@@ -133,12 +133,20 @@ const Login = ({ onLoginSuccess }) => {
               });
               if (userListRes.ok) {
                 const listJson = await userListRes.json();
-                const usersList = listJson.data || listJson || [];
+                const usersList = Array.isArray(listJson)
+                  ? listJson
+                  : (Array.isArray(listJson.data)
+                      ? listJson.data
+                      : (Array.isArray(listJson.data?.list)
+                          ? listJson.data.list
+                          : []));
                 const myId = String(userId);
                 const myEmail = (userEmail || '').toLowerCase();
-                const matched = Array.isArray(usersList)
-                  ? usersList.find(u => String(u.sochiotUserId) === myId || String(u.id) === myId || (u.email || '').toLowerCase() === myEmail)
-                  : null;
+                const matched = usersList.find(u => 
+                  String(u.sochiotUserId) === myId || 
+                  String(u.id) === myId || 
+                  (u.email || '').toLowerCase() === myEmail
+                );
                 if (matched?.featurePermissions && Object.keys(matched.featurePermissions).length > 0) {
                   localFp = matched.featurePermissions;
                 }
@@ -149,32 +157,50 @@ const Login = ({ onLoginSuccess }) => {
           }
         }
 
-        localStorage.setItem('scada_feature_permissions', JSON.stringify(localFp));
         const isSuperRole = role === 'SUPER_ADMIN';
         const isPowerUser = role === 'SUPER_ADMIN' || role === 'ADMIN';
 
         const sidebarMapping = {
-          "Dashboard": isPowerUser ? true : (localFp.showDashboard_read ?? localFp.showDashboard ?? false),
-          "Water Management": isPowerUser ? true : (localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? false),
-          "Motors": isPowerUser ? true : (localFp.showMotors_read ?? localFp.showMotors ?? false),
-          "DG Set": isPowerUser ? true : (localFp.showDGSet_read ?? localFp.showDGSet ?? false),
-          "Setting Templates": isPowerUser ? true : (localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? false),
-          "Alarm System": isPowerUser ? true : (localFp.showAlarms_read ?? localFp.showAlarms ?? false),
-          "LT Panel": isPowerUser ? true : (localFp.showLTPanel_read ?? localFp.showLTPanel ?? false),
-          "Transformer": isPowerUser ? true : (localFp.showTransformers_read ?? localFp.showTransformers ?? false),
-          "Fire": isPowerUser ? true : (localFp.showFirePumps_read ?? localFp.showFirePumps ?? false),
-          "Ticketing": isPowerUser ? true : (localFp.showTicketing_read ?? localFp.showTicketing ?? false),
-          "Maintenance": isPowerUser ? true : (localFp.showMaintenance_read ?? localFp.showMaintenance ?? false),
-          "Service History": isPowerUser ? true : (localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? false),
-          "Daily DPR": isPowerUser ? true : (localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? false),
-          "Energy Metering": isPowerUser ? true : (localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? false),
-          "VRV": isPowerUser ? true : (localFp.showVRV_read ?? localFp.showVRV ?? false),
-          "AQI Sensor": isPowerUser ? true : (localFp.showAQISensor_read ?? localFp.showAQISensor ?? false),
-          "HVAC": isPowerUser ? true : (localFp.showHVAC_read ?? localFp.showHVAC ?? false),
-          "AC": isPowerUser ? true : (localFp.showAC_read ?? localFp.showAC ?? false)
+          "Dashboard": localFp.showDashboard_read ?? localFp.showDashboard ?? (isPowerUser ? true : false),
+          "Water Management": localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? (isPowerUser ? true : false),
+          "Motors": localFp.showMotors_read ?? localFp.showMotors ?? (isPowerUser ? true : false),
+          "DG Set": localFp.showDGSet_read ?? localFp.showDGSet ?? (isPowerUser ? true : false),
+          "Setting Templates": localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? (isPowerUser ? true : false),
+          "Alarm System": localFp.showAlarms_read ?? localFp.showAlarms ?? (isPowerUser ? true : false),
+          "LT Panel": localFp.showLTPanel_read ?? localFp.showLTPanel ?? (isPowerUser ? true : false),
+          "Transformer": localFp.showTransformers_read ?? localFp.showTransformers ?? (isPowerUser ? true : false),
+          "Fire": localFp.showFirePumps_read ?? localFp.showFirePumps ?? (isPowerUser ? true : false),
+          "Ticketing": localFp.showTicketing_read ?? localFp.showTicketing ?? (isPowerUser ? true : false),
+          "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? (isPowerUser ? true : false),
+          "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? (isPowerUser ? true : false),
+          "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? (isPowerUser ? true : false),
+          "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? (isPowerUser ? true : false),
+          "VRV": localFp.showVRV_read ?? localFp.showVRV ?? (isPowerUser ? true : false),
+          "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? (isPowerUser ? true : false),
+          "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? (isPowerUser ? true : false),
+          "AC": localFp.showAC_read ?? localFp.showAC ?? (isPowerUser ? true : false)
         };
         localStorage.setItem('scada_modules_config', JSON.stringify(sidebarMapping));
-        localStorage.setItem('scada_submodules_config', JSON.stringify(localFp.submoduleVisibility || {}));
+        // Reconstruct submoduleVisibility from flat keys if present
+        const submoduleVisibility = {};
+        Object.entries(localFp).forEach(([key, val]) => {
+          if (key.startsWith('submodule_')) {
+            const parts = key.split('_');
+            if (parts.length >= 3) {
+              const moduleKey = parts[1];
+              const subName = parts.slice(2).join('_');
+              if (!submoduleVisibility[moduleKey]) submoduleVisibility[moduleKey] = {};
+              submoduleVisibility[moduleKey][subName] = !!val;
+            }
+          }
+        });
+        const finalSubs = Object.keys(submoduleVisibility).length > 0 
+          ? submoduleVisibility 
+          : (localFp.submoduleVisibility || {});
+
+        localFp.submoduleVisibility = finalSubs;
+        localStorage.setItem('scada_feature_permissions', JSON.stringify(localFp));
+        localStorage.setItem('scada_submodules_config', JSON.stringify(finalSubs));
 
         window.dispatchEvent(new Event('storage-update'));
 

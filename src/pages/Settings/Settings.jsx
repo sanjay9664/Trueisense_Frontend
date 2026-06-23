@@ -4,7 +4,9 @@ import {
   Settings as SettingsIcon,
   Shield,
   Save,
-  RotateCcw
+  RotateCcw,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 const createDefaultModules = () => ({
@@ -28,6 +30,42 @@ const createDefaultModules = () => ({
   'AC': true
 });
 
+const defaultSubmoduleVisibility = {
+  showWaterManagement: { Overview: true, 'AG TANK': true, 'UG TANK': true },
+  showMotors: { Overview: true, 'Pump Room 1': true, 'Pump Room 2': true, 'VFD / DOL Status': true, 'PDF Report': true },
+  showDGSet: { Overview: true, 'DG Set-1': true, 'DG Set-2': true, 'DG Set-3': true },
+  showAlarms: { Overview: true, 'Active Alarms': true, 'Inactive Alarms': true, 'ACK (Acknowledge)': true, 'Alarm History': true, 'PDF Report': true },
+  showLTPanel: { Overview: true, 'LT Room-1': true, 'LT Room-2': true, 'LT Room-3': true, 'Incoming / Outgoing': true, 'Breaker Status': true, 'PDF Report': true },
+  showTransformers: { Overview: true, 'Transformer-1': true, 'Transformer-2': true, 'Load / Temp': true, 'PDF Report': true },
+  showFirePumps: { Overview: true, 'Pump Status': true, 'Header Pressure': true, 'Jockey / Main': true, 'PDF Report': true },
+  showMaintenance: { Scheduled: true, 'Pending Tasks': true, 'PDF Report': true },
+  showServiceHistory: { 'Equipment-wise': true, 'Service Records': true, 'PDF Report': true },
+  showDailyDPR: { 'Data Aggregation': true, 'Daily Logs': true, 'PDF Report': true },
+  showEnergyMetering: { Overview: true, 'Main Meter': true, 'Sub Meters': true, 'Graphs': true, 'PDF Report': true },
+  showVRV: { Overview: true, 'Control Panel': true, 'Schedule': true, 'Human Sensor': true },
+  showAQISensor: { Overview: true, 'Temp & Humidity': true },
+  showHVAC: { 'Chiller': true, 'AHU': true, 'Cooling Tower': true, 'PDF Report': true },
+  showAC: { 'Overview': true, 'PDF Report': true }
+};
+
+const moduleToSubmoduleKey = {
+  'Water Management': 'showWaterManagement',
+  'Motors': 'showMotors',
+  'DG Set': 'showDGSet',
+  'Alarm System': 'showAlarms',
+  'LT Panel': 'showLTPanel',
+  'Transformer': 'showTransformers',
+  'Fire': 'showFirePumps',
+  'Maintenance': 'showMaintenance',
+  'Service History': 'showServiceHistory',
+  'Daily DPR': 'showDailyDPR',
+  'Energy Metering': 'showEnergyMetering',
+  'VRV': 'showVRV',
+  'AQI Sensor': 'showAQISensor',
+  'HVAC': 'showHVAC',
+  'AC': 'showAC'
+};
+
 const Settings = () => {
   const userRole = localStorage.getItem('userRole') || 'USER';
   const isSuperAdmin = userRole === 'SUPER_ADMIN';
@@ -35,6 +73,7 @@ const Settings = () => {
   const defaultModules = useMemo(() => createDefaultModules(), []);
   const [saving, setSaving] = useState(false);
   const [modules, setModules] = useState(defaultModules);
+  const [submodules, setSubmodules] = useState(defaultSubmoduleVisibility);
   const [saveStatus, setSaveStatus] = useState(null);
 
   const fetchGlobalConfig = async () => {
@@ -69,6 +108,17 @@ const Settings = () => {
           sidebarModules[label] = data[key] ?? true;
         });
         setModules(sidebarModules);
+
+        if (data.submoduleVisibility) {
+          const mergedSubmodules = {};
+          Object.entries(defaultSubmoduleVisibility).forEach(([key, subs]) => {
+            mergedSubmodules[key] = {
+              ...subs,
+              ...(data.submoduleVisibility[key] || {})
+            };
+          });
+          setSubmodules(mergedSubmodules);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch config:', error);
@@ -83,12 +133,35 @@ const Settings = () => {
     setModules(prev => ({ ...prev, [name]: !prev[name] }));
   };
 
+  const toggleSubmodule = (subKey, subName) => {
+    setSubmodules(prev => ({
+      ...prev,
+      [subKey]: {
+        ...prev[subKey],
+        [subName]: !(prev[subKey]?.[subName] ?? true)
+      }
+    }));
+  };
+
   const toggleAll = (enabled) => {
     const nextModules = {};
     Object.keys(modules).forEach(key => {
       nextModules[key] = enabled;
     });
     setModules(nextModules);
+
+    if (enabled) {
+      setSubmodules(defaultSubmoduleVisibility);
+    } else {
+      const nextSubmodules = {};
+      Object.keys(defaultSubmoduleVisibility).forEach(subKey => {
+        nextSubmodules[subKey] = {};
+        Object.keys(defaultSubmoduleVisibility[subKey]).forEach(subName => {
+          nextSubmodules[subKey][subName] = false;
+        });
+      });
+      setSubmodules(nextSubmodules);
+    }
   };
 
   const handleSaveToBackend = async () => {
@@ -119,6 +192,7 @@ const Settings = () => {
       Object.entries(reverseMap).forEach(([label, key]) => {
         backendConfig[key] = modules[label];
       });
+      backendConfig.submoduleVisibility = submodules;
 
       const configEndpoint = isSuperAdmin ? '/api/super-admin/config' : '/api/super-admin/admin-config';
       const response = await fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}${configEndpoint}`, {
@@ -129,6 +203,15 @@ const Settings = () => {
 
       if (response.ok) {
         localStorage.setItem('scada_modules_config', JSON.stringify(modules));
+        localStorage.setItem('scada_submodules_config', JSON.stringify(submodules));
+
+        const savedFp = localStorage.getItem('scada_feature_permissions');
+        if (savedFp) {
+          const localFp = JSON.parse(savedFp);
+          localFp.submoduleVisibility = submodules;
+          localStorage.setItem('scada_feature_permissions', JSON.stringify(localFp));
+        }
+
         window.dispatchEvent(new Event('storage-update'));
         setSaveStatus('System Updated Successfully');
         setTimeout(() => setSaveStatus(null), 3000);
@@ -143,6 +226,7 @@ const Settings = () => {
 
   const resetConfig = () => {
     setModules(defaultModules);
+    setSubmodules(defaultSubmoduleVisibility);
     setSaveStatus('Values Reset (Click Save to Persist)');
     setTimeout(() => setSaveStatus(null), 3000);
   };
@@ -184,30 +268,71 @@ const Settings = () => {
 
               <div className="module-list-container pe-2">
                 <Row className="g-3">
-                  {Object.keys(modules).map((name) => (
-                    <Col key={name} md={6} lg={4} xl={3}>
-                      <div
-                        className={`d-flex justify-content-between align-items-center h-100 p-3 rounded-4 border transition-all ${modules[name]
-                            ? 'border-info border-opacity-10 bg-black bg-opacity-40'
-                            : 'border-secondary border-opacity-5 bg-dark bg-opacity-10 opacity-40'
-                          }`}
-                      >
-                        <div className="d-flex align-items-center gap-3">
-                          <div className={`p-2 rounded-circle ${modules[name] ? 'bg-info text-dark' : 'bg-secondary text-white opacity-10'}`}>
-                            <SettingsIcon size={14} />
+                  {Object.keys(modules).map((name) => {
+                    const subKey = moduleToSubmoduleKey[name];
+                    const hasSubs = subKey && defaultSubmoduleVisibility[subKey];
+                    return (
+                      <Col key={name} md={6} lg={4} xl={3}>
+                        <div
+                          className={`d-flex flex-column justify-content-between h-100 p-3 rounded-4 border transition-all ${modules[name]
+                              ? 'border-info border-opacity-10 bg-black bg-opacity-40'
+                              : 'border-secondary border-opacity-5 bg-dark bg-opacity-10 opacity-40'
+                            }`}
+                        >
+                          <div className="d-flex justify-content-between align-items-center w-100">
+                            <div className="d-flex align-items-center gap-3">
+                              <div className={`p-2 rounded-circle ${modules[name] ? 'bg-info text-dark' : 'bg-secondary text-white opacity-10'}`}>
+                                <SettingsIcon size={14} />
+                              </div>
+                              <span className={`fw-bold fs-11 ${modules[name] ? 'text-white' : 'text-muted'}`}>{name}</span>
+                            </div>
+                            <Form.Check
+                              type="switch"
+                              id={`switch-${name}`}
+                              checked={modules[name]}
+                              onChange={() => toggleModule(name)}
+                              className="scada-switch custom-switch-large"
+                            />
                           </div>
-                          <span className={`fw-bold fs-11 ${modules[name] ? 'text-white' : 'text-muted'}`}>{name}</span>
+
+                          {/* Render submodules if module is enabled and has submodules */}
+                          {modules[name] && hasSubs && (
+                            <div className="mt-3 pt-3 border-top border-secondary border-opacity-25 w-100">
+                              <div className="d-flex flex-wrap gap-2">
+                                {Object.keys(defaultSubmoduleVisibility[subKey]).map((subName) => {
+                                  const isVisible = submodules[subKey]?.[subName] ?? true;
+                                  return (
+                                    <button
+                                      key={subName}
+                                      onClick={() => toggleSubmodule(subKey, subName)}
+                                      className={`btn-sub-pill ${isVisible ? 'active' : 'inactive'}`}
+                                      style={{
+                                        background: isVisible ? 'rgba(14, 165, 233, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                                        border: isVisible ? '1px solid rgba(14, 165, 233, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                        borderRadius: '8px',
+                                        padding: '4px 8px',
+                                        fontSize: '0.68rem',
+                                        color: isVisible ? '#38bdf8' : '#64748b',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        fontWeight: '600'
+                                      }}
+                                    >
+                                      {isVisible ? <Eye size={10} /> : <EyeOff size={10} />}
+                                      {subName}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        <Form.Check
-                          type="switch"
-                          id={`switch-${name}`}
-                          checked={modules[name]}
-                          onChange={() => toggleModule(name)}
-                          className="scada-switch custom-switch-large"
-                        />
-                      </div>
-                    </Col>
-                  ))}
+                      </Col>
+                    );
+                  })}
                 </Row>
               </div>
             </Card.Body>

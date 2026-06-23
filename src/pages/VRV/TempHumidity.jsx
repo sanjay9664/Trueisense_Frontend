@@ -11,7 +11,7 @@ const metricsConfig = {
   AQI: { label: 'AQI', shortLabel: 'AQI', unit: 'IV', color: '#10b981', icon: Leaf, min: 0, max: 200 }
 };
 
-const Gauge = ({ value, min, max, unit, color }) => {
+const Gauge = ({ value, min, max, unit, color, isMapped = true }) => {
   const radius = 65;
   const cx = 100;
   const cy = 90;
@@ -45,35 +45,41 @@ const Gauge = ({ value, min, max, unit, color }) => {
         />
         
         {/* Value Arc (Colored) */}
-        <path
-          d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
-          fill="none"
-          stroke={color}
-          strokeWidth="12"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          filter="url(#glow)"
-        />
+        {isMapped && (
+          <path
+            d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
+            fill="none"
+            stroke={color}
+            strokeWidth="12"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            filter="url(#glow)"
+          />
+        )}
         
         {/* Central Pivot Needle */}
-        <g 
-          transform={`rotate(${rotation}, ${cx}, ${cy})`}
-        >
-          {/* Needle pointer */}
-          <polygon points={`${cx - 3},${cy} ${cx + 3},${cy} ${cx},${cy - radius - 2}`} fill="#ffffff" filter="url(#shadow)" />
-          {/* Inner circle pivot */}
-          <circle cx={cx} cy={cy} r="6" fill="#ffffff" filter="url(#shadow)" />
-          <circle cx={cx} cy={cy} r="2" fill={color} />
-        </g>
+        {isMapped ? (
+          <g 
+            transform={`rotate(${rotation}, ${cx}, ${cy})`}
+          >
+            {/* Needle pointer */}
+            <polygon points={`${cx - 3},${cy} ${cx + 3},${cy} ${cx},${cy - radius - 2}`} fill="#ffffff" filter="url(#shadow)" />
+            {/* Inner circle pivot */}
+            <circle cx={cx} cy={cy} r="6" fill="#ffffff" filter="url(#shadow)" />
+            <circle cx={cx} cy={cy} r="2" fill={color} />
+          </g>
+        ) : (
+          <circle cx={cx} cy={cy} r="6" fill="rgba(255,255,255,0.15)" />
+        )}
         
         {/* Min / Max Text Labels */}
         <text x={cx - radius - 15} y={cy + 5} fill="rgba(255,255,255,0.4)" fontSize="10" textAnchor="end" alignmentBaseline="middle">{min}</text>
         <text x={cx + radius + 15} y={cy + 5} fill="rgba(255,255,255,0.4)" fontSize="10" textAnchor="start" alignmentBaseline="middle">{max}</text>
 
         {/* Big Value Text (Positioned safely below the needle pivot) */}
-        <text x={cx} y={cy + 38} fill="rgba(255, 255, 255, 0.85)" fontSize="42" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
-          {Number.isInteger(value) ? value : value.toFixed(2)}
+        <text x={cx} y={cy + 38} fill={isMapped ? "rgba(255, 255, 255, 0.85)" : "rgba(255, 255, 255, 0.3)"} fontSize="42" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+          {isMapped ? (Number.isInteger(value) ? value : value.toFixed(2)) : '—'}
         </text>
         <text x={cx} y={cy + 58} fill={color} fontSize="16" fontWeight="bold" textAnchor="middle" letterSpacing="2">
           {unit}
@@ -186,27 +192,27 @@ const EnvDashboard = () => {
           currentTemplates = vrvTemplates;
           
           setSavedZones(prev => {
-            if (prev.length > 0) return prev; // already initialized
-            
-            const mappedZones = Array.from({ length: 6 }).map((_, index) => {
-              const t = vrvTemplates[index];
-              return {
-                id: index + 1,
-                name: t?.mapping?.vrvConfig?.vrvZone || t?.template_name || `Channel ${index + 1}`,
-                TEMP: 0,
-                HUMIDITY: 0,
-                CO2: 0,
-                TVOC: 0,
-                AQI: 0,
-                status: 'Optimal',
-                mapping: t?.mapping || null
-              };
-            });
-            
-            if (mappedZones.length > 0 && selectedUnit === 'Common' && globalCachedSelectedUnit === 'Common') {
-              setSelectedUnit(mappedZones[0].name);
+            const nextZones = vrvTemplates
+              .map((t, index) => {
+                const existing = prev.find(p => p.name === (t?.mapping?.vrvConfig?.vrvZone || t?.name));
+                return {
+                  id: index + 1,
+                  name: t?.mapping?.vrvConfig?.vrvZone || t?.template_name || `Zone ${index + 1}`,
+                  TEMP: existing?.TEMP ?? 0,
+                  HUMIDITY: existing?.HUMIDITY ?? 0,
+                  CO2: existing?.CO2 ?? 0,
+                  TVOC: existing?.TVOC ?? 0,
+                  AQI: existing?.AQI ?? 0,
+                  status: existing?.status ?? 'Optimal',
+                  mapping: t?.mapping || null
+                };
+              })
+              .filter(z => z.mapping?.vrvConfig?.device);
+
+            if (nextZones.length > 0 && (selectedUnit === 'Common' || !nextZones.some(z => z.name === selectedUnit))) {
+              setSelectedUnit(nextZones[0].name);
             }
-            return mappedZones;
+            return nextZones;
           });
           
           setIsFetching(false);
@@ -294,6 +300,22 @@ const EnvDashboard = () => {
           </h2>
           <p className="text-secondary fs-7 mb-0">High-precision zone telemetry and historical tracking</p>
         </div>
+        {savedZones.length > 0 && (
+          <div className="d-flex align-items-center gap-2">
+            <select
+              className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
+              style={{ width: '220px', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
+              value={selectedUnit}
+              onChange={(e) => setSelectedUnit(e.target.value)}
+            >
+              {savedZones.map(zone => (
+                <option key={zone.id} value={zone.name}>
+                  {zone.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Removed old blocking isLoading screen entirely as requested */}
@@ -306,35 +328,39 @@ const EnvDashboard = () => {
               </Card.Header>
               <Card.Body className="p-2 overflow-auto scada-scrollbar" style={{ maxHeight: 'calc(100vh - 200px)' }}>
                 <div className="p-1">
-                  {activeZones.map((zone) => {
-                    const isSelected = selectedUnit === zone.name;
-                    return (
-                      <div 
-                        key={zone.id} 
-                        className="p-3 mb-2 rounded-4 d-flex justify-content-between align-items-center"
-                        style={{ 
-                          cursor: 'pointer',
-                          background: isSelected ? 'linear-gradient(90deg, rgba(56, 189, 248, 0.15) 0%, rgba(56, 189, 248, 0) 100%)' : 'transparent',
-                          borderLeft: isSelected ? '4px solid #38bdf8' : '4px solid transparent',
-                          transition: 'all 0.3s ease'
-                        }}
-                        onClick={() => setSelectedUnit(zone.name)}
-                      >
-                        <div>
-                          <span className={`fw-bold d-block fs-6 ${isSelected ? 'text-white' : 'text-secondary'}`}>{zone.name}</span>
-                          <span className="text-muted fs-8">Zone {zone.id}</span>
+                  {activeZones.length === 0 ? (
+                    <div className="p-3 text-center text-secondary fs-13">No zones mapped.</div>
+                  ) : (
+                    activeZones.map((zone) => {
+                      const isSelected = selectedUnit === zone.name;
+                      return (
+                        <div 
+                          key={zone.id} 
+                          className="p-3 mb-2 rounded-4 d-flex justify-content-between align-items-center"
+                          style={{ 
+                            cursor: 'pointer',
+                            background: isSelected ? 'linear-gradient(90deg, rgba(56, 189, 248, 0.15) 0%, rgba(56, 189, 248, 0) 100%)' : 'transparent',
+                            borderLeft: isSelected ? '4px solid #38bdf8' : '4px solid transparent',
+                            transition: 'all 0.3s ease'
+                          }}
+                          onClick={() => setSelectedUnit(zone.name)}
+                        >
+                          <div>
+                            <span className={`fw-bold d-block fs-6 ${isSelected ? 'text-white' : 'text-secondary'}`}>{zone.name}</span>
+                            <span className="text-muted fs-8">Zone {zone.id}</span>
+                          </div>
+                          <div className="text-end d-flex flex-column align-items-end">
+                            <span className={`font-monospace fw-bold fs-5 ${isSelected ? 'text-info' : 'text-white'} d-flex align-items-center`}>
+                              {zone.TEMP.toFixed(1)}<span style={{fontSize:'0.6em', marginLeft:'2px'}}>°C</span>
+                            </span>
+                            <span className={`font-monospace fw-bold fs-6 ${isSelected ? 'text-primary' : 'text-secondary'} d-flex align-items-center`} style={{marginTop: '-4px'}}>
+                              {zone.HUMIDITY.toFixed(1)}<span style={{fontSize:'0.6em', marginLeft:'2px'}}>%</span>
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-end d-flex flex-column align-items-end">
-                          <span className={`font-monospace fw-bold fs-5 ${isSelected ? 'text-info' : 'text-white'} d-flex align-items-center`}>
-                            {zone.TEMP.toFixed(1)}<span style={{fontSize:'0.6em', marginLeft:'2px'}}>°C</span>
-                          </span>
-                          <span className={`font-monospace fw-bold fs-6 ${isSelected ? 'text-primary' : 'text-secondary'} d-flex align-items-center`} style={{marginTop: '-4px'}}>
-                            {zone.HUMIDITY.toFixed(1)}<span style={{fontSize:'0.6em', marginLeft:'2px'}}>%</span>
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
               </Card.Body>
             </Card>
@@ -394,6 +420,16 @@ const EnvDashboard = () => {
                     const statusColor = isOptimal ? '#10b981' : '#f59e0b';
                     const statusText = isOptimal ? 'OPTIMAL' : 'ATTENTION';
                     
+                    const metricToConfigField = {
+                      TEMP: 'temperature',
+                      HUMIDITY: 'humidity',
+                      CO2: 'co2',
+                      TVOC: 'tvoc',
+                      AQI: 'aqi'
+                    };
+                    const configField = unitData?.mapping?.vrvConfig?.[metricToConfigField[key]];
+                    const isFieldMapped = configField && typeof configField === 'string' && configField.includes('::');
+
                     return (
                       <Col xl={4} lg={6} md={12} key={key}>
                         <Card 
@@ -404,11 +440,17 @@ const EnvDashboard = () => {
                             borderRadius: '16px',
                             border: '1px solid rgba(255,255,255,0.08)',
                             boxShadow: '0 8px 32px -8px rgba(0,0,0,0.7)',
-                            minHeight: '100px'
+                            minHeight: '100px',
+                            opacity: isFieldMapped ? 1 : 0.35,
+                            filter: isFieldMapped ? 'none' : 'grayscale(1) brightness(0.65)',
+                            pointerEvents: isFieldMapped ? 'auto' : 'none',
+                            transition: 'all 0.3s ease'
                           }}
                         >
                           {/* Subtle background glow based on metric color */}
-                          <div className="position-absolute" style={{ top: '-50px', right: '-50px', width: '160px', height: '160px', background: config.color, filter: 'blur(80px)', opacity: 0.15, borderRadius: '50%', pointerEvents: 'none' }}></div>
+                          {isFieldMapped && (
+                            <div className="position-absolute" style={{ top: '-50px', right: '-50px', width: '160px', height: '160px', background: config.color, filter: 'blur(80px)', opacity: 0.15, borderRadius: '50%', pointerEvents: 'none' }}></div>
+                          )}
                           
                           <Card.Body className="p-2 d-flex flex-column justify-content-between">
                             {/* Card Header */}
@@ -420,8 +462,14 @@ const EnvDashboard = () => {
                                 {config.label}
                               </h6>
                               <div className="d-flex align-items-center">
-                                <div className="spinner-grow spinner-grow-sm me-2 opacity-50" style={{ color: statusColor, width: '0.75rem', height: '0.75rem' }} role="status"></div>
-                                <span className="text-secondary opacity-75 fs-9 fw-bold uppercase tracking-widest">LIVE DATA</span>
+                                {isFieldMapped ? (
+                                  <>
+                                    <div className="spinner-grow spinner-grow-sm me-2 opacity-50" style={{ color: statusColor, width: '0.75rem', height: '0.75rem' }} role="status"></div>
+                                    <span className="text-secondary opacity-75 fs-9 fw-bold uppercase tracking-widest">LIVE DATA</span>
+                                  </>
+                                ) : (
+                                  <span className="text-muted fs-9 fw-bold uppercase tracking-widest">UNMAPPED</span>
+                                )}
                               </div>
                             </div>
 
@@ -432,6 +480,7 @@ const EnvDashboard = () => {
                                 max={config.max} 
                                 unit={config.unit} 
                                 color={config.color}
+                                isMapped={isFieldMapped}
                               />
                             </div>
 

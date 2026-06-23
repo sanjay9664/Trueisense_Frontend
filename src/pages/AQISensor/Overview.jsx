@@ -5,40 +5,24 @@ import { Leaf, Wind, Thermometer, Droplets, MapPin, Activity } from 'lucide-reac
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { io } from 'socket.io-client';
 
-// --- MOCK DATA ---
-const CHANNELS = Array.from({ length: 6 }).map((_, i) => {
-  const baseTemp = 20 + Math.random() * 5;
-  const baseHum = 40 + Math.random() * 20;
-  const baseAqi = 15 + Math.random() * 15; // IAQ
-  const baseCo2 = 400 + Math.random() * 200;
-  const baseTvoc = 50 + Math.random() * 50;
-  
-  return {
-    id: i + 1,
-    name: `Channel ${i + 1}`,
-    location: ['Server Room', 'HVAC Plant', 'Main Office', 'Lobby', 'Basement', 'Warehouse'][i],
-    temp: baseTemp.toFixed(2),
-    hum: baseHum.toFixed(1),
-    aqi: baseAqi.toFixed(2),
-    co2: Math.round(baseCo2),
-    tvoc: Math.round(baseTvoc),
-    history: Array.from({ length: 24 }).map((_, j) => {
-      const time = new Date();
-      time.setHours(time.getHours() - (23 - j));
-      return {
-        time: `${time.getHours().toString().padStart(2, '0')}:00`,
-        temp: (baseTemp + (Math.random() * 4 - 2)).toFixed(2),
-        hum: (baseHum + (Math.random() * 10 - 5)).toFixed(1),
-        aqi: Math.max(0, baseAqi + (Math.random() * 10 - 5)).toFixed(2),
-        co2: Math.round(baseCo2 + (Math.random() * 50 - 25)),
-        tvoc: Math.round(baseTvoc + (Math.random() * 20 - 10))
-      };
-    })
-  };
-});
+// --- HELPER FOR HISTORY DATA ---
+const createHistoryData = (baseTemp, baseHum, baseAqi, baseCo2, baseTvoc) => {
+  return Array.from({ length: 24 }).map((_, j) => {
+    const time = new Date();
+    time.setHours(time.getHours() - (23 - j));
+    return {
+      time: `${time.getHours().toString().padStart(2, '0')}:00`,
+      temp: (baseTemp + (Math.random() * 4 - 2)).toFixed(2),
+      hum: (baseHum + (Math.random() * 10 - 5)).toFixed(1),
+      aqi: Math.max(0, baseAqi + (Math.random() * 10 - 5)).toFixed(2),
+      co2: Math.round(baseCo2 + (Math.random() * 50 - 25)),
+      tvoc: Math.round(baseTvoc + (Math.random() * 20 - 10))
+    };
+  });
+};
 
 // --- CUSTOM ARC GAUGE COMPONENT ---
-const CustomArcGauge = ({ value, max, label, color, format = (v) => v }) => {
+const CustomArcGauge = ({ value, max, label, color, format = (v) => v, isMapped = true }) => {
   const radius = 45;
   const circumference = 2 * Math.PI * radius; 
   const arcLength = circumference * 0.75; // 270 degrees arc
@@ -61,22 +45,26 @@ const CustomArcGauge = ({ value, max, label, color, format = (v) => v }) => {
           transform="rotate(135 50 50)"
         />
         {/* Value Arc */}
-        <circle
-          cx="50"
-          cy="50"
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeDasharray={`${arcLength} ${circumference}`}
-          strokeDashoffset={strokeDashoffset}
-          transform="rotate(135 50 50)"
-          style={{ transition: 'stroke-dashoffset 1s ease-in-out' }}
-        />
+        {isMapped && (
+          <circle
+            cx="50"
+            cy="50"
+            r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={`${arcLength} ${circumference}`}
+            strokeDashoffset={strokeDashoffset}
+            transform="rotate(135 50 50)"
+            style={{ transition: 'stroke-dashoffset 1s ease-in-out' }}
+          />
+        )}
       </svg>
       <div className="position-absolute d-flex flex-column align-items-center" style={{ top: '55px' }}>
-        <div className="fw-black text-white" style={{ fontSize: '20px', lineHeight: '1', textShadow: `0 0 10px ${color}60` }}>{format(value)}</div>
+        <div className="fw-black text-white" style={{ fontSize: '20px', lineHeight: '1', textShadow: isMapped ? `0 0 10px ${color}60` : 'none', opacity: isMapped ? 1 : 0.3 }}>
+          {isMapped ? format(value) : '—'}
+        </div>
       </div>
     </div>
   );
@@ -84,9 +72,9 @@ const CustomArcGauge = ({ value, max, label, color, format = (v) => v }) => {
 
 const AQIOverview = () => {
   const navigate = useNavigate();
-  const [channels, setChannels] = useState(CHANNELS);
-  const [selectedChId, setSelectedChId] = useState(CHANNELS[0].id);
-  const selectedCh = channels.find(ch => ch.id === selectedChId) || channels[0];
+  const [channels, setChannels] = useState([]);
+  const [selectedChId, setSelectedChId] = useState(null);
+  const selectedCh = channels.find(ch => ch.id === selectedChId) || channels[0] || null;
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -140,6 +128,30 @@ const AQIOverview = () => {
           const aqi = getValue(config.aqi);
           if (aqi !== null && newZone.aqi !== aqi.toFixed(2)) { newZone.aqi = aqi.toFixed(2); updated = true; }
 
+          if (updated) {
+            const lastVal = newZone.history[newZone.history.length - 1];
+            const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            if (lastVal && lastVal.time === timeStr) {
+              newZone.history[newZone.history.length - 1] = {
+                time: timeStr,
+                temp: newZone.temp,
+                hum: newZone.hum,
+                aqi: newZone.aqi,
+                co2: newZone.co2,
+                tvoc: newZone.tvoc
+              };
+            } else {
+              newZone.history = [...newZone.history.slice(1), {
+                time: timeStr,
+                temp: newZone.temp,
+                hum: newZone.hum,
+                aqi: newZone.aqi,
+                co2: newZone.co2,
+                tvoc: newZone.tvoc
+              }];
+            }
+          }
+
           return newZone;
         });
 
@@ -174,13 +186,39 @@ const AQIOverview = () => {
           currentTemplates = aqiTemplates;
           
           setChannels(prev => {
-            const next = [...prev];
-            for (let i = 0; i < Math.min(next.length, aqiTemplates.length); i++) {
-               const t = aqiTemplates[i];
-               next[i].name = t.mapping?.vrvConfig?.vrvZone || t.template_name || next[i].name;
-               next[i].mapping = t.mapping;
+            const nextChannels = aqiTemplates
+              .map((t, index) => {
+                const baseTemp = 20 + Math.random() * 5;
+                const baseHum = 40 + Math.random() * 20;
+                const baseAqi = 15 + Math.random() * 15;
+                const baseCo2 = 400 + Math.random() * 200;
+                const baseTvoc = 50 + Math.random() * 50;
+
+                const name = t.mapping?.vrvConfig?.vrvZone || t.template_name || `TEMP & HUMIDITY (#${index + 1})`;
+                const existing = prev.find(p => p.name === name);
+
+                return {
+                  id: index + 1,
+                  name: name,
+                  location: t.mapping?.vrvConfig?.building || t.mapping?.vrvConfig?.subZone || 'Facility Zone',
+                  temp: existing?.temp ?? baseTemp.toFixed(2),
+                  hum: existing?.hum ?? baseHum.toFixed(1),
+                  aqi: existing?.aqi ?? baseAqi.toFixed(2),
+                  co2: existing?.co2 ?? Math.round(baseCo2),
+                  tvoc: existing?.tvoc ?? Math.round(baseTvoc),
+                  history: existing?.history ?? createHistoryData(baseTemp, baseHum, baseAqi, baseCo2, baseTvoc),
+                  mapping: t.mapping || null
+                };
+              })
+              .filter(ch => ch.mapping?.vrvConfig?.device);
+
+            if (nextChannels.length > 0) {
+              setSelectedChId(prevId => {
+                if (nextChannels.some(ch => ch.id === prevId)) return prevId;
+                return nextChannels[0].id;
+              });
             }
-            return next;
+            return nextChannels;
           });
 
           if (aqiTemplates.length > 0) {
@@ -265,134 +303,185 @@ const AQIOverview = () => {
             <span className="text-secondary fw-bold" style={{ fontSize: '11px' }}>{currentTime.toLocaleTimeString()}</span>
           </div>
         </div>
+        {channels.length > 0 && (
+          <div className="d-flex align-items-center gap-2">
+            <select
+              className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
+              style={{ width: '220px', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
+              value={selectedChId || ''}
+              onChange={(e) => setSelectedChId(Number(e.target.value))}
+            >
+              {channels.map(ch => (
+                <option key={ch.id} value={ch.id}>
+                  {ch.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
-      <Row className="g-3 flex-grow-1">
-        {/* LEFT PANEL: CHANNEL LIST */}
-        <Col xl={3} lg={4} className="d-flex flex-column gap-2">
-          <div className="px-2 mb-1">
-             <span className="text-secondary fw-bold" style={{ fontSize: '12px', letterSpacing: '1px' }}>AVAILABLE CHANNELS</span>
+      {channels.length === 0 ? (
+        <div className="d-flex flex-column align-items-center justify-content-center flex-grow-1 bg-dark bg-opacity-20 rounded-4 border border-white border-opacity-5 p-5 mt-3" style={{ minHeight: '500px' }}>
+          <div className="p-4 rounded-circle bg-dark bg-opacity-40 border border-secondary border-opacity-25 mb-4 shadow-sm">
+            <Activity size={48} className="text-secondary opacity-50" />
           </div>
-          
-          <div className="d-flex flex-column gap-2">
-            {channels.map(ch => {
-              const isSelected = selectedCh.id === ch.id;
-              
-              return (
-                <div 
-                  key={ch.id} 
-                  onClick={() => navigate('/aqi-sensor/temp-humidity')}
-                  className="p-3 rounded position-relative overflow-hidden"
-                  style={{ 
-                    cursor: 'pointer',
-                    background: isSelected ? 'rgba(56, 189, 248, 0.08)' : 'rgba(30, 41, 59, 0.4)',
-                    border: `1px solid ${isSelected ? '#38bdf8' : 'rgba(255,255,255,0.03)'}`,
-                    transition: 'all 0.3s ease'
-                  }}
-                  title="Single click to view analytics, Double click for detailed diagnostics"
-                >
-                  {isSelected && <div className="position-absolute h-100" style={{ left: 0, top: 0, width: '4px', background: '#38bdf8', boxShadow: '0 0 10px #38bdf8' }}></div>}
-                  
-                  <div className="d-flex justify-content-between align-items-center mb-2">
-                    <div className="d-flex align-items-center gap-2">
-                       <div className="rounded p-1 d-flex align-items-center justify-content-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                          <MapPin size={14} className={isSelected ? 'text-info' : 'text-secondary'} />
-                       </div>
-                       <span className={`fw-bold ${isSelected ? 'text-white' : 'text-light'}`} style={{ fontSize: '15px' }}>{ch.name}</span>
-                    </div>
-                    <span className="fw-bold font-monospace" style={{ color: '#facc15', fontSize: '15px' }}>{ch.temp} <span style={{fontSize: '10px'}} className="text-secondary">°C</span></span>
-                  </div>
-                  
-                  <div className="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style={{ borderColor: 'rgba(255,255,255,0.05) !important' }}>
-                    <span className="text-secondary" style={{ fontSize: '11px' }}>{ch.location}</span>
-                    <span className="text-white font-monospace fw-bold" style={{ fontSize: '12px' }}>Humidity: {ch.hum}%</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </Col>
-
-        {/* RIGHT PANEL: 6 PARAMETER GRID */}
-        <Col xl={9} lg={8} className="d-flex flex-column">
-          {/* Header Info for Selected Channel */}
-          <div className="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style={{ background: 'rgba(30, 41, 59, 0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
-             <div>
-                <Badge bg="transparent" className="border px-2 py-1 rounded-pill shadow-sm mb-1 text-info border-info">
-                  Type of Sensor: Environmental
-                </Badge>
-                <h4 className="text-white fw-black m-0">{selectedCh.name} Analytics</h4>
-             </div>
-             <div className="text-end">
-                <div className="text-secondary fw-bold" style={{ fontSize: '11px', letterSpacing: '1px' }}>LOCATION</div>
-                <div className="text-info fw-bold">{selectedCh.location.toUpperCase()}</div>
-             </div>
-          </div>
-
-          {/* Grid of 6 Parameters */}
-          <Row className="g-3">
-            {parameters.map((param, idx) => (
-              <Col md={6} key={idx}>
-                <Card 
-                  className="border-0 shadow-sm h-100" 
-                  style={{ background: 'rgba(30, 41, 59, 0.4)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', cursor: 'pointer', transition: 'all 0.2s ease' }}
-                  onClick={() => navigate('/aqi-sensor/temp-humidity')}
-                  onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(14, 165, 233, 0.5)'}
-                  onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'}
-                >
-                  <Card.Body className="p-3 d-flex gap-2 align-items-center">
+          <h4 className="text-white fw-bold mb-2 tracking-wide text-uppercase">No Mapped AQI Sensors Found</h4>
+          <p className="text-secondary mb-0 text-center" style={{ maxWidth: '450px' }}>
+            Map an AQI Sensor / Temp & Humidity device in the settings configuration templates module to view live environment telemetry.
+          </p>
+        </div>
+      ) : (
+        <Row className="g-3 flex-grow-1">
+          {/* LEFT PANEL: CHANNEL LIST */}
+          <Col xl={3} lg={4} className="d-flex flex-column gap-2">
+            <div className="px-2 mb-1">
+               <span className="text-secondary fw-bold" style={{ fontSize: '12px', letterSpacing: '1px' }}>AVAILABLE CHANNELS</span>
+            </div>
+            
+            <div className="d-flex flex-column gap-2">
+              {channels.map(ch => {
+                const isSelected = selectedCh && selectedCh.id === ch.id;
+                
+                return (
+                  <div 
+                    key={ch.id} 
+                    onClick={() => setSelectedChId(ch.id)}
+                    onDoubleClick={() => navigate('/aqi-sensor/temp-humidity')}
+                    className="p-3 rounded position-relative overflow-hidden"
+                    style={{ 
+                      cursor: 'pointer',
+                      background: isSelected ? 'rgba(56, 189, 248, 0.08)' : 'rgba(30, 41, 59, 0.4)',
+                      border: `1px solid ${isSelected ? '#38bdf8' : 'rgba(255,255,255,0.03)'}`,
+                      transition: 'all 0.3s ease'
+                    }}
+                    title="Single click to view analytics, Double click for detailed diagnostics"
+                  >
+                    {isSelected && <div className="position-absolute h-100" style={{ left: 0, top: 0, width: '4px', background: '#38bdf8', boxShadow: '0 0 10px #38bdf8' }}></div>}
                     
-                    {/* Gauge Area */}
-                    <div style={{ width: '130px', flexShrink: 0 }} className="d-flex justify-content-center">
-                       <CustomArcGauge 
-                         value={Number(selectedCh[param.key])} 
-                         max={param.max} 
-                         label={param.label} 
-                         color={param.color} 
-                       />
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <div className="d-flex align-items-center gap-2">
+                         <div className="rounded p-1 d-flex align-items-center justify-content-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                            <MapPin size={14} className={isSelected ? 'text-info' : 'text-secondary'} />
+                         </div>
+                         <span className={`fw-bold ${isSelected ? 'text-white' : 'text-light'}`} style={{ fontSize: '15px' }}>{ch.name}</span>
+                      </div>
+                      <span className="fw-bold font-monospace" style={{ color: '#facc15', fontSize: '15px' }}>{ch.temp} <span style={{fontSize: '10px'}} className="text-secondary">°C</span></span>
                     </div>
-
-                    {/* Chart Area */}
-                    <div className="flex-grow-1 d-flex flex-column w-100">
-                       <div className="text-center text-secondary mb-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
-                         HISTORY ({param.unit})
-                       </div>
-                       <div style={{ height: '110px', width: '100%' }}>
-                         <ResponsiveContainer width="100%" height="100%">
-                           <LineChart data={selectedCh.history} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                             <XAxis dataKey="time" hide />
-                             <YAxis 
-                                hide 
-                                domain={['dataMin', 'dataMax']} 
-                                padding={{ top: 10, bottom: 10 }}
-                             />
-                             <Tooltip 
-                               contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px' }} 
-                               itemStyle={{ color: '#fff' }}
-                             />
-                             <Line 
-                               type="linear" 
-                               dataKey={param.key} 
-                               name={param.label}
-                               stroke="#475569" 
-                               strokeWidth={1} 
-                               dot={{ r: 3, fill: '#fff', stroke: param.color, strokeWidth: 2 }} 
-                               activeDot={{ r: 5, fill: param.color }}
-                             />
-                           </LineChart>
-                         </ResponsiveContainer>
-                       </div>
+                    
+                    <div className="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style={{ borderColor: 'rgba(255,255,255,0.05) !important' }}>
+                      <span className="text-secondary" style={{ fontSize: '11px' }}>{ch.location}</span>
+                      <span className="text-white font-monospace fw-bold" style={{ fontSize: '12px' }}>Humidity: {ch.hum}%</span>
                     </div>
+                  </div>
+                )
+              })}
+            </div>
+          </Col>
 
-                  </Card.Body>
-                </Card>
-              </Col>
-            ))}
-          </Row>
+          {/* RIGHT PANEL: 6 PARAMETER GRID */}
+          <Col xl={9} lg={8} className="d-flex flex-column">
+            {/* Header Info for Selected Channel */}
+            <div className="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style={{ background: 'rgba(30, 41, 59, 0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
+               <div>
+                  <Badge bg="transparent" className="border px-2 py-1 rounded-pill shadow-sm mb-1 text-info border-info">
+                    Type of Sensor: Environmental
+                  </Badge>
+                  <h4 className="text-white fw-black m-0">{selectedCh?.name} Analytics</h4>
+               </div>
+               <div className="text-end">
+                  <div className="text-secondary fw-bold" style={{ fontSize: '11px', letterSpacing: '1px' }}>LOCATION</div>
+                  <div className="text-info fw-bold">{selectedCh?.location?.toUpperCase()}</div>
+               </div>
+            </div>
 
-        </Col>
-      </Row>
+            {/* Grid of 6 Parameters */}
+            <Row className="g-3">
+              {parameters.map((param, idx) => {
+                const paramToConfigField = {
+                  temp: 'temperature',
+                  hum: 'humidity',
+                  co2: 'co2',
+                  tvoc: 'tvoc',
+                  aqi: 'aqi'
+                };
+                const configField = selectedCh?.mapping?.vrvConfig?.[paramToConfigField[param.key]];
+                const isFieldMapped = configField && typeof configField === 'string' && configField.includes('::');
+
+                return (
+                  <Col md={6} key={idx}>
+                    <Card 
+                      className="border-0 shadow-sm h-100" 
+                      style={{ 
+                        background: 'rgba(30, 41, 59, 0.4)', 
+                        borderRadius: '12px', 
+                        border: '1px solid rgba(255,255,255,0.05)', 
+                        cursor: isFieldMapped ? 'pointer' : 'default', 
+                        transition: 'all 0.2s ease',
+                        opacity: isFieldMapped ? 1 : 0.35,
+                        filter: isFieldMapped ? 'none' : 'grayscale(1) brightness(0.65)',
+                        pointerEvents: isFieldMapped ? 'auto' : 'none'
+                      }}
+                      onClick={() => { if (isFieldMapped) navigate('/aqi-sensor/temp-humidity'); }}
+                      onMouseEnter={(e) => { if (isFieldMapped) e.currentTarget.style.borderColor = 'rgba(14, 165, 233, 0.5)'; }}
+                      onMouseLeave={(e) => { if (isFieldMapped) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; }}
+                    >
+                      <Card.Body className="p-3 d-flex gap-2 align-items-center">
+                        
+                        {/* Gauge Area */}
+                        <div style={{ width: '130px', flexShrink: 0 }} className="d-flex justify-content-center">
+                           <CustomArcGauge 
+                             value={selectedCh ? Number(selectedCh[param.key]) : 0} 
+                             max={param.max} 
+                             label={param.label} 
+                             color={param.color} 
+                             isMapped={isFieldMapped}
+                           />
+                        </div>
+
+                        {/* Chart Area */}
+                        <div className="flex-grow-1 d-flex flex-column w-100">
+                           <div className="text-center text-secondary mb-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
+                             HISTORY ({param.unit})
+                           </div>
+                           <div style={{ height: '110px', width: '100%' }}>
+                             <ResponsiveContainer width="100%" height="100%">
+                               <LineChart data={selectedCh?.history || []} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                 <XAxis dataKey="time" hide />
+                                 <YAxis 
+                                    hide 
+                                    domain={['dataMin', 'dataMax']} 
+                                    padding={{ top: 10, bottom: 10 }}
+                                 />
+                                 <Tooltip 
+                                   contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px' }} 
+                                   itemStyle={{ color: '#fff' }}
+                                 />
+                                 <Line 
+                                   type="linear" 
+                                   dataKey={param.key} 
+                                   name={param.label}
+                                   stroke="#475569" 
+                                   strokeWidth={1} 
+                                   dot={{ r: 3, fill: '#fff', stroke: param.color, strokeWidth: 2 }} 
+                                   activeDot={{ r: 5, fill: param.color }}
+                                 />
+                               </LineChart>
+                             </ResponsiveContainer>
+                           </div>
+                        </div>
+
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                );
+              })}
+            </Row>
+
+          </Col>
+        </Row>
+      )}
     </div>
   );
 };

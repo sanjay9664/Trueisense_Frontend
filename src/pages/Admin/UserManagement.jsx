@@ -4,7 +4,7 @@ import {
   UserPlus, Trash2, Save,
   Search, LayoutDashboard, Droplets, Activity, Database, Bell, Zap,
   ShieldAlert, ClipboardList, PenTool, History, Gauge, User, X,
-  CheckCircle, Key, Settings, RefreshCw, Wind
+  CheckCircle, Key, Settings, RefreshCw, Wind, Eye, EyeOff
 } from 'lucide-react';
 
 
@@ -28,6 +28,24 @@ const moduleDetails = {
   showAQISensor        : { label: 'AQI Sensor',      icon: <Wind            size={15} /> },
   showHVAC             : { label: 'HVAC',            icon: <Settings        size={15} /> },
   showAC               : { label: 'AC',              icon: <Wind            size={15} /> },
+};
+
+const defaultSubmoduleVisibility = {
+  showWaterManagement: { Overview: true, 'AG TANK': true, 'UG TANK': true },
+  showMotors: { Overview: true, 'Pump Room 1': true, 'Pump Room 2': true, 'VFD / DOL Status': true, 'PDF Report': true },
+  showDGSet: { Overview: true, 'DG Set-1': true, 'DG Set-2': true, 'DG Set-3': true },
+  showAlarms: { Overview: true, 'Active Alarms': true, 'Inactive Alarms': true, 'ACK (Acknowledge)': true, 'Alarm History': true, 'PDF Report': true },
+  showLTPanel: { Overview: true, 'LT Room-1': true, 'LT Room-2': true, 'LT Room-3': true, 'Incoming / Outgoing': true, 'Breaker Status': true, 'PDF Report': true },
+  showTransformers: { Overview: true, 'Transformer-1': true, 'Transformer-2': true, 'Load / Temp': true, 'PDF Report': true },
+  showFirePumps: { Overview: true, 'Pump Status': true, 'Header Pressure': true, 'Jockey / Main': true, 'PDF Report': true },
+  showMaintenance: { Scheduled: true, 'Pending Tasks': true, 'PDF Report': true },
+  showServiceHistory: { 'Equipment-wise': true, 'Service Records': true, 'PDF Report': true },
+  showDailyDPR: { 'Data Aggregation': true, 'Daily Logs': true, 'PDF Report': true },
+  showEnergyMetering: { Overview: true, 'Main Meter': true, 'Sub Meters': true, 'Graphs': true, 'PDF Report': true },
+  showVRV: { Overview: true, 'Control Panel': true, 'Schedule': true, 'Human Sensor': true },
+  showAQISensor: { Overview: true, 'Temp & Humidity': true },
+  showHVAC: { 'Chiller': true, 'AHU': true, 'Cooling Tower': true, 'PDF Report': true },
+  showAC: { 'Overview': true, 'PDF Report': true }
 };
 
 const buildDefaultConfig = () => {
@@ -109,6 +127,7 @@ const UserManagement = () => {
   const [showModal,    setShowModal]    = useState(false);
   const [formData,     setFormData]     = useState({ id:'', name:'', email:'', roleId:'', role:'', siteId:'' });
   const [formConfig,   setFormConfig]   = useState(buildDefaultConfig());
+  const [submodules,   setSubmodules]   = useState(defaultSubmoduleVisibility);
   const [saving,       setSaving]       = useState(false);
   const [saveError,    setSaveError]    = useState(null);
 
@@ -193,6 +212,7 @@ const UserManagement = () => {
   const openCreateModal = () => {
     setFormData({ id:'', name:'', email:'', roleId:'', role:'', siteId: sites.length > 0 ? String(sites[0].id) : '' });
     setFormConfig(buildDefaultConfig());
+    setSubmodules(defaultSubmoduleVisibility);
     setSaveError(null);
     setShowModal(true);
   };
@@ -207,6 +227,30 @@ const UserManagement = () => {
       cfg[`${k}_write`] = writeVal;
       cfg[k] = readVal;
     });
+
+    const userSubs = {};
+    Object.entries(fp).forEach(([key, val]) => {
+      if (key.startsWith('submodule_')) {
+        const parts = key.split('_');
+        if (parts.length >= 3) {
+          const moduleKey = parts[1];
+          const subName = parts.slice(2).join('_');
+          if (!userSubs[moduleKey]) userSubs[moduleKey] = {};
+          userSubs[moduleKey][subName] = !!val;
+        }
+      }
+    });
+
+    const finalSubsSource = Object.keys(userSubs).length > 0 ? userSubs : (fp.submoduleVisibility || {});
+
+    const mergedSubs = {};
+    Object.entries(defaultSubmoduleVisibility).forEach(([k, subs]) => {
+      mergedSubs[k] = {
+        ...subs,
+        ...(finalSubsSource[k] || {})
+      };
+    });
+    setSubmodules(mergedSubs);
 
     const matchedRole = roles.find(r => String(r.id) === String(user.roleId || user.role?.id));
     const roleIdVal = user.role?.id || user.roleId || matchedRole?.id || '';
@@ -294,8 +338,102 @@ const UserManagement = () => {
       featurePermissions[`${k}_write`] = writeVal;
       featurePermissions[k] = readVal;
     });
+    
+    // Save submodule visibility as flat boolean keys!
+    Object.entries(submodules).forEach(([moduleKey, subs]) => {
+      Object.entries(subs).forEach(([subName, val]) => {
+        featurePermissions[`submodule_${moduleKey}_${subName}`] = !!val;
+      });
+    });
+
     const siteId  = formData.siteId ? parseInt(formData.siteId, 10) : (sites.length > 0 ? sites[0].id : 1);
     const isEdit  = !!formData.id;
+
+    // Helper to immediately update sidebar if editing ourselves
+    const syncSidebarIfMe = (updatedFp, userEmail, userId) => {
+      const loggedInUser = JSON.parse(localStorage.getItem('userData') || '{}');
+      const editedUserRecord = users.find(u => String(u.id) === String(userId));
+      const isMe = (editedUserRecord && (
+                     String(editedUserRecord.sochiotUserId) === String(loggedInUser.id) ||
+                     String(editedUserRecord.id) === String(loggedInUser.id) ||
+                     (editedUserRecord.email && loggedInUser.email && editedUserRecord.email.trim().toLowerCase() === loggedInUser.email.trim().toLowerCase())
+                   )) ||
+                   (userEmail && loggedInUser.email && userEmail.trim().toLowerCase() === loggedInUser.email.trim().toLowerCase());
+      
+      if (isMe) {
+        const fp = { ...updatedFp };
+        const submoduleVisibility = {};
+        Object.entries(fp).forEach(([k, val]) => {
+          if (k.startsWith('submodule_')) {
+            const parts = k.split('_');
+            if (parts.length >= 3) {
+              const moduleKey = parts[1];
+              const subName = parts.slice(2).join('_');
+              if (!submoduleVisibility[moduleKey]) submoduleVisibility[moduleKey] = {};
+              submoduleVisibility[moduleKey][subName] = !!val;
+            }
+          }
+        });
+        fp.submoduleVisibility = submoduleVisibility;
+
+        localStorage.setItem('scada_feature_permissions', JSON.stringify(fp));
+        localStorage.setItem('scada_submodules_config', JSON.stringify(submoduleVisibility));
+        
+        const matchedRole = roles.find(r => String(r.id) === String(formData.roleId));
+        const newRoleName = matchedRole ? matchedRole.name : '';
+        let newRole = 'USER';
+        if (newRoleName) {
+          const rNameLower = newRoleName.toLowerCase();
+          if (rNameLower.includes('super')) {
+            newRole = 'SUPER_ADMIN';
+          } else if (rNameLower.includes('admin')) {
+            newRole = 'ADMIN';
+          } else {
+            newRole = newRoleName;
+          }
+        }
+
+        localStorage.setItem('userRole', newRole);
+        const updatedUserObj = {
+          ...loggedInUser,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          role: newRole,
+          roleName: newRoleName
+        };
+        localStorage.setItem('userData', JSON.stringify(updatedUserObj));
+
+        const userRole = newRole;
+        const rName = (newRoleName || userRole || '').toLowerCase();
+        const isRestricted = rName.includes('zone') || rName.includes('area') || rName.includes('location') || rName.includes('unit') || rName.includes('operator') || rName.includes('org') || rName.includes('organisation') || rName.includes('organization');
+        const isPowerUser = (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && !isRestricted;
+
+        const sidebarMapping = {
+          "Dashboard": isPowerUser ? true : (fp.showDashboard_read ?? fp.showDashboard ?? false),
+          "Water Management": isPowerUser ? true : (fp.showWaterManagement_read ?? fp.showWaterManagement ?? false),
+          "Motors": isPowerUser ? true : (fp.showMotors_read ?? fp.showMotors ?? false),
+          "DG Set": isPowerUser ? true : (fp.showDGSet_read ?? fp.showDGSet ?? false),
+          "Setting Templates": isPowerUser ? true : (fp.showSettingTemplates_read ?? fp.showSettingTemplates ?? false),
+          "Alarm System": isPowerUser ? true : (fp.showAlarms_read ?? fp.showAlarms ?? false),
+          "LT Panel": isPowerUser ? true : (fp.showLTPanel_read ?? fp.showLTPanel ?? false),
+          "Transformer": isPowerUser ? true : (fp.showTransformers_read ?? fp.showTransformers ?? false),
+          "Fire": isPowerUser ? true : (fp.showFirePumps_read ?? fp.showFirePumps ?? false),
+          "Ticketing": isPowerUser ? true : (fp.showTicketing_read ?? fp.showTicketing ?? false),
+          "Maintenance": isPowerUser ? true : (fp.showMaintenance_read ?? fp.showMaintenance ?? false),
+          "Service History": isPowerUser ? true : (fp.showServiceHistory_read ?? fp.showServiceHistory ?? false),
+          "Daily DPR": isPowerUser ? true : (fp.showDailyDPR_read ?? fp.showDailyDPR ?? false),
+          "Energy Metering": isPowerUser ? true : (fp.showEnergyMetering_read ?? fp.showEnergyMetering ?? false),
+          "VRV": isPowerUser ? true : (fp.showVRV_read ?? fp.showVRV ?? false),
+          "AQI Sensor": isPowerUser ? true : (fp.showAQISensor_read ?? fp.showAQISensor ?? false),
+          "HVAC": isPowerUser ? true : (fp.showHVAC_read ?? fp.showHVAC ?? false),
+          "AC": isPowerUser ? true : (fp.showAC_read ?? fp.showAC ?? false)
+        };
+        localStorage.setItem('scada_modules_config', JSON.stringify(sidebarMapping));
+
+        window.dispatchEvent(new Event('storage-update'));
+        window.dispatchEvent(new Event('storage'));
+      }
+    };
 
     // Resolve original user's siteId to check if it has changed
     const origUser = users.find(u => String(u.id) === String(formData.id));
@@ -329,6 +467,7 @@ const UserManagement = () => {
           setShowModal(false);
           setSaveMsg(`✓ "${formData.name}" transferred to new site successfully!`);
           setTimeout(() => setSaveMsg(null), 4000);
+          syncSidebarIfMe(payload.featurePermissions, formData.email, formData.id);
           fetchUsers(pagination.page);
         } else {
           throw new Error(json.message || json.error || `Failed to create user on new site`);
@@ -353,6 +492,7 @@ const UserManagement = () => {
         setShowModal(false);
         setSaveMsg(isEdit ? `✓ "${formData.name}" updated!` : `✓ "${formData.name}" registered!`);
         setTimeout(() => setSaveMsg(null), 4000);
+        syncSidebarIfMe(payload.featurePermissions, formData.email, formData.id);
         fetchUsers(pagination.page);
       } else { setSaveError(json.message || json.error || `Error ${res.status}`); }
     } catch (e) { console.error(e); setSaveError('Network error.'); }
@@ -787,64 +927,110 @@ const UserManagement = () => {
                   const onRead = formConfig[`${key}_read`] !== false;
                   const onWrite = !!formConfig[`${key}_write`];
                   return (
-                    <div key={key} className={`um-perm-card ${onRead ? 'on' : 'off'}`} style={{ cursor: 'default' }}>
-                      <span className="um-perm-card-icon">{mod.icon}</span>
-                      <span className="um-perm-card-label" style={{ fontSize: '0.78rem' }}>{mod.label}</span>
-                      
-                      <div className="d-flex align-items-center gap-2" style={{ marginLeft: 'auto' }}>
-                        {/* Read Toggle */}
-                        <div className="d-flex align-items-center gap-1" style={{ cursor: 'pointer' }} onClick={() => {
-                          const nextRead = !onRead;
-                          setFormConfig({
-                            ...formConfig,
-                            [`${key}_read`]: nextRead,
-                            [`${key}_write`]: nextRead ? onWrite : false
-                          });
-                        }}>
-                          <span style={{ fontSize: '0.62rem', fontWeight: 800, color: onRead ? '#a78bfa' : '#475569' }}>R</span>
-                          <div style={{
-                            width:'26px', height:'14px', borderRadius:'7px',
-                            background: onRead ? 'rgba(224,94,0,0.2)' : 'rgba(255,255,255,0.06)',
-                            border: `1.2px solid ${onRead ? 'rgba(224,94,0,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                            position:'relative', transition:'all 0.2s',
+                    <div key={key} className={`um-perm-card ${onRead ? 'on' : 'off'}`} style={{ cursor: 'default', display: 'flex', flexDirection: 'column', gap: '8px', height: 'auto' }}>
+                      <div className="d-flex align-items-center w-100">
+                        <span className="um-perm-card-icon">{mod.icon}</span>
+                        <span className="um-perm-card-label" style={{ fontSize: '0.78rem' }}>{mod.label}</span>
+                        
+                        <div className="d-flex align-items-center gap-2" style={{ marginLeft: 'auto' }}>
+                          {/* Read Toggle */}
+                          <div className="d-flex align-items-center gap-1" style={{ cursor: 'pointer' }} onClick={() => {
+                            const nextRead = !onRead;
+                            setFormConfig({
+                              ...formConfig,
+                              [`${key}_read`]: nextRead,
+                              [`${key}_write`]: nextRead ? onWrite : false
+                            });
                           }}>
+                            <span style={{ fontSize: '0.62rem', fontWeight: 800, color: onRead ? '#a78bfa' : '#475569' }}>R</span>
                             <div style={{
-                              width:'8px', height:'8px', borderRadius:'50%',
-                              background: onRead ? '#e05e00' : '#475569',
-                              position:'absolute', top:'1.8px',
-                              left: onRead ? '14px' : '1.8px',
-                              transition:'all 0.2s',
-                              boxShadow: onRead ? '0 0 6px rgba(224,94,0,0.7)' : 'none',
-                            }} />
+                              width:'26px', height:'14px', borderRadius:'7px',
+                              background: onRead ? 'rgba(224,94,0,0.2)' : 'rgba(255,255,255,0.06)',
+                              border: `1.2px solid ${onRead ? 'rgba(224,94,0,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                              position:'relative', transition:'all 0.2s',
+                            }}>
+                              <div style={{
+                                width:'8px', height:'8px', borderRadius:'50%',
+                                background: onRead ? '#e05e00' : '#475569',
+                                position:'absolute', top:'1.8px',
+                                left: onRead ? '14px' : '1.8px',
+                                transition:'all 0.2s',
+                                boxShadow: onRead ? '0 0 6px rgba(224,94,0,0.7)' : 'none',
+                              }} />
+                            </div>
                           </div>
-                        </div>
 
-                        {/* Write Toggle */}
-                        <div className={`d-flex align-items-center gap-1 ${!onRead ? 'disabled' : ''}`} style={{ cursor: onRead ? 'pointer' : 'not-allowed', opacity: onRead ? 1 : 0.35 }} onClick={() => {
-                          if (!onRead) return;
-                          setFormConfig({
-                            ...formConfig,
-                            [`${key}_write`]: !onWrite
-                          });
-                        }}>
-                          <span style={{ fontSize: '0.62rem', fontWeight: 800, color: onWrite ? '#a78bfa' : '#475569' }}>W</span>
-                          <div style={{
-                            width:'26px', height:'14px', borderRadius:'7px',
-                            background: onWrite ? 'rgba(224,94,0,0.2)' : 'rgba(255,255,255,0.06)',
-                            border: `1.2px solid ${onWrite ? 'rgba(224,94,0,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                            position:'relative', transition:'all 0.2s',
+                          {/* Write Toggle */}
+                          <div className={`d-flex align-items-center gap-1 ${!onRead ? 'disabled' : ''}`} style={{ cursor: onRead ? 'pointer' : 'not-allowed', opacity: onRead ? 1 : 0.35 }} onClick={() => {
+                            if (!onRead) return;
+                            setFormConfig({
+                              ...formConfig,
+                              [`${key}_write`]: !onWrite
+                            });
                           }}>
+                            <span style={{ fontSize: '0.62rem', fontWeight: 800, color: onWrite ? '#a78bfa' : '#475569' }}>W</span>
                             <div style={{
-                              width:'8px', height:'8px', borderRadius:'50%',
-                              background: onWrite ? '#e05e00' : '#475569',
-                              position:'absolute', top:'1.8px',
-                              left: onWrite ? '14px' : '1.8px',
-                              transition:'all 0.2s',
-                              boxShadow: onWrite ? '0 0 6px rgba(224,94,0,0.7)' : 'none',
-                            }} />
+                              width:'26px', height:'14px', borderRadius:'7px',
+                              background: onWrite ? 'rgba(224,94,0,0.2)' : 'rgba(255,255,255,0.06)',
+                              border: `1.2px solid ${onWrite ? 'rgba(224,94,0,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                              position:'relative', transition:'all 0.2s',
+                            }}>
+                              <div style={{
+                                width:'8px', height:'8px', borderRadius:'50%',
+                                background: onWrite ? '#e05e00' : '#475569',
+                                position:'absolute', top:'1.8px',
+                                left: onWrite ? '14px' : '1.8px',
+                                transition:'all 0.2s',
+                                boxShadow: onWrite ? '0 0 6px rgba(224,94,0,0.7)' : 'none',
+                              }} />
+                            </div>
                           </div>
                         </div>
                       </div>
+
+                      {/* Render submodules if module is enabled and has submodules */}
+                      {onRead && defaultSubmoduleVisibility[key] && (
+                        <div className="mt-2 pt-2 border-top border-secondary border-opacity-10 w-100">
+                          <div className="d-flex flex-wrap gap-1">
+                            {Object.keys(defaultSubmoduleVisibility[key]).map((subName) => {
+                              const isVisible = submodules[key]?.[subName] ?? true;
+                              return (
+                                <button
+                                  key={subName}
+                                  type="button"
+                                  onClick={() => {
+                                    setSubmodules(prev => ({
+                                      ...prev,
+                                      [key]: {
+                                        ...prev[key],
+                                        [subName]: !isVisible
+                                      }
+                                    }));
+                                  }}
+                                  className={`btn-sub-pill ${isVisible ? 'active' : 'inactive'}`}
+                                  style={{
+                                    background: isVisible ? 'rgba(224, 94, 0, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                                    border: isVisible ? '1px solid rgba(224, 94, 0, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                    borderRadius: '6px',
+                                    padding: '3px 6px',
+                                    fontSize: '0.62rem',
+                                    color: isVisible ? '#fb923c' : '#64748b',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  {isVisible ? <Eye size={8} /> : <EyeOff size={8} />}
+                                  {subName}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

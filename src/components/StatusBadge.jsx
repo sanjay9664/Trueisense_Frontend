@@ -5,9 +5,9 @@ const StatusBadge = ({ status }) => {
     switch (s?.toLowerCase()) {
       case 'running':
       case 'online': return 'status-running';
-      case 'fault': return 'status-fault';
+      case 'fault':
+      case 'offline': return 'status-fault';
       case 'warning': return 'status-warning';
-      case 'offline':
       case 'stopped': return 'status-stopped';
       case 'not mapped': return 'status-not-mapped';
       default: return 'status-stopped';

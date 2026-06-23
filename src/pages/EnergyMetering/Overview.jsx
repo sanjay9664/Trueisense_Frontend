@@ -386,7 +386,7 @@ const EnergyMeteringOverview = () => {
     if (!template?.mapping) return false;
     const deviceId = template.mapping?.deviceId || template.mapping?.emChangeConfig?.device;
     const gatewayUuid = template.mapping?.gatewayUuid;
-    if (deviceId && getOverallStatus(deviceId, gatewayUuid)) return true;
+    const devOnline = deviceId ? !!getOverallStatus(deviceId, gatewayUuid) : false;
 
     const activeModules = new Set();
     ['emChangeConfig', 'emWarningConfig', 'emReadConfig', 'emVoltageConfig', 'emCurrentConfig', 'emPowerConfig', 'emSystemConfig']
@@ -401,15 +401,32 @@ const EnergyMeteringOverview = () => {
 
     if (matchingStats.length === 0) return false;
 
-    const TELEMETRY_FRESHNESS_MS = 24 * 60 * 60 * 1000;
-    return matchingStats.some(stat => {
+    const TELEMETRY_FRESHNESS_MS = 5 * 60 * 1000; // 5 minutes freshness window
+    let hasData = false;
+
+    matchingStats.forEach(stat => {
       if (stat?.meta?.created_at_timestamp) {
         const raw = stat.meta.created_at_timestamp;
         const tsMs = raw > 1e12 ? raw : raw * 1000;
-        return (Math.abs(Date.now() - tsMs) < TELEMETRY_FRESHNESS_MS);
+        const isFresh = Math.abs(Date.now() - tsMs) < TELEMETRY_FRESHNESS_MS;
+        if (isFresh) {
+          const keys = Object.keys(stat.meta);
+          const hasV = keys.some(k => (k.toLowerCase().includes('voltage') || k.toLowerCase().startsWith('v')) && Number(stat.meta[k]) > 0);
+          const hasI = keys.some(k => (k.toLowerCase().includes('current') || k.toLowerCase().startsWith('i')) && Number(stat.meta[k]) > 0);
+          const hasLoad = keys.some(k => (k.toLowerCase().includes('kw') || k.toLowerCase().includes('power') || k.toLowerCase().includes('load')) && Number(stat.meta[k]) > 0);
+          const hasComm = stat.meta.commStatus !== undefined && stat.meta.commStatus !== null && stat.meta.commStatus !== '' && stat.meta.commStatus !== 0 && stat.meta.commStatus !== '0' && String(stat.meta.commStatus).toLowerCase() !== 'offline';
+          
+          if (hasV || hasI || hasLoad || hasComm) {
+            hasData = true;
+          }
+        }
       }
-      return false;
     });
+
+    if (deviceId) {
+      return devOnline && hasData;
+    }
+    return hasData;
   };
 
   const mainMeterTemplates = useMemo(

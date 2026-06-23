@@ -167,8 +167,14 @@ const DeviceRegistration = () => {
           label: m.name || `Module ${m.id}`,
           id: m.id,
           eventFields: [
-            ...(m.eventFieldVOS || []).map(f => f.fieldName),
-            ...(m.settingFieldVOList || []).map(f => f.fieldName)
+            ...(m.eventFieldVOS || []).map(f => ({
+              fieldName: f.fieldName,
+              displayName: f.displayName || f.fieldName
+            })),
+            ...(m.settingFieldVOList || []).map(f => ({
+              fieldName: f.fieldName,
+              displayName: f.displayName || f.fieldName
+            }))
           ]
         }));
         setTemplateRows(prev => prev.map((r, i) => i === idx ? { ...r, modules: modulesList } : r));
@@ -498,7 +504,16 @@ const DeviceRegistration = () => {
                     onChange={(e) => {
                       const val = e.target.value;
                       updateRow(idx, 'sochiotFieldName', val);
-                      if (!row.displayName) {
+                      
+                      // Auto-fill displayName from matched field
+                      const matched = (row.eventFields || []).find(f => {
+                        const fName = typeof f === 'object' ? f.fieldName : f;
+                        return String(fName) === String(val);
+                      });
+                      
+                      if (matched && typeof matched === 'object' && matched.displayName) {
+                        updateRow(idx, 'displayName', matched.displayName);
+                      } else {
                         const titleCase = val
                           .replace(/_/g, ' ')
                           .replace(/([A-Z])/g, ' $1')
@@ -509,9 +524,16 @@ const DeviceRegistration = () => {
                     }}
                   />
                   <datalist id={`fields-${idx}`}>
-                    {(row.eventFields || []).map(f => (
-                      <option key={f} value={f} />
-                    ))}
+                    {(row.eventFields || []).map(f => {
+                      const fKey = typeof f === 'object' ? f.fieldName : f;
+                      const fVal = typeof f === 'object' ? f.fieldName : f;
+                      const fDisplay = typeof f === 'object' ? (f.displayName || f.fieldName) : f;
+                      return (
+                        <option key={fKey} value={fVal}>
+                          {fDisplay}
+                        </option>
+                      );
+                    })}
                   </datalist>
                 </div>
 

@@ -160,9 +160,22 @@ const MiniMFMMeter = ({ meter, isMapped = true, isOnline, onClick }) => {
 
   return (
     <div className="w-100 d-flex flex-column align-items-center scada-meter-wrapper" onClick={onClick} style={{ cursor: 'pointer', transition: 'transform 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}>
-      <div className="mb-2 text-center" style={{ minHeight: '36px' }}>
+      <div className="mb-2 text-center d-flex flex-column align-items-center" style={{ minHeight: '44px' }}>
         <h6 className="fw-bold text-white mb-0" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }}>{meter.label}</h6>
-        <Badge bg="secondary" className="bg-opacity-10 border border-secondary border-opacity-10 px-2 py-0 fs-12 uppercase text-muted" style={{ fontSize: '0.6rem' }}>{meter.type}</Badge>
+        <div className="d-flex align-items-center justify-content-center gap-2 mt-1">
+          <Badge bg="secondary" className="bg-opacity-10 border border-secondary border-opacity-10 px-2 py-0 fs-12 uppercase text-muted" style={{ fontSize: '0.6rem' }}>{meter.type}</Badge>
+          {isMapped && (
+            isOnline ? (
+              <span className="badge bg-success bg-opacity-15 border border-success border-opacity-25 text-success px-2 py-0 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.58rem', fontWeight: 800, borderRadius: '12px' }}>
+                <span className="pulse-dot-green" style={{ width: '4px', height: '4px', boxShadow: '0 0 4px #22c55e' }}></span> ONLINE
+              </span>
+            ) : (
+              <span className="badge bg-danger bg-opacity-15 border border-danger border-opacity-25 text-danger px-2 py-0 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.58rem', fontWeight: 800, borderRadius: '12px' }}>
+                <span className="pulse-dot-red" style={{ width: '4px', height: '4px', boxShadow: '0 0 4px #ef4444' }}></span> OFFLINE
+              </span>
+            )
+          )}
+        </div>
       </div>
       <div className="mfm-polycarbonate-case shadow-2xl mx-auto" style={{ maxWidth: '270px', padding: '14px 10px', borderWidth: '8px', borderRadius: '24px' }}>
         {/* Bezel Screws */}
@@ -355,25 +368,101 @@ const fetchSavedMeterGroups = async (meters) => {
   return normalizeMeterGroups(groups, meters);
 };
 
+const naturalSort = (a, b) => {
+  const clean = (str) => String(str || '').trim();
+  const partsA = clean(a).split(/(\d+)/);
+  const partsB = clean(b).split(/(\d+)/);
+  const len = Math.max(partsA.length, partsB.length);
+  for (let i = 0; i < len; i++) {
+    if (partsA[i] === undefined) return -1;
+    if (partsB[i] === undefined) return 1;
+    const pA = partsA[i];
+    const pB = partsB[i];
+    if (pA !== pB) {
+      const numA = parseInt(pA, 10);
+      const numB = parseInt(pB, 10);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      return pA.localeCompare(pB, undefined, { sensitivity: 'base' });
+    }
+  }
+  return 0;
+};
+
 const SubMeters = () => {
   const location = useLocation();
   const { getOverallStatus, refreshStatuses } = useDeviceStatus();
   const [selectedMeter, setSelectedMeter] = useState(null);
   const [meters, setMeters] = useState([]);
   const [templates, setTemplates] = useState([]);
+
+  // Helper to find template for a specific meter
+  const getTemplateForMeter = (meterLabel) => {
+    return templates.find(t =>
+      t.module === 'Sub Meters' &&
+      String(t.mapping?.energyMeteringTarget || t.name || '').trim().toUpperCase() === String(meterLabel || '').trim().toUpperCase()
+    );
+  };
+
+  // Helper to check mapped fields for a meter
+  const getMappedFieldsForMeter = (meterLabel) => {
+    const template = getTemplateForMeter(meterLabel);
+    if (!template || !template.mapping) return {};
+    const mapping = template.mapping;
+    const mapped = {};
+
+    // Legacy configs
+    if (mapping.emPowerConfig?.enabled !== false && mapping.emPowerConfig?.module && mapping.emPowerConfig?.activePower) {
+      mapped.load = true;
+    }
+    if (mapping.emVoltageConfig?.enabled !== false && mapping.emVoltageConfig?.module && mapping.emVoltageConfig?.vR) {
+      mapped.voltage = true;
+    }
+    if (mapping.emCurrentConfig?.enabled !== false && mapping.emCurrentConfig?.module && mapping.emCurrentConfig?.iR) {
+      mapped.current = true;
+    }
+    if (mapping.emSystemConfig?.enabled !== false && mapping.emSystemConfig?.module && mapping.emSystemConfig?.pf) {
+      mapped.pf = true;
+    }
+
+    // New emChangeConfig (module event based mapping)
+    if (mapping.emChangeConfig?.enabled !== false && mapping.emChangeConfig?.module) {
+      if (mapping.emChangeConfig.totalKw) mapped.load = true;
+      if (mapping.emChangeConfig.vR) mapped.voltage = true;
+      if (mapping.emChangeConfig.iR) mapped.current = true;
+      if (mapping.emChangeConfig.pf) mapped.pf = true;
+    }
+
+    // emWarningConfig
+    if (mapping.emWarningConfig?.enabled !== false && mapping.emWarningConfig?.module) {
+      if (mapping.emWarningConfig.connectedStatus) mapped.warning = true;
+    }
+
+    // emReadConfig
+    if (mapping.emReadConfig?.enabled !== false && mapping.emReadConfig?.module) {
+      if (mapping.emReadConfig.meterSrno) mapped.read = true;
+    }
+
+    return mapped;
+  };
+
   const [showGroupingSettings, setShowGroupingSettings] = useState(false);
   const [meterGroups, setMeterGroups] = useState([]);
   const [groupSaveStatus, setGroupSaveStatus] = useState(null);
   const [showSaveSuccessPopup, setShowSaveSuccessPopup] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState('Group created successfully');
   const groupsHydratedRef = useRef(false);
-  const TELEMETRY_FRESHNESS_MS = 24 * 60 * 60 * 1000;
+  const TELEMETRY_FRESHNESS_MS = 5 * 60 * 1000; // 5 minutes freshness timeout
 
   const getMeterOnlineStatus = (meterLabel) => {
     const meter = meters.find(
       m => String(m.label).trim().toUpperCase() === String(meterLabel).trim().toUpperCase()
     );
     const template = getTemplateForMeter(meterLabel);
+    let devOnline = false;
+    let hasMapping = false;
+
     if (template?.mapping) {
       let devId = template.mapping.deviceId;
       if (!devId) {
@@ -382,33 +471,36 @@ const SubMeters = () => {
       }
       const gatewayUuid = template.mapping.gatewayUuid;
       if (devId) {
-        const isOnline = getOverallStatus(devId, gatewayUuid);
-        if (isOnline) return true;
+        hasMapping = true;
+        devOnline = !!getOverallStatus(devId, gatewayUuid);
       }
     }
 
-    // Telemetry fallback is allowed only for fresh readings, otherwise stale data
-    // would incorrectly keep an offline sub-meter marked as online.
     if (meter) {
       const lastTelemetryTs = Number(meter.lastTelemetryTimestamp);
       const isFreshTelemetry =
         Number.isFinite(lastTelemetryTs) &&
         lastTelemetryTs > 0 &&
         Date.now() - lastTelemetryTs < TELEMETRY_FRESHNESS_MS;
+      
       const hasV = meter.voltage !== undefined && meter.voltage !== null && Number(meter.voltage) > 0;
       const hasI = meter.current !== undefined && meter.current !== null && Number(meter.current) > 0;
       const hasLoad = meter.load !== undefined && meter.load !== null && Number(meter.load) > 0;
-      const hasTelemetry = meter.telemetryValues && Object.keys(meter.telemetryValues).length > 0;
       const hasCommStatus =
         meter.telemetryValues?.commStatus !== undefined &&
         meter.telemetryValues?.commStatus !== null &&
         meter.telemetryValues?.commStatus !== '' &&
         meter.telemetryValues?.commStatus !== 0 &&
-        meter.telemetryValues?.commStatus !== '0';
+        meter.telemetryValues?.commStatus !== '0' &&
+        String(meter.telemetryValues?.commStatus).toLowerCase() !== 'offline';
 
-      if (isFreshTelemetry && (hasV || hasI || hasLoad || hasTelemetry || hasCommStatus)) {
-        return true;
+      const hasData = isFreshTelemetry && (hasV || hasI || hasLoad || hasCommStatus);
+
+      // Online only if both Sochiot connection status is online and we have fresh telemetry data.
+      if (hasMapping) {
+        return devOnline && hasData;
       }
+      return hasData;
     }
     return false; // Default offline
   };
@@ -432,7 +524,7 @@ const SubMeters = () => {
     const subMeterTemplates = templates.filter(t => t.module === 'Sub Meters');
     if (subMeterTemplates.length > 0) {
       setMeters(prev => {
-        return subMeterTemplates.map(t => {
+        const mapped = subMeterTemplates.map(t => {
           const label = t.mapping?.energyMeteringTarget || t.name;
           const meterId = `SM-${t.id}`;
           const existing = prev.find(m => m.id === meterId || String(m.label).toUpperCase() === String(label).toUpperCase());
@@ -460,6 +552,11 @@ const SubMeters = () => {
             telemetryValues: existing?.telemetryValues ?? null
           };
         });
+        
+        // Sort mapped list naturally so Meter-1 comes before Meter-2
+        mapped.sort((a, b) => naturalSort(a.label, b.label));
+        
+        return mapped;
       });
     }
   }, [templates]);
@@ -540,6 +637,10 @@ const SubMeters = () => {
     }
   }, [templates, refreshStatuses]);
 
+  const mappedMeters = useMemo(() => {
+    return meters.filter(m => getMeterMappedStatus(m.label));
+  }, [meters, templates]);
+
   // Derive activeMeter dynamically from meters array so it updates in real-time
   const activeMeter = useMemo(() => {
     if (!selectedMeter) return null;
@@ -552,8 +653,8 @@ const SubMeters = () => {
   );
 
   const ungroupedMeters = useMemo(
-    () => meters.filter(meter => !assignedMeterIds.has(String(meter.templateId ?? meter.id))),
-    [meters, assignedMeterIds]
+    () => mappedMeters.filter(meter => !assignedMeterIds.has(String(meter.templateId ?? meter.id))),
+    [mappedMeters, assignedMeterIds]
   );
 
   const getAssignedGroupForMeter = (meterId, currentGroupId = null) => {
@@ -564,7 +665,7 @@ const SubMeters = () => {
   };
 
   const getGroupMeterOptions = (groupId) =>
-    [...meters].sort((left, right) => {
+    [...mappedMeters].sort((left, right) => {
       const leftKey = String(left.templateId ?? left.id);
       const rightKey = String(right.templateId ?? right.id);
       const leftChecked = meterGroups.find(group => group.id === groupId)?.meterIds.includes(leftKey);
@@ -574,7 +675,7 @@ const SubMeters = () => {
 
       if (leftChecked !== rightChecked) return leftChecked ? -1 : 1;
       if (leftAssignedElsewhere !== rightAssignedElsewhere) return leftAssignedElsewhere ? 1 : -1;
-      return String(left.label || '').localeCompare(String(right.label || ''));
+      return naturalSort(left.label, right.label);
     });
 
   const duplicateGroupNames = useMemo(() => {
@@ -759,55 +860,7 @@ const SubMeters = () => {
       .catch(err => console.error('Error fetching templates in SubMeters:', err));
   }, [refreshStatuses]);
 
-  // Helper to find template for a specific meter
-  const getTemplateForMeter = (meterLabel) => {
-    return templates.find(t =>
-      t.module === 'Sub Meters' &&
-      String(t.mapping?.energyMeteringTarget || t.name || '').trim().toUpperCase() === String(meterLabel || '').trim().toUpperCase()
-    );
-  };
 
-  // Helper to check mapped fields for a meter
-  const getMappedFieldsForMeter = (meterLabel) => {
-    const template = getTemplateForMeter(meterLabel);
-    if (!template || !template.mapping) return {};
-    const mapping = template.mapping;
-    const mapped = {};
-
-    // Legacy configs
-    if (mapping.emPowerConfig?.enabled !== false && mapping.emPowerConfig?.module && mapping.emPowerConfig?.activePower) {
-      mapped.load = true;
-    }
-    if (mapping.emVoltageConfig?.enabled !== false && mapping.emVoltageConfig?.module && mapping.emVoltageConfig?.vR) {
-      mapped.voltage = true;
-    }
-    if (mapping.emCurrentConfig?.enabled !== false && mapping.emCurrentConfig?.module && mapping.emCurrentConfig?.iR) {
-      mapped.current = true;
-    }
-    if (mapping.emSystemConfig?.enabled !== false && mapping.emSystemConfig?.module && mapping.emSystemConfig?.pf) {
-      mapped.pf = true;
-    }
-
-    // New emChangeConfig (module event based mapping)
-    if (mapping.emChangeConfig?.enabled !== false && mapping.emChangeConfig?.module) {
-      if (mapping.emChangeConfig.totalKw) mapped.load = true;
-      if (mapping.emChangeConfig.vR) mapped.voltage = true;
-      if (mapping.emChangeConfig.iR) mapped.current = true;
-      if (mapping.emChangeConfig.pf) mapped.pf = true;
-    }
-
-    // emWarningConfig
-    if (mapping.emWarningConfig?.enabled !== false && mapping.emWarningConfig?.module) {
-      if (mapping.emWarningConfig.connectedStatus) mapped.warning = true;
-    }
-
-    // emReadConfig
-    if (mapping.emReadConfig?.enabled !== false && mapping.emReadConfig?.module) {
-      if (mapping.emReadConfig.meterSrno) mapped.read = true;
-    }
-
-    return mapped;
-  };
 
 
   // Live Telemetry Sync using Websockets and Polling
@@ -1227,6 +1280,29 @@ const SubMeters = () => {
           <p className="text-secondary fs-7">Granular power metrics, current loading, and status indicators across individual feeds.</p>
         </div>
         <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+          {mappedMeters.length > 0 && (
+            <Form.Select
+              className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
+              style={{ width: '220px', cursor: 'pointer', background: 'rgba(15,23,42,0.85)' }}
+              value={selectedMeter?.id || ''}
+              onChange={(e) => {
+                const target = mappedMeters.find(m => m.id === e.target.value);
+                if (target) {
+                  setSelectedMeter(target);
+                  if (refreshStatuses) refreshStatuses();
+                } else {
+                  setSelectedMeter(null);
+                }
+              }}
+            >
+              <option value="">Select Sub-Meter...</option>
+              {mappedMeters.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.label} ({getMeterOnlineStatus(m.label) ? 'Online' : 'Offline'})
+                </option>
+              ))}
+            </Form.Select>
+          )}
           {groupSaveStatus && <Badge bg="success" className="px-3 py-2">{groupSaveStatus}</Badge>}
           <button
             onClick={() => setShowGroupingSettings(true)}
@@ -1241,23 +1317,33 @@ const SubMeters = () => {
 
       {/* METERS CARD GRID */}
       <Row className="row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-3 mb-4 justify-content-center">
-        {meters.map((meter, index) => {
-          const isMapped = getMeterMappedStatus(meter.label);
-          const isOnline = getMeterOnlineStatus(meter.label);
-          return (
-            <Col key={index} className="d-flex justify-content-center">
-              <MiniMFMMeter
-                meter={meter}
-                isMapped={isMapped}
-                isOnline={isOnline}
-                onClick={() => {
-                  setSelectedMeter(meter);
-                  if (refreshStatuses) refreshStatuses();
-                }}
-              />
-            </Col>
-          );
-        })}
+        {mappedMeters.length === 0 ? (
+          <Col xs={12} className="text-center py-5">
+            <div className="p-5 rounded-4 scada-glass-section border-change" style={{ maxWidth: '600px', margin: '0 auto' }}>
+              <Zap size={48} className="text-info mb-3 animate-pulse" />
+              <h4 className="text-white fw-black mb-2">No Sub-Meters Mapped</h4>
+              <p className="text-secondary mb-0">Please map your sub-meters in the Module Configurator / Templates page to see live telemetry analytics here.</p>
+            </div>
+          </Col>
+        ) : (
+          mappedMeters.map((meter, index) => {
+            const isMapped = getMeterMappedStatus(meter.label);
+            const isOnline = getMeterOnlineStatus(meter.label);
+            return (
+              <Col key={index} className="d-flex justify-content-center">
+                <MiniMFMMeter
+                  meter={meter}
+                  isMapped={isMapped}
+                  isOnline={isOnline}
+                  onClick={() => {
+                    setSelectedMeter(meter);
+                    if (refreshStatuses) refreshStatuses();
+                  }}
+                />
+              </Col>
+            );
+          })
+        )}
       </Row>
 
       {/* FILTER TABS & LOAD ANALYSIS */}
@@ -1283,24 +1369,30 @@ const SubMeters = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {meters.map((meter, idx) => {
-                      const isMapped = getMeterMappedStatus(meter.label);
-                      const isOnline = getMeterOnlineStatus(meter.label);
-                      const hasTelemetry = Object.keys(meter.telemetryValues || {}).length > 0;
-                      const showActive = !isMapped || isOnline || hasTelemetry;
-                      const fmtNum = (v, d = 1) => { const n = Number(v); return isNaN(n) ? '0.0' : n.toFixed(d); };
-                      return (
-                        <tr key={idx} className="border-bottom border-secondary border-opacity-5">
-                          <td className="py-3 font-monospace text-info fs-13">{meter.id}</td>
-                          <td className="py-3 text-white fw-bold">{meter.label}</td>
-                          <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load)} kW` : '—'}</td>
-                          <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
-                          <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.current)} A` : '—'}</td>
-                          <td className="py-3 text-center text-secondary font-monospace">{showActive ? fmtNum(meter.pf, 3) : '—'}</td>
-                          <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? meter.status : 'Offline'} /> : '—'}</td>
-                        </tr>
-                      );
-                    })}
+                    {mappedMeters.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="text-center py-4 text-secondary">No mapped sub-meters found.</td>
+                      </tr>
+                    ) : (
+                      mappedMeters.map((meter, idx) => {
+                        const isMapped = getMeterMappedStatus(meter.label);
+                        const isOnline = getMeterOnlineStatus(meter.label);
+                        const hasTelemetry = Object.keys(meter.telemetryValues || {}).length > 0;
+                        const showActive = !isMapped || isOnline || hasTelemetry;
+                        const fmtNum = (v, d = 1) => { const n = Number(v); return isNaN(n) ? '0.0' : n.toFixed(d); };
+                        return (
+                          <tr key={idx} className="border-bottom border-secondary border-opacity-5">
+                            <td className="py-3 font-monospace text-info fs-13">{meter.id}</td>
+                            <td className="py-3 text-white fw-bold">{meter.label}</td>
+                            <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load)} kW` : '—'}</td>
+                            <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
+                            <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.current)} A` : '—'}</td>
+                            <td className="py-3 text-center text-secondary font-monospace">{showActive ? fmtNum(meter.pf, 3) : '—'}</td>
+                            <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? meter.status : 'Offline'} /> : '—'}</td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </Table>
               </div>
@@ -1319,23 +1411,29 @@ const SubMeters = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {meters.filter(m => m.type === 'Server Room' || m.type === 'Utility').map((meter, idx) => {
-                      const isMapped = getMeterMappedStatus(meter.label);
-                      const isOnline = getMeterOnlineStatus(meter.label);
-                      const hasTelemetry = Object.keys(meter.telemetryValues || {}).length > 0;
-                      const showActive = !isMapped || isOnline || hasTelemetry;
-                      const fmtNum = (v, d = 1) => { const n = Number(v); return isNaN(n) ? '0.0' : n.toFixed(d); };
-                      return (
-                        <tr key={idx} className="border-bottom border-secondary border-opacity-5">
-                          <td className="py-3 font-monospace text-info fs-13">{meter.id}</td>
-                          <td className="py-3 text-white fw-bold">{meter.label}</td>
-                          <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load)} kW` : '—'}</td>
-                          <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
-                          <td className="py-3 text-center text-secondary font-monospace">{showActive ? fmtNum(meter.pf, 3) : '—'}</td>
-                          <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? meter.status : 'Offline'} /> : '—'}</td>
-                        </tr>
-                      );
-                    })}
+                    {mappedMeters.filter(m => m.type === 'Server Room' || m.type === 'Utility').length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-4 text-secondary">No critical mapped sub-meters found.</td>
+                      </tr>
+                    ) : (
+                      mappedMeters.filter(m => m.type === 'Server Room' || m.type === 'Utility').map((meter, idx) => {
+                        const isMapped = getMeterMappedStatus(meter.label);
+                        const isOnline = getMeterOnlineStatus(meter.label);
+                        const hasTelemetry = Object.keys(meter.telemetryValues || {}).length > 0;
+                        const showActive = !isMapped || isOnline || hasTelemetry;
+                        const fmtNum = (v, d = 1) => { const n = Number(v); return isNaN(n) ? '0.0' : n.toFixed(d); };
+                        return (
+                          <tr key={idx} className="border-bottom border-secondary border-opacity-5">
+                            <td className="py-3 font-monospace text-info fs-13">{meter.id}</td>
+                            <td className="py-3 text-white fw-bold">{meter.label}</td>
+                            <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load)} kW` : '—'}</td>
+                            <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
+                            <td className="py-3 text-center text-secondary font-monospace">{showActive ? fmtNum(meter.pf, 3) : '—'}</td>
+                            <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? meter.status : 'Offline'} /> : '—'}</td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </Table>
               </div>

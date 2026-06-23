@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Row, Col, Card, Modal, Form } from 'react-bootstrap';
 import {
   Plus, Trash2, Save, Search, Settings, RefreshCw, X, CheckCircle,
-  Activity, Zap, Database, Droplets, Flame, Sliders, ShieldAlert, ChevronDown
+  Activity, Zap, Database, Droplets, Flame, Sliders, ShieldAlert, ChevronDown,
+  Cpu, MapPin
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -102,6 +103,7 @@ const DeviceManagement = () => {
 
   /* ── modal / form state ── */
   const [showModal, setShowModal] = useState(false);
+  const [customTemplateMode, setCustomTemplateMode] = useState(false);
   const [formData, setFormData] = useState({
     id: '',
     name: '',
@@ -311,9 +313,7 @@ const DeviceManagement = () => {
       fetchAreas(selectedSiteId);
       fetchEnergyGroups(selectedSiteId);
       fetchDevices(selectedSiteId, 1);
-      if (activeTab === 'templates') {
-        fetchTemplatesList(selectedSiteId);
-      }
+      fetchTemplatesList(selectedSiteId);
     }
   }, [selectedSiteId]);
 
@@ -326,6 +326,8 @@ const DeviceManagement = () => {
   /* ── open modals ── */
   const openCreateModal = () => {
     const defaultProfileId = profiles.length > 0 ? profiles[0].id : '';
+    // Pre-fill local date/time string for input type="datetime-local"
+    const localISOString = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     setFormData({
       id: '',
       name: '',
@@ -339,7 +341,7 @@ const DeviceManagement = () => {
       sochiotTemplateId: '',
       templateName: '',
       displayOrder: 0,
-      installedAt: '',
+      installedAt: localISOString,
       description: '',
       isActive: true,
       deviceId: '',
@@ -362,6 +364,7 @@ const DeviceManagement = () => {
         "wagesPerHour": 500
       }, null, 2)
     });
+    setCustomTemplateMode(false);
     setModalTab('info');
     setSaveError(null);
     setShowModal(true);
@@ -388,10 +391,45 @@ const DeviceManagement = () => {
       template_settings: '[]',
       default_values: '{}'
     });
+    const isMatched = templates.some(t => String(t.id || t.templateId || t.sochiotTemplateId) === String(device.sochiotTemplateId));
+    setCustomTemplateMode(!!device.sochiotTemplateId && !isMatched);
     setModalTab('info');
     setSaveError(null);
     setShowModal(true);
   };
+
+  /* ── smart prefilling & synchronization handlers ── */
+  const handleBuildingChange = (buildingId) => {
+    const areasInBuilding = areas.filter(a => String(a.buildingId) === String(buildingId));
+    let autoAreaId = '';
+    if (areasInBuilding.length === 1) {
+      autoAreaId = String(areasInBuilding[0].id);
+    }
+    setFormData(prev => ({
+      ...prev,
+      buildingId,
+      areaId: autoAreaId
+    }));
+  };
+
+  const handleProfileChange = (profileId) => {
+    const selectedProfile = profiles.find(p => String(p.id) === String(profileId));
+    setFormData(prev => ({
+      ...prev,
+      profileId,
+      category: selectedProfile ? selectedProfile.category : prev.category
+    }));
+  };
+
+  const handleCategoryChange = (category) => {
+    const matchingProfile = profiles.find(p => p.category === category);
+    setFormData(prev => ({
+      ...prev,
+      category,
+      profileId: matchingProfile ? matchingProfile.id : prev.profileId
+    }));
+  };
+
 
   /* ── submit device ── */
   const handleSubmitDevice = async (e) => {
@@ -1354,224 +1392,329 @@ const DeviceManagement = () => {
             )}
 
             {(formData.id || modalTab === 'info') ? (
-              <Row className="g-3">
-                <Col md={6}>
-                  <Form.Label className="um-form-label">Building / Block (Optional)</Form.Label>
-                  <select
-                    className="um-form-input select"
-                    value={formData.buildingId}
-                    onChange={(e) => setFormData({ ...formData, buildingId: e.target.value, areaId: '' })}
-                  >
-                    <option value="">No Building Selected</option>
-                    {buildings.map(b => (
-                      <option key={b.id} value={String(b.id)}>{b.name}</option>
-                    ))}
-                  </select>
-                </Col>
-                <Col md={6}>
-                  <Form.Label className="um-form-label">Functional Area (Optional)</Form.Label>
-                  <select
-                    className="um-form-input select"
-                    value={formData.areaId}
-                    onChange={(e) => setFormData({ ...formData, areaId: e.target.value })}
-                  >
-                    <option value="">No Area Selected</option>
-                    {filteredAreasForModal.map(a => (
-                      <option key={a.id} value={String(a.id)}>{a.name}</option>
-                    ))}
-                  </select>
-                </Col>
-                <Col md={6}>
-                  <Form.Label className="um-form-label">Device Name</Form.Label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Incomer-1 LT Panel"
-                    className="um-form-input"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  />
-                </Col>
-                <Col md={6}>
-                  <Form.Label className="um-form-label">Device Category</Form.Label>
-                  <select
-                    className="um-form-input select"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  >
-                    {Object.keys(categoryDetails).map(cat => (
-                      <option key={cat} value={cat}>
-                        {categoryDetails[cat].label}
-                      </option>
-                    ))}
-                  </select>
-                </Col>
-                <Col md={6}>
-                  <Form.Label className="um-form-label">Sochiot Device ID</Form.Label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="e.g. 101"
-                    className="um-form-input"
-                    value={formData.sochiotDeviceId}
-                    onChange={(e) => setFormData({ ...formData, sochiotDeviceId: e.target.value })}
-                  />
-                </Col>
-                <Col md={6}>
-                  <Form.Label className="um-form-label">Device ID (Optional)</Form.Label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 1"
-                    className="um-form-input"
-                    value={formData.deviceId}
-                    onChange={(e) => setFormData({ ...formData, deviceId: e.target.value })}
-                  />
-                </Col>
-                <Col md={6}>
-                  <Form.Label className="um-form-label">Serial Number (Optional)</Form.Label>
-                  <input
-                    type="text"
-                    placeholder="e.g. SN-98319AB-2"
-                    className="um-form-input"
-                    value={formData.serialNumber}
-                    onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
-                  />
-                </Col>
-                {formData.id && (
-                  <Col md={6}>
-                    <Form.Label className="um-form-label">Device Profile</Form.Label>
-                    <select
-                      required={!!formData.id}
-                      className="um-form-input select"
-                      value={formData.profileId}
-                      onChange={(e) => setFormData({ ...formData, profileId: e.target.value })}
-                    >
-                      <option value="">Select Profile</option>
-                      {profiles.map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.category})
-                        </option>
-                      ))}
-                    </select>
-                  </Col>
-                )}
-                <Col md={formData.id ? 6 : 12}>
-                  <Form.Label className="um-form-label">Energy Group (Optional)</Form.Label>
-                  <select
-                    className="um-form-input select"
-                    value={formData.energyGroupId}
-                    onChange={(e) => setFormData({ ...formData, energyGroupId: e.target.value })}
-                  >
-                    <option value="">No Energy Group Selected</option>
-                    {energyGroups.map(eg => (
-                      <option key={eg.id} value={String(eg.id)}>{eg.name}</option>
-                    ))}
-                  </select>
-                </Col>
-                <Col md={4}>
-                  <Form.Label className="um-form-label">Sochiot Template ID (Optional)</Form.Label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 5"
-                    className="um-form-input"
-                    value={formData.sochiotTemplateId}
-                    onChange={(e) => setFormData({ ...formData, sochiotTemplateId: e.target.value })}
-                  />
-                </Col>
-                <Col md={4}>
-                  <Form.Label className="um-form-label">Template Name (Optional)</Form.Label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Main Incomer Template"
-                    className="um-form-input"
-                    value={formData.templateName}
-                    onChange={(e) => setFormData({ ...formData, templateName: e.target.value })}
-                  />
-                </Col>
-                <Col md={4}>
-                  <Form.Label className="um-form-label">Display Order</Form.Label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 0"
-                    className="um-form-input"
-                    value={formData.displayOrder}
-                    onChange={(e) => setFormData({ ...formData, displayOrder: e.target.value })}
-                  />
-                </Col>
-                <Col md={6}>
-                  <Form.Label className="um-form-label">Installation Time</Form.Label>
-                  <input
-                    type="datetime-local"
-                    className="um-form-input"
-                    value={formData.installedAt}
-                    onChange={(e) => setFormData({ ...formData, installedAt: e.target.value })}
-                  />
-                </Col>
-                <Col md={6} className="d-flex align-items-end" style={{ paddingBottom: '0.62rem' }}>
-                  <div
-                    className="d-flex align-items-center gap-3"
-                    style={{ cursor: 'pointer', userSelect: 'none' }}
-                    onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
-                  >
-                    <div style={{
-                      width: '38px', height: '20px', borderRadius: '10px',
-                      background: formData.isActive ? 'rgba(56,189,248,0.2)' : 'rgba(255,255,255,0.06)',
-                      border: `1.5px solid ${formData.isActive ? 'rgba(56,189,248,0.5)' : 'rgba(255,255,255,0.1)'}`,
-                      position: 'relative', transition: 'all 0.2s',
-                    }}>
-                      <div style={{
-                        width: '14px', height: '14px', borderRadius: '50%',
-                        background: formData.isActive ? '#38bdf8' : '#475569',
-                        position: 'absolute', top: '1.5px',
-                        left: formData.isActive ? '20px' : '2px',
-                        transition: 'all 0.2s',
-                        boxShadow: formData.isActive ? '0 0 6px rgba(56,189,248,0.7)' : 'none',
-                      }} />
-                    </div>
-                    <span style={{ fontSize: '0.78rem', fontWeight: 800, color: formData.isActive ? '#38bdf8' : '#64748b' }}>
-                      DEVICE STATUS: {formData.isActive ? 'ACTIVE' : 'INACTIVE'}
-                    </span>
+              <div className="d-flex flex-column gap-3">
+                {/* Section 1: Basic Identity & Classification */}
+                <div className="um-modal-section">
+                  <div className="um-modal-section-title">
+                    <Activity size={14} className="text-warning" />
+                    Identity & Category
                   </div>
-                </Col>
-                <Col md={12}>
-                  <Form.Label className="um-form-label">Description / Location Notes</Form.Label>
-                  <textarea
-                    rows={2}
-                    placeholder="e.g. Ground floor plant room, serves block A and B..."
-                    className="um-form-input"
-                    style={{ resize: 'none' }}
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  />
-                </Col>
-              </Row>
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <Form.Label className="um-form-label">
+                        Device Name <span className="text-danger ms-1">*</span>
+                      </Form.Label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Incomer-1 LT Panel"
+                        className="um-form-input"
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      />
+                    </Col>
+                    <Col md={6}>
+                      <Form.Label className="um-form-label">
+                        Device Category <span className="text-danger ms-1">*</span>
+                      </Form.Label>
+                      <select
+                        className="um-form-input select"
+                        value={formData.category}
+                        onChange={(e) => handleCategoryChange(e.target.value)}
+                      >
+                        {Object.keys(categoryDetails).map(cat => (
+                          <option key={cat} value={cat}>
+                            {categoryDetails[cat].label}
+                          </option>
+                        ))}
+                      </select>
+                    </Col>
+                    {formData.id && (
+                      <Col md={6}>
+                        <Form.Label className="um-form-label">
+                          Device Profile <span className="text-danger ms-1">*</span>
+                        </Form.Label>
+                        <select
+                          required={!!formData.id}
+                          className="um-form-input select"
+                          value={formData.profileId}
+                          onChange={(e) => handleProfileChange(e.target.value)}
+                        >
+                          <option value="">Select Profile</option>
+                          {profiles.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} ({p.category})
+                            </option>
+                          ))}
+                        </select>
+                      </Col>
+                    )}
+                    <Col md={formData.id ? 6 : 12} className="d-flex align-items-center" style={{ minHeight: '52px' }}>
+                      <div
+                        className="d-flex align-items-center gap-3 w-100"
+                        style={{ cursor: 'pointer', userSelect: 'none', padding: '0.4rem 0' }}
+                        onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
+                      >
+                        <div style={{
+                          width: '38px', height: '20px', borderRadius: '10px',
+                          background: formData.isActive ? 'rgba(224,94,0,0.2)' : 'rgba(255,255,255,0.06)',
+                          border: `1.5px solid ${formData.isActive ? 'rgba(224,94,0,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                          position: 'relative', transition: 'all 0.2s',
+                        }}>
+                          <div style={{
+                            width: '14px', height: '14px', borderRadius: '50%',
+                            background: formData.isActive ? '#e05e00' : '#475569',
+                            position: 'absolute', top: '1.5px',
+                            left: formData.isActive ? '20px' : '2px',
+                            transition: 'all 0.2s',
+                            boxShadow: formData.isActive ? '0 0 6px rgba(224,94,0,0.7)' : 'none',
+                          }} />
+                        </div>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 800, color: formData.isActive ? '#e05e00' : '#64748b' }}>
+                          DEVICE STATUS: {formData.isActive ? 'ACTIVE' : 'INACTIVE'}
+                        </span>
+                      </div>
+                    </Col>
+                  </Row>
+                </div>
+
+                {/* Section 2: Integration & Identifiers */}
+                <div className="um-modal-section">
+                  <div className="um-modal-section-title">
+                    <Cpu size={14} className="text-info" />
+                    Integration & Identifiers
+                  </div>
+                  <Row className="g-3">
+                    <Col md={4}>
+                      <Form.Label className="um-form-label">
+                        Sochiot Device ID <span className="text-danger ms-1">*</span>
+                      </Form.Label>
+                      <input
+                        type="number"
+                        required
+                        placeholder="e.g. 45775"
+                        className="um-form-input"
+                        value={formData.sochiotDeviceId}
+                        onChange={(e) => setFormData({ ...formData, sochiotDeviceId: e.target.value })}
+                      />
+                    </Col>
+                    <Col md={4}>
+                      <Form.Label className="um-form-label">Device ID (Optional)</Form.Label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 1"
+                        className="um-form-input"
+                        value={formData.deviceId}
+                        onChange={(e) => setFormData({ ...formData, deviceId: e.target.value })}
+                      />
+                    </Col>
+                    <Col md={4}>
+                      <Form.Label className="um-form-label">Serial Number (Optional)</Form.Label>
+                      <input
+                        type="text"
+                        placeholder="e.g. SN-98319AB-2"
+                        className="um-form-input"
+                        value={formData.serialNumber}
+                        onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
+                      />
+                    </Col>
+                    <Col md={6}>
+                      <Form.Label className="um-form-label">Installation Time</Form.Label>
+                      <input
+                        type="datetime-local"
+                        className="um-form-input"
+                        value={formData.installedAt}
+                        onChange={(e) => setFormData({ ...formData, installedAt: e.target.value })}
+                      />
+                    </Col>
+                    <Col md={6}>
+                      <Form.Label className="um-form-label">Display Order</Form.Label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 0"
+                        className="um-form-input"
+                        value={formData.displayOrder}
+                        onChange={(e) => setFormData({ ...formData, displayOrder: e.target.value })}
+                      />
+                    </Col>
+                  </Row>
+                </div>
+
+                {/* Section 3: Location & Templates */}
+                <div className="um-modal-section">
+                  <div className="um-modal-section-title">
+                    <MapPin size={14} className="text-success" />
+                    Location & Template Association
+                  </div>
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <Form.Label className="um-form-label">Building / Block (Optional)</Form.Label>
+                      <select
+                        className="um-form-input select"
+                        value={formData.buildingId}
+                        onChange={(e) => handleBuildingChange(e.target.value)}
+                      >
+                        <option value="">No Building Selected</option>
+                        {buildings.map(b => (
+                          <option key={b.id} value={String(b.id)}>{b.name}</option>
+                        ))}
+                      </select>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Label className="um-form-label">Functional Area (Optional)</Form.Label>
+                      <select
+                        className="um-form-input select"
+                        value={formData.areaId}
+                        onChange={(e) => setFormData({ ...formData, areaId: e.target.value })}
+                      >
+                        <option value="">No Area Selected</option>
+                        {filteredAreasForModal.map(a => (
+                          <option key={a.id} value={String(a.id)}>{a.name}</option>
+                        ))}
+                      </select>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Label className="um-form-label">Energy Group (Optional)</Form.Label>
+                      <select
+                        className="um-form-input select"
+                        value={formData.energyGroupId}
+                        onChange={(e) => setFormData({ ...formData, energyGroupId: e.target.value })}
+                      >
+                        <option value="">No Energy Group Selected</option>
+                        {energyGroups.map(eg => (
+                          <option key={eg.id} value={String(eg.id)}>{eg.name}</option>
+                        ))}
+                      </select>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Label className="um-form-label">Configuration Template (Optional)</Form.Label>
+                      {templates.length > 0 ? (
+                        <select
+                          className="um-form-input select"
+                          value={customTemplateMode ? 'custom' : (formData.sochiotTemplateId || '')}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === 'custom') {
+                              setCustomTemplateMode(true);
+                              setFormData({
+                                ...formData,
+                                sochiotTemplateId: '',
+                                templateName: ''
+                              });
+                            } else {
+                              setCustomTemplateMode(false);
+                              if (val === '') {
+                                setFormData({
+                                  ...formData,
+                                  sochiotTemplateId: '',
+                                  templateName: ''
+                                });
+                              } else {
+                                const selectedTemplate = templates.find(t => String(t.id || t.templateId || t.sochiotTemplateId) === String(val));
+                                setFormData({
+                                  ...formData,
+                                  sochiotTemplateId: val,
+                                  templateName: selectedTemplate ? (selectedTemplate.name || '') : ''
+                                });
+                              }
+                            }
+                          }}
+                        >
+                          <option value="">No Template Selected</option>
+                          {templates.map((t, idx) => (
+                            <option key={t.id || t.templateId || idx} value={String(t.id || t.templateId || t.sochiotTemplateId || '')}>
+                              {t.name || 'Unnamed Template'} (ID: {t.id || t.templateId || t.sochiotTemplateId})
+                            </option>
+                          ))}
+                          <option value="custom">✍ Enter Custom Template ID / Name</option>
+                        </select>
+                      ) : (
+                        <div className="d-flex align-items-center justify-content-between gap-2 um-form-input py-2">
+                          <span style={{ fontSize: '0.78rem', color: '#64748b' }}>No Site templates. Custom Mode enabled.</span>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-warning py-0 px-2"
+                            style={{ fontSize: '0.68rem', height: '24px', border: '1px solid rgba(224,94,0,0.3)', color: '#fb923c' }}
+                            onClick={() => setCustomTemplateMode(true)}
+                          >
+                            Force Manual
+                          </button>
+                        </div>
+                      )}
+                    </Col>
+
+                    {(customTemplateMode || templates.length === 0) && (
+                      <>
+                        <Col md={6}>
+                          <Form.Label className="um-form-label">Custom Template ID</Form.Label>
+                          <input
+                            type="number"
+                            placeholder="e.g. 5"
+                            className="um-form-input"
+                            value={formData.sochiotTemplateId}
+                            onChange={(e) => setFormData({ ...formData, sochiotTemplateId: e.target.value })}
+                          />
+                        </Col>
+                        <Col md={6}>
+                          <Form.Label className="um-form-label">Custom Template Name</Form.Label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Main Incomer Template"
+                            className="um-form-input"
+                            value={formData.templateName}
+                            onChange={(e) => setFormData({ ...formData, templateName: e.target.value })}
+                          />
+                        </Col>
+                      </>
+                    )}
+
+                    <Col md={12}>
+                      <Form.Label className="um-form-label">Description / Location Notes</Form.Label>
+                      <textarea
+                        rows={2}
+                        placeholder="e.g. Ground floor plant room, serves block A and B..."
+                        className="um-form-input"
+                        style={{ resize: 'none' }}
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      />
+                    </Col>
+                  </Row>
+                </div>
+              </div>
             ) : (
-              <Row className="g-3">
-                <Col md={12}>
-                  <Form.Label className="um-form-label">Template Settings (JSON Array)</Form.Label>
-                  <textarea
-                    rows={7}
-                    required
-                    placeholder="[ { ...setting1 }, { ...setting2 } ]"
-                    className="um-form-input font-monospace"
-                    style={{ fontSize: '0.78rem', resize: 'vertical' }}
-                    value={formData.template_settings}
-                    onChange={(e) => setFormData({ ...formData, template_settings: e.target.value })}
-                  />
-                </Col>
-                <Col md={12}>
-                  <Form.Label className="um-form-label">Default Values (JSON Object)</Form.Label>
-                  <textarea
-                    rows={6}
-                    required
-                    placeholder="{ plannedDownTime: 0, ... }"
-                    className="um-form-input font-monospace"
-                    style={{ fontSize: '0.78rem', resize: 'vertical' }}
-                    value={formData.default_values}
-                    onChange={(e) => setFormData({ ...formData, default_values: e.target.value })}
-                  />
-                </Col>
-              </Row>
+              <div className="um-modal-section">
+                <div className="um-modal-section-title">
+                  <Database size={14} className="text-warning" />
+                  JSON Configuration Profiles
+                </div>
+                <Row className="g-3">
+                  <Col md={12}>
+                    <Form.Label className="um-form-label">Template Settings (JSON Array)</Form.Label>
+                    <textarea
+                      rows={7}
+                      required
+                      placeholder="[ { ...setting1 }, { ...setting2 } ]"
+                      className="um-form-input font-monospace"
+                      style={{ fontSize: '0.78rem', resize: 'vertical' }}
+                      value={formData.template_settings}
+                      onChange={(e) => setFormData({ ...formData, template_settings: e.target.value })}
+                    />
+                  </Col>
+                  <Col md={12}>
+                    <Form.Label className="um-form-label">Default Values (JSON Object)</Form.Label>
+                    <textarea
+                      rows={6}
+                      required
+                      placeholder="{ plannedDownTime: 0, ... }"
+                      className="um-form-input font-monospace"
+                      style={{ fontSize: '0.78rem', resize: 'vertical' }}
+                      value={formData.default_values}
+                      onChange={(e) => setFormData({ ...formData, default_values: e.target.value })}
+                    />
+                  </Col>
+                </Row>
+              </div>
             )}
           </Modal.Body>
           <Modal.Footer className="border-0 pt-0" style={{ padding: '0.75rem 1.5rem 1.25rem', flexDirection: 'column', alignItems: 'stretch', gap: '0.65rem' }}>
@@ -2030,6 +2173,33 @@ const DeviceManagement = () => {
           background-position: right 0.75rem center;
           background-size: 10px 10px;
           padding-right: 2.2rem;
+        }
+
+        /* ── Beautiful Modal Sections ── */
+        .um-modal-section {
+          background: rgba(255, 255, 255, 0.015);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 1.25rem;
+          margin-bottom: 0.25rem;
+          transition: border-color 0.25s, box-shadow 0.25s;
+        }
+        .um-modal-section:hover {
+          border-color: rgba(224, 94, 0, 0.15);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        .um-modal-section-title {
+          font-size: 0.78rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #fb923c;
+          margin-bottom: 1.1rem;
+          display: flex;
+          align-items: center;
+          gap: 0.6rem;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+          padding-bottom: 0.5rem;
         }
       `}} />
     </div>

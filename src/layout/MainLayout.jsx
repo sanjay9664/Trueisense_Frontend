@@ -121,6 +121,267 @@ const MainLayout = ({ children }) => {
     };
   }, []);
 
+  // Set up periodic real-time sync of logged-in user permissions
+  useEffect(() => {
+    const syncUserPermissions = async () => {
+      try {
+        const token = localStorage.getItem('sochiot_token');
+        if (!token) return;
+        const loggedInUser = JSON.parse(localStorage.getItem('userData') || '{}');
+        const userEmail = loggedInUser.email;
+        if (!userEmail) return;
+
+        // Skip polling if impersonating to avoid overwriting active preview config
+        const isImpersonating = !!localStorage.getItem('impersonator_backup_role');
+        if (isImpersonating) return;
+
+        // Step 1: For SUPER_ADMIN, fetch the global config and sync it directly
+        if (loggedInUser.role === 'SUPER_ADMIN') {
+          try {
+            const configRes = await fetch('/api/super-admin/config');
+            if (configRes.ok) {
+              const configData = await configRes.json();
+              if (configData && !configData.error) {
+                const configRaw = configData.config || configData.data || (configData.features ? configData.features : configData);
+                
+                const globalModuleKeys = {
+                  showDashboard: "Dashboard",
+                  showWaterManagement: "Water Management",
+                  showMotors: "Motors",
+                  showDGSet: "DG Set",
+                  showSettingTemplates: "Setting Templates",
+                  showAlarms: "Alarm System",
+                  showLTPanel: "LT Panel",
+                  showTransformers: "Transformer",
+                  showFirePumps: "Fire",
+                  showTicketing: "Ticketing",
+                  showMaintenance: "Maintenance",
+                  showServiceHistory: "Service History",
+                  showDailyDPR: "Daily DPR",
+                  showEnergyMetering: "Energy Metering",
+                  showVRV: "VRV",
+                  showAQISensor: "AQI Sensor",
+                  showHVAC: "HVAC",
+                  showAC: "AC"
+                };
+
+                const sidebarModules = {};
+                Object.entries(globalModuleKeys).forEach(([key, label]) => {
+                  sidebarModules[label] = configRaw[key] ?? true;
+                });
+                
+                const savedModulesStr = localStorage.getItem('scada_modules_config');
+                const savedSubsStr = localStorage.getItem('scada_submodules_config');
+                const currentSubs = configRaw.submoduleVisibility || {};
+                
+                const modulesChanged = JSON.stringify(sidebarModules) !== savedModulesStr;
+                const subsChanged = JSON.stringify(currentSubs) !== savedSubsStr;
+                
+                if (modulesChanged || subsChanged) {
+                  localStorage.setItem('scada_modules_config', JSON.stringify(sidebarModules));
+                  localStorage.setItem('scada_submodules_config', JSON.stringify(currentSubs));
+                  localStorage.setItem('cache_global_config', JSON.stringify(configRaw));
+                  
+                  window.dispatchEvent(new Event('storage-update'));
+                  window.dispatchEvent(new Event('storage'));
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('[MainLayout Sync] Global config fetch failed:', err);
+          }
+          return;
+        }
+
+        let matchedUser = null;
+
+        // Step 2: Try /users/me first
+        try {
+          const meRes = await fetch(`${import.meta.env.VITE_BACKEND_BMS_URL}/users/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (meRes.ok) {
+            const meJson = await meRes.json();
+            const meData = meJson.data || meJson || {};
+            if (meData && meData.featurePermissions && Object.keys(meData.featurePermissions).length > 0) {
+              matchedUser = meData;
+            }
+          }
+        } catch (err) {
+          console.warn('[MainLayout Sync] /users/me failed:', err);
+        }
+
+        // Step 3: Try search fallback
+        if (!matchedUser) {
+          try {
+            const searchParam = `?search=${encodeURIComponent(userEmail)}&pageSize=5`;
+            const searchRes = await fetch(`${import.meta.env.VITE_BACKEND_BMS_URL}/users${searchParam}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (searchRes.ok) {
+              const listJson = await searchRes.json();
+              const usersList = Array.isArray(listJson)
+                ? listJson
+                : (Array.isArray(listJson.data)
+                    ? listJson.data
+                    : (Array.isArray(listJson.data?.list)
+                        ? listJson.data.list
+                        : []));
+              const myId = String(loggedInUser.id);
+              const myEmail = (userEmail || '').toLowerCase();
+              matchedUser = usersList.find(u => 
+                String(u.sochiotUserId) === myId || 
+                String(u.id) === myId || 
+                (u.email || '').toLowerCase() === myEmail
+              );
+            }
+          } catch (err) {
+            console.warn('[MainLayout Sync] /users?search failed:', err);
+          }
+        }
+
+        // Step 4: Try complete list fallback
+        if (!matchedUser) {
+          try {
+            const listRes = await fetch(`${import.meta.env.VITE_BACKEND_BMS_URL}/users?pageSize=1000`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (listRes.ok) {
+              const listJson = await listRes.json();
+              const usersList = Array.isArray(listJson)
+                ? listJson
+                : (Array.isArray(listJson.data)
+                    ? listJson.data
+                    : (Array.isArray(listJson.data?.list)
+                        ? listJson.data.list
+                        : []));
+              const myId = String(loggedInUser.id);
+              const myEmail = (userEmail || '').toLowerCase();
+              matchedUser = usersList.find(u => 
+                String(u.sochiotUserId) === myId || 
+                String(u.id) === myId || 
+                (u.email || '').toLowerCase() === myEmail
+              );
+            }
+          } catch (err) {
+            console.warn('[MainLayout Sync] /users list fallback failed:', err);
+          }
+        }
+
+        if (matchedUser && matchedUser.featurePermissions) {
+          const newFp = matchedUser.featurePermissions;
+          
+          // Reconstruct submoduleVisibility from flat keys
+          const submoduleVisibility = {};
+          Object.entries(newFp).forEach(([key, val]) => {
+            if (key.startsWith('submodule_')) {
+              const parts = key.split('_');
+              if (parts.length >= 3) {
+                const moduleKey = parts[1];
+                const subName = parts.slice(2).join('_');
+                if (!submoduleVisibility[moduleKey]) submoduleVisibility[moduleKey] = {};
+                submoduleVisibility[moduleKey][subName] = !!val;
+              }
+            }
+          });
+          const finalSubs = Object.keys(submoduleVisibility).length > 0 
+            ? submoduleVisibility 
+            : (newFp.submoduleVisibility || {});
+          newFp.submoduleVisibility = finalSubs;
+
+          // Resolve new role dynamically
+          let roleUpdated = false;
+          let newRoleName = loggedInUser.roleName;
+          let newRole = loggedInUser.role;
+
+          if (matchedUser.role?.name || matchedUser.roleName) {
+            const matchedRoleName = matchedUser.roleName || matchedUser.role?.name;
+            if (matchedRoleName !== loggedInUser.roleName) {
+              newRoleName = matchedRoleName;
+              roleUpdated = true;
+              
+              // Determine standard userRole
+              const rNameLower = matchedRoleName.toLowerCase();
+              if (matchedUser.isRootUser === true || rNameLower.includes('super')) {
+                newRole = 'SUPER_ADMIN';
+              } else if (rNameLower.includes('admin') || matchedUser.role?.roleType === 'SYSTEM_ADMIN' || matchedUser.userType === 'SYSTEM_ADMIN') {
+                newRole = 'ADMIN';
+              } else {
+                newRole = matchedRoleName;
+              }
+            }
+          }
+
+          // Check if anything has changed before updating local storage to avoid infinite loops
+          const savedFpStr = localStorage.getItem('scada_feature_permissions');
+          const savedSubConfigStr = localStorage.getItem('scada_submodules_config');
+          const savedUserRole = localStorage.getItem('userRole');
+          
+          const fpChanged = JSON.stringify(newFp) !== savedFpStr;
+          const subConfigChanged = JSON.stringify(finalSubs) !== savedSubConfigStr;
+          const roleChanged = newRole !== savedUserRole || roleUpdated;
+
+          if (fpChanged || subConfigChanged || roleChanged) {
+            if (fpChanged) {
+              localStorage.setItem('scada_feature_permissions', JSON.stringify(newFp));
+            }
+            if (subConfigChanged) {
+              localStorage.setItem('scada_submodules_config', JSON.stringify(finalSubs));
+            }
+            if (roleChanged) {
+              localStorage.setItem('userRole', newRole);
+              const updatedUserObj = {
+                ...loggedInUser,
+                role: newRole,
+                roleName: newRoleName
+              };
+              localStorage.setItem('userData', JSON.stringify(updatedUserObj));
+            }
+
+            const userRole = newRole;
+            const rName = (newRoleName || userRole || '').toLowerCase();
+            const isRestricted = rName.includes('zone') || rName.includes('area') || rName.includes('location') || rName.includes('unit') || rName.includes('operator') || rName.includes('org') || rName.includes('organisation') || rName.includes('organization');
+            const isPowerUser = (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && !isRestricted;
+
+            const sidebarMapping = {
+              "Dashboard": newFp.showDashboard_read ?? newFp.showDashboard ?? (isPowerUser ? true : false),
+              "Water Management": newFp.showWaterManagement_read ?? newFp.showWaterManagement ?? (isPowerUser ? true : false),
+              "Motors": newFp.showMotors_read ?? newFp.showMotors ?? (isPowerUser ? true : false),
+              "DG Set": newFp.showDGSet_read ?? newFp.showDGSet ?? (isPowerUser ? true : false),
+              "Setting Templates": newFp.showSettingTemplates_read ?? newFp.showSettingTemplates ?? (isPowerUser ? true : false),
+              "Alarm System": newFp.showAlarms_read ?? newFp.showAlarms ?? (isPowerUser ? true : false),
+              "LT Panel": newFp.showLTPanel_read ?? newFp.showLTPanel ?? (isPowerUser ? true : false),
+              "Transformer": newFp.showTransformers_read ?? newFp.showTransformers ?? (isPowerUser ? true : false),
+              "Fire": newFp.showFirePumps_read ?? newFp.showFirePumps ?? (isPowerUser ? true : false),
+              "Ticketing": newFp.showTicketing_read ?? newFp.showTicketing ?? (isPowerUser ? true : false),
+              "Maintenance": newFp.showMaintenance_read ?? newFp.showMaintenance ?? (isPowerUser ? true : false),
+              "Service History": newFp.showServiceHistory_read ?? newFp.showServiceHistory ?? (isPowerUser ? true : false),
+              "Daily DPR": newFp.showDailyDPR_read ?? newFp.showDailyDPR ?? (isPowerUser ? true : false),
+              "Energy Metering": newFp.showEnergyMetering_read ?? newFp.showEnergyMetering ?? (isPowerUser ? true : false),
+              "VRV": newFp.showVRV_read ?? newFp.showVRV ?? (isPowerUser ? true : false),
+              "AQI Sensor": newFp.showAQISensor_read ?? newFp.showAQISensor ?? (isPowerUser ? true : false),
+              "HVAC": newFp.showHVAC_read ?? newFp.showHVAC ?? (isPowerUser ? true : false),
+              "AC": newFp.showAC_read ?? newFp.showAC ?? (isPowerUser ? true : false)
+            };
+            localStorage.setItem('scada_modules_config', JSON.stringify(sidebarMapping));
+
+            window.dispatchEvent(new Event('storage-update'));
+            window.dispatchEvent(new Event('storage'));
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to sync user permissions:', err);
+      }
+    };
+
+    // Initial sync on mount
+    syncUserPermissions();
+
+    // Poll every 5 seconds for live database updates
+    const interval = setInterval(syncUserPermissions, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   const toggleSidebar = () => {
     setCollapsed(!collapsed);
   };

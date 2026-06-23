@@ -17,7 +17,12 @@ const Sidebar = ({ collapsed }) => {
     const isRestricted = rName.includes('zone') || rName.includes('area') || rName.includes('location') || rName.includes('unit') || rName.includes('operator') || rName.includes('org') || rName.includes('organisation') || rName.includes('organization');
     const isPowerUser = (uRole === 'SUPER_ADMIN' || uRole === 'ADMIN') && !isRestricted;
 
-    if (isPowerUser) return null; // Global Admins see everything
+    if (isPowerUser) {
+      const savedConfig = localStorage.getItem('scada_modules_config');
+      if (savedConfig) return JSON.parse(savedConfig);
+      return null; // Global Admins see everything by default
+    }
+
     const savedFp = localStorage.getItem('scada_feature_permissions');
     if (!savedFp) return {}; // Secure by default: hide everything if permissions are missing
     const localFp = JSON.parse(savedFp);
@@ -43,10 +48,38 @@ const Sidebar = ({ collapsed }) => {
     };
   });
   const [submodulesConfig, setSubmodulesConfig] = useState(() => {
+    const savedSubConfig = localStorage.getItem('scada_submodules_config');
+    if (savedSubConfig) {
+      try {
+        return JSON.parse(savedSubConfig);
+      } catch (e) {
+        console.error('Failed to parse scada_submodules_config', e);
+      }
+    }
+
     const savedFp = localStorage.getItem('scada_feature_permissions');
     if (!savedFp) return {};
-    const localFp = JSON.parse(savedFp);
-    return localFp.submoduleVisibility || {};
+    try {
+      const localFp = JSON.parse(savedFp);
+      if (localFp.submoduleVisibility) return localFp.submoduleVisibility;
+      
+      const submoduleVisibility = {};
+      Object.entries(localFp).forEach(([key, val]) => {
+        if (key.startsWith('submodule_')) {
+          const parts = key.split('_');
+          if (parts.length >= 3) {
+            const moduleKey = parts[1];
+            const subName = parts.slice(2).join('_');
+            if (!submoduleVisibility[moduleKey]) submoduleVisibility[moduleKey] = {};
+            submoduleVisibility[moduleKey][subName] = !!val;
+          }
+        }
+      });
+      return submoduleVisibility;
+    } catch (e) {
+      console.error('Failed to parse scada_feature_permissions', e);
+      return {};
+    }
   });
 
   const userRole = localStorage.getItem('userRole') || 'USER';
@@ -73,34 +106,63 @@ const Sidebar = ({ collapsed }) => {
       const isPowerUser = (uRole === 'SUPER_ADMIN' || uRole === 'ADMIN') && !isRestricted;
 
       if (isPowerUser) {
-        setModulesConfig(null);
-        setSubmodulesConfig({});
-        return;
+        const savedConfig = localStorage.getItem('scada_modules_config');
+        const savedSubConfig = localStorage.getItem('scada_submodules_config');
+        setModulesConfig(savedConfig ? JSON.parse(savedConfig) : null);
+        setSubmodulesConfig(savedSubConfig ? JSON.parse(savedSubConfig) : {});
+      } else {
+        const savedFp = localStorage.getItem('scada_feature_permissions');
+        const localFp = savedFp ? JSON.parse(savedFp) : {};
+        const calculated = {
+          "Dashboard": localFp.showDashboard_read ?? localFp.showDashboard ?? false,
+          "Water Management": localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? false,
+          "Motors": localFp.showMotors_read ?? localFp.showMotors ?? false,
+          "DG Set": localFp.showDGSet_read ?? localFp.showDGSet ?? false,
+          "Setting Templates": localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? false,
+          "Alarm System": localFp.showAlarms_read ?? localFp.showAlarms ?? false,
+          "LT Panel": localFp.showLTPanel_read ?? localFp.showLTPanel ?? false,
+          "Transformer": localFp.showTransformers_read ?? localFp.showTransformers ?? false,
+          "Fire": localFp.showFirePumps_read ?? localFp.showFirePumps ?? false,
+          "Ticketing": localFp.showTicketing_read ?? localFp.showTicketing ?? false,
+          "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? false,
+          "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? false,
+          "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? false,
+          "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? false,
+          "VRV": localFp.showVRV_read ?? localFp.showVRV ?? false,
+          "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? false,
+          "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? false,
+          "AC": localFp.showAC_read ?? localFp.showAC ?? false
+        };
+        setModulesConfig(calculated);
+
+        let finalSubs = {};
+        const savedSubConfig = localStorage.getItem('scada_submodules_config');
+        if (savedSubConfig) {
+          try {
+            finalSubs = JSON.parse(savedSubConfig);
+          } catch (e) {}
+        }
+        if (!finalSubs || Object.keys(finalSubs).length === 0) {
+          if (localFp.submoduleVisibility) {
+            finalSubs = localFp.submoduleVisibility;
+          } else {
+            const submoduleVisibility = {};
+            Object.entries(localFp).forEach(([key, val]) => {
+              if (key.startsWith('submodule_')) {
+                const parts = key.split('_');
+                if (parts.length >= 3) {
+                  const moduleKey = parts[1];
+                  const subName = parts.slice(2).join('_');
+                  if (!submoduleVisibility[moduleKey]) submoduleVisibility[moduleKey] = {};
+                  submoduleVisibility[moduleKey][subName] = !!val;
+                }
+              }
+            });
+            finalSubs = submoduleVisibility;
+          }
+        }
+        setSubmodulesConfig(finalSubs);
       }
-      const savedFp = localStorage.getItem('scada_feature_permissions');
-      const localFp = savedFp ? JSON.parse(savedFp) : {};
-      const calculated = {
-        "Dashboard": localFp.showDashboard_read ?? localFp.showDashboard ?? false,
-        "Water Management": localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? false,
-        "Motors": localFp.showMotors_read ?? localFp.showMotors ?? false,
-        "DG Set": localFp.showDGSet_read ?? localFp.showDGSet ?? false,
-        "Setting Templates": localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? false,
-        "Alarm System": localFp.showAlarms_read ?? localFp.showAlarms ?? false,
-        "LT Panel": localFp.showLTPanel_read ?? localFp.showLTPanel ?? false,
-        "Transformer": localFp.showTransformers_read ?? localFp.showTransformers ?? false,
-        "Fire": localFp.showFirePumps_read ?? localFp.showFirePumps ?? false,
-        "Ticketing": localFp.showTicketing_read ?? localFp.showTicketing ?? false,
-        "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? false,
-        "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? false,
-        "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? false,
-        "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? false,
-        "VRV": localFp.showVRV_read ?? localFp.showVRV ?? false,
-        "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? false,
-        "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? false,
-        "AC": localFp.showAC_read ?? localFp.showAC ?? false
-      };
-      setModulesConfig(calculated);
-      setSubmodulesConfig(localFp.submoduleVisibility || {});
     };
 
     window.addEventListener('storage-update', updateConfig);

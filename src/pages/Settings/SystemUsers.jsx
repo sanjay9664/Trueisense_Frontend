@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   UserPlus, Users, Shield, Building, Trash2, Lock,
   ChevronLeft, ChevronRight, ArrowLeft, ChevronDown,
-  ChevronRight as ChevRight, Eye, Plus, Search,
+  ChevronRight as ChevRight, Eye, EyeOff, Plus, Search,
   CheckSquare, Square, Settings, Globe, Star, X, Edit
 } from 'lucide-react';
 
@@ -214,6 +214,24 @@ const OPERATOR_MODULES = [
   { key: 'showAC', label: 'AC' }
 ];
 
+const defaultSubmoduleVisibility = {
+  showWaterManagement: { Overview: true, 'AG TANK': true, 'UG TANK': true },
+  showMotors: { Overview: true, 'Pump Room 1': true, 'Pump Room 2': true, 'VFD / DOL Status': true, 'PDF Report': true },
+  showDGSet: { Overview: true, 'DG Set-1': true, 'DG Set-2': true, 'DG Set-3': true },
+  showAlarms: { Overview: true, 'Active Alarms': true, 'Inactive Alarms': true, 'ACK (Acknowledge)': true, 'Alarm History': true, 'PDF Report': true },
+  showLTPanel: { Overview: true, 'LT Room-1': true, 'LT Room-2': true, 'LT Room-3': true, 'Incoming / Outgoing': true, 'Breaker Status': true, 'PDF Report': true },
+  showTransformers: { Overview: true, 'Transformer-1': true, 'Transformer-2': true, 'Load / Temp': true, 'PDF Report': true },
+  showFirePumps: { Overview: true, 'Pump Status': true, 'Header Pressure': true, 'Jockey / Main': true, 'PDF Report': true },
+  showMaintenance: { Scheduled: true, 'Pending Tasks': true, 'PDF Report': true },
+  showServiceHistory: { 'Equipment-wise': true, 'Service Records': true, 'PDF Report': true },
+  showDailyDPR: { 'Data Aggregation': true, 'Daily Logs': true, 'PDF Report': true },
+  showEnergyMetering: { Overview: true, 'Main Meter': true, 'Sub Meters': true, 'Graphs': true, 'PDF Report': true },
+  showVRV: { Overview: true, 'Control Panel': true, 'Schedule': true, 'Human Sensor': true },
+  showAQISensor: { Overview: true, 'Temp & Humidity': true },
+  showHVAC: { 'Chiller': true, 'AHU': true, 'Cooling Tower': true, 'PDF Report': true },
+  showAC: { 'Overview': true, 'PDF Report': true }
+};
+
 const CONFIGURABLE_ROLES = ['zone_manager', 'area_manager', 'location_manager', 'unit_head', 'operator'];
 
 const AdministratorUserTab = () => {
@@ -336,7 +354,35 @@ const AdministratorUserTab = () => {
 
     // Set operator permissions if operator role is set
     const fp = u.featurePermissions || {};
-    setOperatorPerms(fp);
+    
+    // Reconstruct submoduleVisibility from flat keys
+    const userSubs = {};
+    Object.entries(fp).forEach(([key, val]) => {
+      if (key.startsWith('submodule_')) {
+        const parts = key.split('_');
+        if (parts.length >= 3) {
+          const moduleKey = parts[1];
+          const subName = parts.slice(2).join('_');
+          if (!userSubs[moduleKey]) userSubs[moduleKey] = {};
+          userSubs[moduleKey][subName] = !!val;
+        }
+      }
+    });
+    
+    const finalSubsSource = Object.keys(userSubs).length > 0 ? userSubs : (fp.submoduleVisibility || {});
+    
+    const mergedSubs = {};
+    Object.entries(defaultSubmoduleVisibility).forEach(([k, subs]) => {
+      mergedSubs[k] = {
+        ...subs,
+        ...(finalSubsSource[k] || {})
+      };
+    });
+    
+    setOperatorPerms({
+      ...fp,
+      submoduleVisibility: mergedSubs
+    });
 
     setView('add'); // Show the form view
   };
@@ -781,11 +827,23 @@ const AdministratorUserTab = () => {
         finalFeaturePermissions[`${m.key}_write`] = writeVal;
         finalFeaturePermissions[m.key] = readVal; // legacy visibility support
       });
+      // Save submodule visibility as flat boolean keys!
+      const subVisibility = operatorPerms.submoduleVisibility || defaultSubmoduleVisibility;
+      Object.entries(subVisibility).forEach(([moduleKey, subs]) => {
+        Object.entries(subs).forEach(([subName, val]) => {
+          finalFeaturePermissions[`submodule_${moduleKey}_${subName}`] = !!val;
+        });
+      });
     } else {
       OPERATOR_MODULES.forEach(m => {
         finalFeaturePermissions[`${m.key}_read`] = true;
         finalFeaturePermissions[`${m.key}_write`] = true;
         finalFeaturePermissions[m.key] = true;
+      });
+      Object.entries(defaultSubmoduleVisibility).forEach(([moduleKey, subs]) => {
+        Object.entries(subs).forEach(([subName, val]) => {
+          finalFeaturePermissions[`submodule_${moduleKey}_${subName}`] = !!val;
+        });
       });
     }
 
@@ -815,6 +873,91 @@ const AdministratorUserTab = () => {
       if (res.ok && json.success !== false) {
         handleCancel();
         fetchUsers();
+
+        // Sync with sidebar immediately if the edited user is the currently logged-in user
+        const loggedInUser = JSON.parse(localStorage.getItem('userData') || '{}');
+        const editedUserRecord = users.find(u => String(u.id) === String(form.id));
+        const isMe = (editedUserRecord && (
+                       String(editedUserRecord.sochiotUserId) === String(loggedInUser.id) ||
+                       String(editedUserRecord.id) === String(loggedInUser.id) ||
+                       (editedUserRecord.email && loggedInUser.email && editedUserRecord.email.trim().toLowerCase() === loggedInUser.email.trim().toLowerCase())
+                     )) ||
+                     (form.email && loggedInUser.email && form.email.trim().toLowerCase() === loggedInUser.email.trim().toLowerCase());
+        
+        if (isMe) {
+          const fp = { ...finalFeaturePermissions };
+          const submoduleVisibility = {};
+          Object.entries(fp).forEach(([k, val]) => {
+            if (k.startsWith('submodule_')) {
+              const parts = k.split('_');
+              if (parts.length >= 3) {
+                const moduleKey = parts[1];
+                const subName = parts.slice(2).join('_');
+                if (!submoduleVisibility[moduleKey]) submoduleVisibility[moduleKey] = {};
+                submoduleVisibility[moduleKey][subName] = !!val;
+              }
+            }
+          });
+          fp.submoduleVisibility = submoduleVisibility;
+
+          localStorage.setItem('scada_feature_permissions', JSON.stringify(fp));
+          localStorage.setItem('scada_submodules_config', JSON.stringify(submoduleVisibility));
+          
+          const matchedRole = roles.find(r => String(r.id) === String(finalRoleId));
+          const newRoleName = matchedRole ? matchedRole.name : form.roleKey;
+          let newRole = 'USER';
+          if (newRoleName) {
+            const rNameLower = newRoleName.toLowerCase();
+            if (rNameLower.includes('super')) {
+              newRole = 'SUPER_ADMIN';
+            } else if (rNameLower.includes('admin')) {
+              newRole = 'ADMIN';
+            } else {
+              newRole = newRoleName;
+            }
+          }
+
+          localStorage.setItem('userRole', newRole);
+          const updatedUserObj = {
+            ...loggedInUser,
+            name: form.name.trim(),
+            email: form.email.trim(),
+            role: newRole,
+            roleName: newRoleName,
+            organizationId: form.organizationId
+          };
+          localStorage.setItem('userData', JSON.stringify(updatedUserObj));
+
+          const userRole = newRole;
+          const rName = (newRoleName || userRole || '').toLowerCase();
+          const isRestricted = rName.includes('zone') || rName.includes('area') || rName.includes('location') || rName.includes('unit') || rName.includes('operator') || rName.includes('org') || rName.includes('organisation') || rName.includes('organization');
+          const isPowerUser = (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && !isRestricted;
+
+          const sidebarMapping = {
+            "Dashboard": isPowerUser ? true : (fp.showDashboard_read ?? fp.showDashboard ?? false),
+            "Water Management": isPowerUser ? true : (fp.showWaterManagement_read ?? fp.showWaterManagement ?? false),
+            "Motors": isPowerUser ? true : (fp.showMotors_read ?? fp.showMotors ?? false),
+            "DG Set": isPowerUser ? true : (fp.showDGSet_read ?? fp.showDGSet ?? false),
+            "Setting Templates": isPowerUser ? true : (fp.showSettingTemplates_read ?? fp.showSettingTemplates ?? false),
+            "Alarm System": isPowerUser ? true : (fp.showAlarms_read ?? fp.showAlarms ?? false),
+            "LT Panel": isPowerUser ? true : (fp.showLTPanel_read ?? fp.showLTPanel ?? false),
+            "Transformer": isPowerUser ? true : (fp.showTransformers_read ?? fp.showTransformers ?? false),
+            "Fire": isPowerUser ? true : (fp.showFirePumps_read ?? fp.showFirePumps ?? false),
+            "Ticketing": isPowerUser ? true : (fp.showTicketing_read ?? fp.showTicketing ?? false),
+            "Maintenance": isPowerUser ? true : (fp.showMaintenance_read ?? fp.showMaintenance ?? false),
+            "Service History": isPowerUser ? true : (fp.showServiceHistory_read ?? fp.showServiceHistory ?? false),
+            "Daily DPR": isPowerUser ? true : (fp.showDailyDPR_read ?? fp.showDailyDPR ?? false),
+            "Energy Metering": isPowerUser ? true : (fp.showEnergyMetering_read ?? fp.showEnergyMetering ?? false),
+            "VRV": isPowerUser ? true : (fp.showVRV_read ?? fp.showVRV ?? false),
+            "AQI Sensor": isPowerUser ? true : (fp.showAQISensor_read ?? fp.showAQISensor ?? false),
+            "HVAC": isPowerUser ? true : (fp.showHVAC_read ?? fp.showHVAC ?? false),
+            "AC": isPowerUser ? true : (fp.showAC_read ?? fp.showAC ?? false)
+          };
+          localStorage.setItem('scada_modules_config', JSON.stringify(sidebarMapping));
+
+          window.dispatchEvent(new Event('storage-update'));
+          window.dispatchEvent(new Event('storage'));
+        }
       } else {
         const errMsg = json.error?.message || json.message || (typeof json.error === 'string' ? json.error : null) || 'Failed to save user';
         setSaveError(errMsg);
@@ -911,6 +1054,7 @@ const AdministratorUserTab = () => {
       if (hasRead) {
         activeServices.push({
           label: m.label,
+          key: m.key,
           write: hasWrite
         });
       }
@@ -926,13 +1070,50 @@ const AdministratorUserTab = () => {
       );
     }
 
+    // Reconstruct submoduleVisibility from flat keys
+    const userSubs = {};
+    Object.entries(fp).forEach(([key, val]) => {
+      if (key.startsWith('submodule_')) {
+        const parts = key.split('_');
+        if (parts.length >= 3) {
+          const moduleKey = parts[1];
+          const subName = parts.slice(2).join('_');
+          if (!userSubs[moduleKey]) userSubs[moduleKey] = {};
+          userSubs[moduleKey][subName] = !!val;
+        }
+      }
+    });
+    const finalSubs = Object.keys(userSubs).length > 0 ? userSubs : (fp.submoduleVisibility || {});
+
     return (
-      <div className="su-column-item-services">
-        {activeServices.map((s, idx) => (
-          <span key={idx} className={`su-service-badge ${s.write ? 'write' : ''}`} title={s.write ? 'Read & Write' : 'Read Only'}>
-            {s.label}
-          </span>
-        ))}
+      <div className="su-column-item-services d-flex flex-wrap gap-2">
+        {activeServices.map((s, idx) => {
+          let activeSubs = [];
+          if (s.key === 'showEnergyMetering') {
+            const subs = finalSubs.showEnergyMetering || {};
+            activeSubs = Object.keys(subs).filter(subName => !!subs[subName]);
+          } else if (s.key === 'showAQISensor') {
+            const subs = finalSubs.showAQISensor || {};
+            activeSubs = Object.keys(subs).filter(subName => !!subs[subName]);
+          }
+
+          return (
+            <div key={idx} className="d-flex flex-column align-items-start gap-1">
+              <span className={`su-service-badge ${s.write ? 'write' : ''} m-0`} title={s.write ? 'Read & Write' : 'Read Only'}>
+                {s.label}
+              </span>
+              {activeSubs.length > 0 && (
+                <div className="d-flex flex-wrap gap-1 ps-1" style={{ maxWidth: '200px' }}>
+                  {activeSubs.map((sub, sIdx) => (
+                    <span key={sIdx} className="text-secondary" style={{ fontSize: '9px', opacity: 0.8, backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '3px', padding: '1px 3px', lineHeight: '1.2' }}>
+                      {sub}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -959,7 +1140,22 @@ const AdministratorUserTab = () => {
         (u.email || '').toLowerCase() === (loggedInUser.email || '').toLowerCase()
       );
       if (myRecord?.featurePermissions) {
-        const fp = myRecord.featurePermissions;
+        const fp = { ...myRecord.featurePermissions };
+        if (!fp.submoduleVisibility) {
+          const submoduleVisibility = {};
+          Object.entries(fp).forEach(([k, val]) => {
+            if (k.startsWith('submodule_')) {
+              const parts = k.split('_');
+              if (parts.length >= 3) {
+                const moduleKey = parts[1];
+                const subName = parts.slice(2).join('_');
+                if (!submoduleVisibility[moduleKey]) submoduleVisibility[moduleKey] = {};
+                submoduleVisibility[moduleKey][subName] = !!val;
+              }
+            }
+          });
+          fp.submoduleVisibility = submoduleVisibility;
+        }
         // Also update localStorage so subsequent checks are fast
         if (Object.keys(fp).length > 0) {
           localStorage.setItem('scada_feature_permissions', JSON.stringify(fp));
@@ -1398,9 +1594,59 @@ const AdministratorUserTab = () => {
                       const hasWriteAccess = hasPermissionToAssign(m.key, 'write');
                       const isRead = !!operatorPerms[`${m.key}_read`];
                       const isWrite = !!operatorPerms[`${m.key}_write`] && isRead;
+                      const subVisibility = operatorPerms.submoduleVisibility || defaultSubmoduleVisibility;
+                      const hasSubs = defaultSubmoduleVisibility[m.key];
                       return (
                         <tr key={m.key}>
-                          <td>{m.label}</td>
+                          <td>
+                            <div>{m.label}</div>
+                            {isRead && hasSubs && (
+                              <div className="mt-2 d-flex flex-wrap gap-1">
+                                {Object.keys(defaultSubmoduleVisibility[m.key]).map((subName) => {
+                                  const isVisible = subVisibility[m.key]?.[subName] ?? true;
+                                  return (
+                                    <button
+                                      key={subName}
+                                      type="button"
+                                      onClick={() => {
+                                        setOperatorPerms(prev => {
+                                          const currentSubs = prev.submoduleVisibility || defaultSubmoduleVisibility;
+                                          return {
+                                            ...prev,
+                                            submoduleVisibility: {
+                                              ...currentSubs,
+                                              [m.key]: {
+                                                ...currentSubs[m.key],
+                                                [subName]: !isVisible
+                                              }
+                                            }
+                                          };
+                                        });
+                                      }}
+                                      className={`btn-sub-pill ${isVisible ? 'active' : 'inactive'}`}
+                                      style={{
+                                        background: isVisible ? 'rgba(124, 58, 237, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                                        border: isVisible ? '1px solid rgba(124, 58, 237, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                        borderRadius: '6px',
+                                        padding: '3px 6px',
+                                        fontSize: '0.62rem',
+                                        color: isVisible ? '#c084fc' : '#64748b',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '3px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        fontWeight: '600'
+                                      }}
+                                    >
+                                      {isVisible ? <Eye size={8} /> : <EyeOff size={8} />}
+                                      {subName}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </td>
                           <td style={{ textAlign: 'center' }}>
                             <span 
                               className={`su-modal-check-wrap ${!hasReadAccess ? 'disabled' : ''}`}

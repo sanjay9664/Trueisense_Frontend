@@ -261,14 +261,22 @@ const ConfigTemplates = () => {
     { name: 'PUMP 02 METER', id: 'EM-P2' }
   ];
 
-  const energyMetersList = [
-    { name: 'MAIN GRID INCOMER METER', id: 'EM-MAIN' },
-    { name: 'COMMERCIAL WING A INCOMER', id: 'SM-WING-A-01' },
-    { name: 'DATA CENTER MAIN UPS INPUT', id: 'SM-SERVER-02' },
-    { name: 'WATER PLANT & UTILITY MOTORS ROOM', id: 'SM-UTILITY-03' },
-    { name: 'VRV CHILLER MAIN FEEDER', id: 'SM-VRV-04' },
-    { name: 'OUTDOOR STREET & PARKING LIGHTS', id: 'SM-LIGHT-05' }
-  ];
+  const energyMetersList = useMemo(() => {
+    const list = [{ name: 'Meter-1', id: 'EM-MAIN' }];
+    for (let i = 1; i <= 50; i++) {
+      list.push({ name: `Meter-${i}`, id: `SM-METER-${String(i).padStart(2, '0')}` });
+    }
+    return list;
+  }, []);
+
+  const aqiSensorsList = useMemo(() => {
+    const list = [];
+    for (let i = 1; i <= 50; i++) {
+      list.push({ name: `TEMP & HUMIDITY (#${i})`, id: `AQI-${String(i).padStart(2, '0')}` });
+    }
+    return list;
+  }, []);
+
 
   const isHierarchyUnlocked = useMemo(() => {
     return !!(globalLocation.organization || globalLocation.client || globalLocation.zone || globalLocation.subZone || globalLocation.building);
@@ -4612,100 +4620,146 @@ const ConfigTemplates = () => {
               ) : selectedCategory === 'AQI Sensor' && selectedModule === 'Temp & Humidity' ? (
                 <div className="config-form-container scale-in">
                   <div className="p-0 rounded-4 bg-dark bg-opacity-20 border border-white border-opacity-5 mb-5 overflow-hidden position-relative">
-                    <div className="p-3 border-bottom border-white border-opacity-5 bg-dark bg-opacity-40 d-flex align-items-center gap-2">
-                      <Wind className="text-info shadow-glow-blue" size={18} />
-                      <h6 className="mb-0 text-white fw-black uppercase tracking-widest fs-11">AQI Sensor Environment Mapping</h6>
+                    <div className="p-3 border-bottom border-white border-opacity-5 bg-dark bg-opacity-40 d-flex justify-content-between align-items-center">
+                      <div className="d-flex align-items-center gap-2">
+                        <Wind className="text-info shadow-glow-blue" size={18} />
+                        <h6 className="mb-0 text-white fw-black uppercase tracking-widest fs-11">AQI Sensor Environment Mapping</h6>
+                      </div>
+                      <div className="d-flex align-items-center gap-3">
+                        <div className="d-flex align-items-center gap-2" style={{ minWidth: '220px' }}>
+                          <span className="text-secondary fs-12 uppercase fw-black opacity-60 text-nowrap">Target Unit:</span>
+                          <Form.Select
+                            className="premium-input px-3 py-1 fs-11 fw-bold border-info border-opacity-20 shadow-inner"
+                            style={{ height: '35px' }}
+                            value={vrvConfig.vrvZone || ''}
+                            onChange={(e) => {
+                              const targetVal = e.target.value;
+                              setVrvConfig(prev => ({ ...prev, vrvZone: targetVal }));
+                              setTemplateName(targetVal); // Auto set the template name to the selected target unit!
+                              
+                              // Load existing if it exists
+                              const existing = savedTemplates.find(t =>
+                                (t.category === 'AQI Sensor' || t.category === 'VRV') &&
+                                t.module === 'Temp & Humidity' &&
+                                t.mapping?.vrvConfig?.vrvZone === targetVal
+                              );
+                              if (existing) {
+                                setVrvConfig(existing.mapping.vrvConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', vrvZone: targetVal, temperature: '', humidity: '', co2: '', tvoc: '', aqi: '', targetTemp: '', enabled: true });
+                                if (existing.mapping.globalHierarchy) setGlobalLocation(existing.mapping.globalHierarchy);
+                              } else {
+                                setVrvConfig({
+                                  organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '',
+                                  vrvZone: targetVal, temperature: '', humidity: '', co2: '', tvoc: '', aqi: '', targetTemp: '', enabled: true
+                                });
+                              }
+                            }}
+                          >
+                            <option value="">SELECT TARGET SENSOR</option>
+                            {aqiSensorsList.map(s => (
+                              <option key={s.id} value={s.name}>{s.name}</option>
+                            ))}
+                          </Form.Select>
+                        </div>
+                      </div>
                     </div>
-                    <div className="p-4 bg-dark bg-opacity-20">
-                      <Row className="g-4">
-                        {[
-                          { title: 'Environment Metrics', state: vrvConfig, setter: setVrvConfig, icon: <Thermometer size={18} />, color: 'info', fields: [{ label: 'TEMPERATURE (C)', key: 'temperature' }, { label: 'HUMIDITY (%)', key: 'humidity' }, { label: 'CO2 (PPM)', key: 'co2' }, { label: 'TVOC (PPM)', key: 'tvoc' }, { label: 'AQI', key: 'aqi' }, { label: 'TARGET TEMP (C)', key: 'targetTemp' }] }
-                        ].map((section, idx) => (
-                          <Col md={12} key={idx}>
-                            <div className={`p-4 rounded-4 bg-dark bg-opacity-40 border border-${section.color} border-opacity-10 premium-figma-card h-100 position-relative overflow-hidden transition-all hover-glow-${section.color}`}>
-                              <div className={`card-inner-glow bg-${section.color} opacity-5`}></div>
-                              <div className="mb-4 d-flex align-items-center justify-content-between">
-                                <div className="d-flex align-items-center gap-3">
-                                  <div className={`icon-box-premium ${section.color} p-2 shadow-glow-${section.color}`}>
-                                    {section.icon}
+                    {vrvConfig.vrvZone ? (
+                      <div className="p-4 bg-dark bg-opacity-20">
+                        <Row className="g-4">
+                          {[
+                            { title: 'Environment Metrics', state: vrvConfig, setter: setVrvConfig, icon: <Thermometer size={18} />, color: 'info', fields: [{ label: 'TEMPERATURE (C)', key: 'temperature' }, { label: 'HUMIDITY (%)', key: 'humidity' }, { label: 'CO2 (PPM)', key: 'co2' }, { label: 'TVOC (PPM)', key: 'tvoc' }, { label: 'AQI', key: 'aqi' }, { label: 'TARGET TEMP (C)', key: 'targetTemp' }] }
+                          ].map((section, idx) => (
+                            <Col md={12} key={idx}>
+                              <div className={`p-4 rounded-4 bg-dark bg-opacity-40 border border-${section.color} border-opacity-10 premium-figma-card h-100 position-relative overflow-hidden transition-all hover-glow-${section.color}`}>
+                                <div className={`card-inner-glow bg-${section.color} opacity-5`}></div>
+                                <div className="mb-4 d-flex align-items-center justify-content-between">
+                                  <div className="d-flex align-items-center gap-3">
+                                    <div className={`icon-box-premium ${section.color} p-2 shadow-glow-${section.color}`}>
+                                      {section.icon}
+                                    </div>
+                                    <div>
+                                      <h6 className="text-white fw-black uppercase tracking-widest mb-0 fs-10">{section.title}</h6>
+                                      <small className={`text-${section.color} opacity-50 uppercase fs-12 fw-bold tracking-widest`}>AQI Sensor Mapping</small>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <h6 className="text-white fw-black uppercase tracking-widest mb-0 fs-10">{section.title}</h6>
-                                    <small className={`text-${section.color} opacity-50 uppercase fs-12 fw-bold tracking-widest`}>AQI Sensor Mapping</small>
-                                  </div>
+                                  <Form.Check type="switch" className={`scada-switch ${section.color}`} checked={section.state.enabled} onChange={(e) => section.setter({ ...section.state, enabled: e.target.checked })} />
                                 </div>
-                                <Form.Check type="switch" className={`scada-switch ${section.color}`} checked={section.state.enabled} onChange={(e) => section.setter({ ...section.state, enabled: e.target.checked })} />
-                              </div>
-                              <div className={`transition-all ${!section.state.enabled ? 'opacity-25 grayscale' : ''}`}>
-                                <Row className="g-3 position-relative z-1">
-                                  {!isHierarchyUnlocked ? (
-                                    <Col md={12}>
-                                      <div className={`p-3 rounded bg-dark bg-opacity-40 border border-${section.color} border-opacity-20 text-center shadow-glow-${section.color}-box`}>
-                                        <small className={`text-${section.color} fw-black uppercase tracking-widest fs-12`}>
-                                          <Info size={14} className="me-2" /> Select hierarchy level to unlock
-                                        </small>
-                                      </div>
-                                    </Col>
-                                  ) : (
-                                    <>
-                                      <Col md={6}>
-                                        <Form.Label className="fs-11 text-secondary fw-black uppercase tracking-widest opacity-50 mb-2 d-block truncate">BUILDING / GATEWAY</Form.Label>
-                                        <Form.Select className={`premium-input p-3 fs-11 fw-bold border-${section.color} border-opacity-10 shadow-inner`} style={{ height: '45px' }} value={section.state.building || globalLocation.building} onChange={(e) => handleConfigChange(section.state, section.setter, 'building', e.target.value)}>
-                                          <option value="">SELECT OPTION</option>
-                                          {getFieldList('building', { ...globalLocation, ...section.state }).map(opt => (
-                                            <option key={opt.id} value={opt.id}>{opt.label}</option>
-                                          ))}
-                                        </Form.Select>
-                                      </Col>
-                                      <Col md={6}>
-                                        <Form.Label className="fs-11 text-secondary fw-black uppercase tracking-widest opacity-50 mb-2 d-block">DEVICE_ID</Form.Label>
-                                        <Form.Select className={`premium-input p-3 fs-11 fw-bold border-${section.color} border-opacity-10 shadow-inner`} style={{ height: '45px' }} value={section.state.device} onChange={(e) => handleConfigChange(section.state, section.setter, 'device', e.target.value)}>
-                                          <option value="">SELECT DEVICE</option>
-                                          {getFieldList('device', { ...globalLocation, ...section.state, building: section.state.building || globalLocation.building }).map(opt => (
-                                            <option key={opt.id} value={opt.id}>{opt.label}</option>
-                                          ))}
-                                        </Form.Select>
-                                      </Col>
+                                <div className={`transition-all ${!section.state.enabled ? 'opacity-25 grayscale' : ''}`}>
+                                  <Row className="g-3 position-relative z-1">
+                                    {!isHierarchyUnlocked ? (
                                       <Col md={12}>
-                                        <hr className={`border-${section.color} opacity-20 my-3`} />
-                                        <Form.Label className={`fs-10 text-${section.color} fw-black uppercase tracking-widest opacity-70 mb-3 d-block`}>Parameters Register Mapping</Form.Label>
-                                        <Row className="g-3">
-                                          {section.fields.map((f, fIdx) => {
-                                            const rawFields = getFieldList('field', { ...globalLocation, ...section.state, building: section.state.building || globalLocation.building });
-                                            const sortedOptions = getFilteredFieldList(section.title, f.key, f.label, rawFields);
-                                            return (
-                                              <Col md={4} key={fIdx}>
-                                                <div className="premium-field-wrapper p-2 rounded bg-dark bg-opacity-20 border border-white border-opacity-5">
-                                                  <Form.Label className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-1 d-block">{f.label}</Form.Label>
-                                                  <Form.Select
-                                                    className={`premium-input p-2 fs-10 fw-bold border-${section.color} border-opacity-10 shadow-inner`}
-                                                    style={{ height: '35px', lineHeight: '1.2' }}
-                                                    value={section.state[f.key] || ''}
-                                                    onChange={(e) => handleConfigChange(section.state, section.setter, f.key, e.target.value)}
-                                                  >
-                                                    <option value="">SELECT PARAMETER</option>
-                                                    {section.state[f.key] && !sortedOptions.some(opt => String(opt.id) === String(section.state[f.key])) && (
-                                                      <option value={section.state[f.key]}>{section.state[f.key]}</option>
-                                                    )}
-                                                    {sortedOptions.map(opt => (
-                                                      <option key={opt.id} value={opt.id}>{opt.label}</option>
-                                                    ))}
-                                                  </Form.Select>
-                                                </div>
-                                              </Col>
-                                            );
-                                          })}
-                                        </Row>
+                                        <div className={`p-3 rounded bg-dark bg-opacity-40 border border-${section.color} border-opacity-20 text-center shadow-glow-${section.color}-box`}>
+                                          <small className={`text-${section.color} fw-black uppercase tracking-widest fs-12`}>
+                                            <Info size={14} className="me-2" /> Select hierarchy level to unlock
+                                          </small>
+                                        </div>
                                       </Col>
-                                    </>
-                                  )}
-                                </Row>
+                                    ) : (
+                                      <>
+                                        <Col md={6}>
+                                          <Form.Label className="fs-11 text-secondary fw-black uppercase tracking-widest opacity-50 mb-2 d-block truncate">BUILDING / GATEWAY</Form.Label>
+                                          <Form.Select className={`premium-input p-3 fs-11 fw-bold border-${section.color} border-opacity-10 shadow-inner`} style={{ height: '45px' }} value={section.state.building || globalLocation.building} onChange={(e) => handleConfigChange(section.state, section.setter, 'building', e.target.value)}>
+                                            <option value="">SELECT OPTION</option>
+                                            {getFieldList('building', { ...globalLocation, ...section.state }).map(opt => (
+                                              <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                            ))}
+                                          </Form.Select>
+                                        </Col>
+                                        <Col md={6}>
+                                          <Form.Label className="fs-11 text-secondary fw-black uppercase tracking-widest opacity-50 mb-2 d-block">DEVICE_ID</Form.Label>
+                                          <Form.Select className={`premium-input p-3 fs-11 fw-bold border-${section.color} border-opacity-10 shadow-inner`} style={{ height: '45px' }} value={section.state.device} onChange={(e) => handleConfigChange(section.state, section.setter, 'device', e.target.value)}>
+                                            <option value="">SELECT DEVICE</option>
+                                            {getFieldList('device', { ...globalLocation, ...section.state, building: section.state.building || globalLocation.building }).map(opt => (
+                                              <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                            ))}
+                                          </Form.Select>
+                                        </Col>
+                                        <Col md={12}>
+                                          <hr className={`border-${section.color} opacity-20 my-3`} />
+                                          <Form.Label className={`fs-10 text-${section.color} fw-black uppercase tracking-widest opacity-70 mb-3 d-block`}>Parameters Register Mapping</Form.Label>
+                                          <Row className="g-3">
+                                            {section.fields.map((f, fIdx) => {
+                                              const rawFields = getFieldList('field', { ...globalLocation, ...section.state, building: section.state.building || globalLocation.building });
+                                              const sortedOptions = getFilteredFieldList(section.title, f.key, f.label, rawFields);
+                                              return (
+                                                <Col md={4} key={fIdx}>
+                                                  <div className="premium-field-wrapper p-2 rounded bg-dark bg-opacity-20 border border-white border-opacity-5">
+                                                    <Form.Label className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-1 d-block">{f.label}</Form.Label>
+                                                    <Form.Select
+                                                      className={`premium-input p-2 fs-10 fw-bold border-${section.color} border-opacity-10 shadow-inner`}
+                                                      style={{ height: '35px', lineHeight: '1.2' }}
+                                                      value={section.state[f.key] || ''}
+                                                      onChange={(e) => handleConfigChange(section.state, section.setter, f.key, e.target.value)}
+                                                    >
+                                                      <option value="">SELECT PARAMETER</option>
+                                                      {section.state[f.key] && !sortedOptions.some(opt => String(opt.id) === String(section.state[f.key])) && (
+                                                        <option value={section.state[f.key]}>{section.state[f.key]}</option>
+                                                      )}
+                                                      {sortedOptions.map(opt => (
+                                                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                                      ))}
+                                                    </Form.Select>
+                                                  </div>
+                                                </Col>
+                                              );
+                                            })}
+                                          </Row>
+                                        </Col>
+                                      </>
+                                    )}
+                                  </Row>
+                                </div>
                               </div>
-                            </div>
-                          </Col>
-                        ))}
-                      </Row>
-                    </div>
+                            </Col>
+                          ))}
+                        </Row>
+                      </div>
+                    ) : (
+                      <Card className="bg-dark bg-opacity-20 border border-white border-opacity-5 rounded-4 p-5 text-center">
+                        <LayoutGrid size={48} className="text-secondary mb-3 mx-auto opacity-50" />
+                        <h5 className="text-white fw-bold mb-2">Target Sensor Unselected</h5>
+                        <p className="text-secondary fs-9">Please select an AQI Sensor from the Target Unit dropdown to begin mapping configuration registers.</p>
+                      </Card>
+                    )}
                   </div>
                 </div>
               ) : selectedModule && selectedModule.startsWith('DG Set') ? (

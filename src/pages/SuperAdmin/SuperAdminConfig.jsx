@@ -223,7 +223,9 @@ const SuperAdminConfig = () => {
       });
 
       if (response.ok) {
-        const updatedConfig = await response.json();
+        const json = await response.json();
+        const configRaw = json.config || json.data || (json.features ? json.features : json);
+        const updatedConfig = mergeConfig(configRaw);
         
         // Synchronize with Sidebar IMMEDIATELY
         if (!selectedTenant) {
@@ -234,7 +236,7 @@ const SuperAdminConfig = () => {
           
           localStorage.setItem('scada_modules_config', JSON.stringify(sidebarModules));
           localStorage.setItem('scada_submodules_config', JSON.stringify(updatedConfig.submoduleVisibility));
-          localStorage.setItem('cache_global_config', JSON.stringify(updatedConfig));
+          localStorage.setItem('cache_global_config', JSON.stringify(configRaw));
           
           // Ensure immediate reload for sidebar components
           window.dispatchEvent(new Event('storage-update'));
