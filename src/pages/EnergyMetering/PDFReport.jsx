@@ -1,186 +1,913 @@
-import React, { useState } from 'react';
-import { Row, Col, Card, Form, Table, Button, Badge } from 'react-bootstrap';
-import { FileText, Download, Calendar, ClipboardList, RefreshCw, Zap } from 'lucide-react';
-import PdfButton from '../../components/PdfButton';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Row, Col, Card, Form, Button, Badge, Spinner, Alert } from 'react-bootstrap';
+import { FileText, Download, FileSpreadsheet, Zap, CheckCircle2, AlertCircle, Activity, BarChart3, Clock, Calendar } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { useDeviceStatus } from '../../services/DeviceStatusContext';
+
+const PARAMETERS = [
+  { key: 'ebKwh', label: 'EB Active Energy (EB KWH)', defaultKey: '3,151' },
+  { key: 'totalKw', label: 'Active Power (Total kW)', defaultKey: '3,152' },
+  { key: 'totalKva', label: 'Apparent Power (Total kVA)', defaultKey: '3,153' },
+  { key: 'vR', label: 'Voltage R', defaultKey: '3,154' },
+  { key: 'vY', label: 'Voltage Y', defaultKey: '3,155' },
+  { key: 'vB', label: 'Voltage B', defaultKey: '3,156' },
+  { key: 'iR', label: 'Current R', defaultKey: '3,157' },
+  { key: 'iY', label: 'Current Y', defaultKey: '3,158' },
+  { key: 'iB', label: 'Current B', defaultKey: '3,159' },
+  { key: 'pf', label: 'Power Factor (PF)', defaultKey: '4,24F' }
+];
 
 const EnergyPDFReport = () => {
-  const [filter, setFilter] = useState({
-    dateRange: 'today',
-    meter: 'all'
-  });
-
+  const { getOverallStatus } = useDeviceStatus();
+  const [templates, setTemplates] = useState([]);
+  const [selectedMeter, setSelectedMeter] = useState('');
   const [generating, setGenerating] = useState(false);
-  const [reportData, setReportData] = useState([
-    { id: 'REP-EM-1025', date: '2026-05-19', meter: 'Main Grid Incomer', consumption: '11,480 kWh', peakDemand: '620 kW', avgPf: '0.97', cost: '₹1,03,320' },
-    { id: 'REP-EM-1024', date: '2026-05-18', meter: 'Main Grid Incomer', consumption: '11,350 kWh', peakDemand: '615 kW', avgPf: '0.98', cost: '₹1,02,150' },
-    { id: 'REP-EM-1023', date: '2026-05-17', meter: 'Main Grid Incomer', consumption: '10,920 kWh', peakDemand: '598 kW', avgPf: '0.96', cost: '₹98,280' },
-    { id: 'REP-EM-1022', date: '2026-05-16', meter: 'Main Grid Incomer', consumption: '11,100 kWh', peakDemand: '608 kW', avgPf: '0.97', cost: '₹99,900' },
-    { id: 'REP-EM-1021', date: '2026-05-15', meter: 'Main Grid Incomer', consumption: '11,250 kWh', peakDemand: '610 kW', avgPf: '0.97', cost: '₹1,01,250' }
-  ]);
+  const [downloadType, setDownloadType] = useState(null);
+  const [downloadSuccess, setDownloadSuccess] = useState(null);
+  
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [toDate, setToDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+  const [interval, setIntervalVal] = useState('HOURLY');
+  const [errorMsg, setErrorMsg] = useState(null);
 
-  const handleGenerate = () => {
-    setGenerating(true);
-    setTimeout(() => {
-      setGenerating(false);
-      // Simulating filtered report change
-      if (filter.meter === 'wing-a') {
-        setReportData([
-          { id: 'REP-EM-1025', date: '2026-05-19', meter: 'Wing A Commercial Hub', consumption: '4,440 kWh', peakDemand: '240 kW', avgPf: '0.98', cost: '₹39,960' },
-          { id: 'REP-EM-1024', date: '2026-05-18', meter: 'Wing A Commercial Hub', consumption: '4,380 kWh', peakDemand: '235 kW', avgPf: '0.98', cost: '₹39,420' }
-        ]);
-      } else {
-        setReportData([
-          { id: 'REP-EM-1025', date: '2026-05-19', meter: 'Main Grid Incomer', consumption: '11,480 kWh', peakDemand: '620 kW', avgPf: '0.97', cost: '₹1,03,320' },
-          { id: 'REP-EM-1024', date: '2026-05-18', meter: 'Main Grid Incomer', consumption: '11,350 kWh', peakDemand: '615 kW', avgPf: '0.98', cost: '₹1,02,150' },
-          { id: 'REP-EM-1023', date: '2026-05-17', meter: 'Main Grid Incomer', consumption: '10,920 kWh', peakDemand: '598 kW', avgPf: '0.96', cost: '₹98,280' }
-        ]);
+  // Load templates on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('scada_templates');
+    if (saved) {
+      try {
+        setTemplates(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse templates:', e);
       }
-    }, 1200);
+    }
+
+    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
+      .then(res => res.ok ? res.json() : [])
+      .then(data => {
+        const mapped = data.map(t => {
+          const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
+          const defValues = hasDef ? t.defaultValues : null;
+          const mappingSource = defValues || t.settings?.[0]?.meta || {};
+          return {
+            id: t.id,
+            name: t.name,
+            category: (defValues && defValues.category) || t.category || 'Water Management',
+            module: (defValues && defValues.module) || t.settings?.[0]?.eventKey || 'AG Tank',
+            mapping: mappingSource
+          };
+        });
+        setTemplates(mapped);
+        localStorage.setItem('scada_templates', JSON.stringify(mapped));
+      })
+      .catch(err => console.error('Error fetching templates:', err));
+  }, []);
+
+  // Natural sort helper
+  const naturalSort = (a, b) => {
+    const partsA = String(a).split(/(\d+)/);
+    const partsB = String(b).split(/(\d+)/);
+    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+      if (partsA[i] === undefined) return -1;
+      if (partsB[i] === undefined) return 1;
+      const nA = parseInt(partsA[i], 10);
+      const nB = parseInt(partsB[i], 10);
+      if (!isNaN(nA) && !isNaN(nB) && nA !== nB) return nA - nB;
+      if (partsA[i] !== partsB[i]) return partsA[i].localeCompare(partsB[i]);
+    }
+    return 0;
   };
 
+  // Sub meters only
+  const subMeterOptions = useMemo(() => {
+    return templates
+      .filter(t => t.module === 'Sub Meters')
+      .map(t => ({
+        id: t.id,
+        label: t.mapping?.energyMeteringTarget || t.name,
+        type: 'sub'
+      }))
+      .sort((a, b) => naturalSort(a.label, b.label));
+  }, [templates]);
+
+  // Combined meters list (only sub-meters)
+  const allMeterOptions = useMemo(() => {
+    return subMeterOptions;
+  }, [subMeterOptions]);
+
+  // Auto-select first meter
+  useEffect(() => {
+    if (allMeterOptions.length > 0 && !selectedMeter) {
+      setSelectedMeter(String(allMeterOptions[0].id));
+    }
+  }, [allMeterOptions, selectedMeter]);
+
+  const selectedMeterInfo = useMemo(() => {
+    return allMeterOptions.find(m => String(m.id) === selectedMeter) || null;
+  }, [selectedMeter, allMeterOptions]);
+
+  // Helper to check device online status
+  const getMeterOnlineStatus = (meterId) => {
+    const template = templates.find(t => String(t.id) === String(meterId));
+    if (!template || !template.mapping) return false;
+
+    let devId = template.mapping.deviceId;
+    if (!devId) {
+      const anyConfig = Object.values(template.mapping).find(cfg => cfg && typeof cfg === 'object' && cfg.device);
+      if (anyConfig) devId = anyConfig.device;
+    }
+    const gatewayUuid = template.mapping.gatewayUuid;
+    if (devId && getOverallStatus) {
+      return !!getOverallStatus(devId, gatewayUuid);
+    }
+    return false;
+  };
+
+  const handleDownload = async (type) => {
+    setGenerating(true);
+    setDownloadType(type);
+    setDownloadSuccess(null);
+    setErrorMsg(null);
+
+    try {
+      const isDev = import.meta.env.DEV;
+      const backendUrl = isDev ? '/sochiot-bms' : (import.meta.env.VITE_BACKEND_BMS_URL || 'https://bms-api.sochiot.com/api/v1');
+      const selectedTemplate = templates.find(t => String(t.id) === selectedMeter);
+      const deviceId = selectedTemplate?.mapping?.deviceId || selectedTemplate?.mapping?.emChangeConfig?.device || selectedMeter;
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      const siteId = userData?.siteId || localStorage.getItem('selectedSiteId') || 1;
+
+      const fromStr = `${fromDate}T00:00:00Z`;
+      const toStr = `${toDate}T23:59:59Z`;
+
+      let rawToken = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
+      const token = rawToken.replace(/^["']|["']$/g, '').trim();
+      const headers = { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      console.log('[Energy PDF Report] Initiating download request with token length:', token.length, 'token prefix:', token ? token.substring(0, 15) + '...' : 'NONE');
+
+      // Helper to resolve mapped parameter field key
+      const resolveFieldKey = (template, paramKey, defaultKey) => {
+        if (!template?.mapping) return defaultKey;
+        const mapping = template.mapping;
+        const configs = [mapping.emChangeConfig, mapping.emReadConfig, mapping.emConsumptionConfig, mapping];
+        for (const cfg of configs) {
+          if (cfg && cfg[paramKey]) {
+            const rawVal = cfg[paramKey];
+            if (typeof rawVal === 'string') {
+              if (rawVal.includes(':')) {
+                return rawVal.split(':').pop();
+              }
+              return rawVal;
+            }
+            return rawVal;
+          }
+        }
+        return defaultKey;
+      };
+
+      // Fetch all parameters in parallel
+      const promises = PARAMETERS.map(async (param) => {
+        const fieldKey = resolveFieldKey(selectedTemplate, param.key, param.defaultKey);
+        const url = `${backendUrl}/sites/${siteId}/devices/${deviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=${interval}&from=${fromStr}&to=${toStr}`;
+        try {
+          const res = await fetch(url, { headers });
+          if (res.status === 401) {
+            throw new Error('Unauthorized');
+          }
+          if (!res.ok) return { key: param.key, label: param.label, snapshots: [] };
+          const json = await res.json();
+          return {
+            key: param.key,
+            label: param.label,
+            snapshots: json.data?.snapshots || []
+          };
+        } catch (e) {
+          if (e.message === 'Unauthorized') {
+            throw e;
+          }
+          console.error(`Error fetching ${param.key}:`, e);
+          return { key: param.key, label: param.label, snapshots: [] };
+        }
+      });
+
+      const results = await Promise.all(promises);
+
+      // Merge snapshots by windowStart
+      const mergedData = {};
+      results.forEach(result => {
+        result.snapshots.forEach(snap => {
+          const key = snap.windowStart;
+          if (!mergedData[key]) {
+            mergedData[key] = {
+              windowStart: snap.windowStart,
+              windowEnd: snap.windowEnd,
+              values: {}
+            };
+          }
+          mergedData[key].values[result.key] = snap.avgValue;
+        });
+      });
+
+      const sortedRows = Object.values(mergedData).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
+
+      if (sortedRows.length === 0) {
+        setErrorMsg('No telemetry data found for the selected sub-meter in this date range.');
+        setTimeout(() => setErrorMsg(null), 5000);
+        setGenerating(false);
+        setDownloadType(null);
+        return;
+      }
+
+      if (type === 'pdf') {
+        generatePdfFromMergedData(sortedRows);
+      } else {
+        generateExcelFromMergedData(sortedRows);
+      }
+    } catch (err) {
+      console.error('Download error:', err);
+      if (err.message === 'Unauthorized') {
+        setErrorMsg('Unauthorized (401): Stale session. Redirecting to login to refresh your session...');
+        localStorage.removeItem('sochiot_token');
+        localStorage.removeItem('token');
+        localStorage.setItem('isAuthenticated', 'false');
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 3000);
+      } else {
+        setErrorMsg(`Failed to fetch report data: ${err.message || err}. Falling back to sample report.`);
+        generateClientSideReport(type);
+      }
+      setTimeout(() => setErrorMsg(null), 10000);
+    } finally {
+      setGenerating(false);
+      setDownloadType(null);
+    }
+  };
+
+  const generatePdfFromMergedData = (rows) => {
+    const meterLabel = selectedMeterInfo?.label || 'Meter';
+    const dateStr = new Date().toLocaleString();
+    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
+    
+    doc.setFontSize(18);
+    doc.setTextColor(224, 94, 0); // TRUEiSENSE Orange
+    doc.text(`ENERGY TELEMETRY CONSOLIDATED REPORT`, 14, 20);
+    
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Generated on: ${dateStr}`, 14, 28);
+    doc.text(`Target Asset: ${meterLabel} (Sub Meter)`, 14, 33);
+    doc.text(`Interval Ledger: ${interval} (From: ${fromDate} to: ${toDate})`, 14, 38);
+    
+    doc.setDrawColor(224, 94, 0, 0.3);
+    doc.line(14, 42, 283, 42); // Horizontal line
+
+    const fmt = (val) => val !== null && val !== undefined ? Number(val).toFixed(3) : '-';
+
+    const tableBody = rows.map(r => [
+      new Date(r.windowStart).toLocaleString('en-IN'),
+      new Date(r.windowEnd).toLocaleString('en-IN'),
+      fmt(r.values.ebKwh),
+      fmt(r.values.totalKw),
+      fmt(r.values.totalKva),
+      fmt(r.values.vR),
+      fmt(r.values.vY),
+      fmt(r.values.vB),
+      fmt(r.values.iR),
+      fmt(r.values.iY),
+      fmt(r.values.iB),
+      fmt(r.values.pf)
+    ]);
+
+    autoTable(doc, {
+      startY: 46,
+      head: [[
+        'Start Time', 'End Time', 
+        'Energy (kWh)', 'Power (kW)', 'Apparent (kVA)', 
+        'Volt R (V)', 'Volt Y (V)', 'Volt B (V)', 
+        'Amp R (A)', 'Amp Y (A)', 'Amp B (A)', 
+        'PF'
+      ]],
+      body: tableBody,
+      theme: 'grid',
+      headStyles: { fillColor: [224, 94, 0], textColor: 255 },
+      styles: { fontSize: 7.5, cellPadding: 3 }
+    });
+
+    const pageCount = doc.internal.getNumberOfPages();
+    for(let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`Page ${i} of ${pageCount} - TRUEiSENSE Smart Monitoring System`, 14, 200);
+    }
+
+    doc.save(`${meterLabel.replace(/\s+/g, '_')}_Consolidated_Report.pdf`);
+    setDownloadSuccess('pdf');
+    setTimeout(() => setDownloadSuccess(null), 4000);
+  };
+
+  const generateExcelFromMergedData = (rows) => {
+    const meterLabel = selectedMeterInfo?.label || 'Meter';
+    const headers = [
+      'Start Time', 'End Time', 
+      'EB Active Energy (kWh)', 'Active Power (kW)', 'Apparent Power (kVA)', 
+      'Voltage R (V)', 'Voltage Y (V)', 'Voltage B (V)', 
+      'Current R (A)', 'Current Y (A)', 'Current B (A)', 
+      'Power Factor (PF)'
+    ];
+    
+    const fmt = (val) => val !== null && val !== undefined ? val : '-';
+
+    const csvRows = rows.map(r => [
+      new Date(r.windowStart).toLocaleString('en-IN'),
+      new Date(r.windowEnd).toLocaleString('en-IN'),
+      fmt(r.values.ebKwh),
+      fmt(r.values.totalKw),
+      fmt(r.values.totalKva),
+      fmt(r.values.vR),
+      fmt(r.values.vY),
+      fmt(r.values.vB),
+      fmt(r.values.iR),
+      fmt(r.values.iY),
+      fmt(r.values.iB),
+      fmt(r.values.pf)
+    ]);
+
+    let csvContent = '\uFEFF';
+    csvContent += `Report Title,${meterLabel} - Consolidated Telemetry Report\n`;
+    csvContent += `Asset Type,Sub Meter\n`;
+    csvContent += `Ledger Interval,${interval}\n`;
+    csvContent += `Period Date Range,${fromDate} to ${toDate}\n\n`;
+    csvContent += headers.join(',') + '\n';
+    csvRows.forEach(row => {
+      csvContent += row.map(cell => `"${cell}"`).join(',') + '\n';
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${meterLabel.replace(/\s+/g, '_')}_Consolidated_Report.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+    setDownloadSuccess('excel');
+    setTimeout(() => setDownloadSuccess(null), 4000);
+  };
+
+  const generateClientSideReport = (type) => {
+    const meterLabel = selectedMeterInfo?.label || 'Meter';
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
+    const timeStr = now.toLocaleTimeString('en-IN');
+
+    if (type === 'excel') {
+      const headers = ['Parameter', 'Value', 'Unit', 'Timestamp'];
+      const rows = [
+        ['Meter Name', meterLabel, '-', `${dateStr} ${timeStr}`],
+        ['Meter Type', 'Sub Meter', '-', dateStr],
+        ['Report Generated', dateStr, '-', timeStr],
+        ['', '', '', ''],
+        ['EB KWH', '-', 'kWh', dateStr],
+        ['Total KW', '-', 'kW', dateStr],
+        ['Total KVA', '-', 'kVA', dateStr],
+        ['Voltage R', '-', 'V', dateStr],
+        ['Voltage Y', '-', 'V', dateStr],
+        ['Voltage B', '-', 'V', dateStr],
+        ['Current R', '-', 'A', dateStr],
+        ['Current Y', '-', 'A', dateStr],
+        ['Current B', '-', 'A', dateStr],
+        ['Power Factor', '-', '', dateStr],
+      ];
+
+      let csvContent = '\uFEFF';
+      csvContent += headers.join(',') + '\n';
+      rows.forEach(row => {
+        csvContent += row.map(cell => `"${cell}"`).join(',') + '\n';
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `${meterLabel.replace(/\s+/g, '_')}_Report.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+      setDownloadSuccess('excel');
+      setTimeout(() => setDownloadSuccess(null), 4000);
+    } else {
+      const doc = new jsPDF();
+      doc.setFontSize(18);
+      doc.setTextColor(224, 94, 0); // TRUEiSENSE Orange
+      doc.text(`ENERGY METER CONSOLIDATED REPORT (OFFLINE)`, 14, 22);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Target Asset: ${meterLabel} (Sub Meter)`, 14, 32);
+      doc.text(`Date of Generation: ${dateStr} ${timeStr}`, 14, 38);
+      
+      doc.setDrawColor(224, 94, 0, 0.3);
+      doc.line(14, 44, 196, 44);
+      
+      doc.setFontSize(11);
+      doc.setTextColor(0);
+      doc.text(`Notice: Connection to production telemetry database was unauthorized (401).`, 14, 54);
+      doc.text(`Please verify your login token or sign out and sign back in to establish a live session.`, 14, 60);
+
+      autoTable(doc, {
+        startY: 68,
+        head: [['Parameter Code', 'Parameter Name', 'Unit', 'Snapshot Value']],
+        body: [
+          ['ebKwh', 'EB Active Energy', 'kWh', 'Unauthorized (401)'],
+          ['totalKw', 'Active Power (Total kW)', 'kW', 'Unauthorized (401)'],
+          ['totalKva', 'Apparent Power (Total kVA)', 'kVA', 'Unauthorized (401)'],
+          ['vR', 'Voltage R', 'V', 'Unauthorized (401)'],
+          ['vY', 'Voltage Y', 'V', 'Unauthorized (401)'],
+          ['vB', 'Voltage B', 'V', 'Unauthorized (401)'],
+          ['iR', 'Current R', 'A', 'Unauthorized (401)'],
+          ['iY', 'Current Y', 'A', 'Unauthorized (401)'],
+          ['iB', 'Current B', 'A', 'Unauthorized (401)'],
+          ['pf', 'Power Factor (PF)', '', 'Unauthorized (401)']
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [224, 94, 0], textColor: 255 }
+      });
+      
+      doc.save(`${meterLabel.replace(/\s+/g, '_')}_Report.pdf`);
+      setDownloadSuccess('pdf');
+      setTimeout(() => setDownloadSuccess(null), 4000);
+    }
+  };
+
+  const currentDate = new Date().toLocaleDateString('en-IN', { 
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+  });
+
   return (
-    <div className="fade-in">
-      {/* HEADER SECTION */}
-      <div className="page-header d-flex justify-content-between align-items-center mb-4">
+    <div className="emr-fade-in">
+      {/* Page Header */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-2">
         <div>
-          <h2 className="mb-1 text-white fw-bold d-flex align-items-center gap-2">
-            <FileText className="text-info" size={26} /> Energy Metering Reports
+          <h2 className="mb-1 fw-bold d-flex align-items-center gap-2" style={{ color: 'var(--scada-text)' }}>
+            <div className="d-flex align-items-center justify-content-center rounded-3" style={{ width: 38, height: 38, background: 'linear-gradient(135deg, var(--scada-accent), #b34500)', boxShadow: '0 4px 15px rgba(224, 94, 0, 0.3)' }}>
+              <FileText size={20} className="text-white" />
+            </div>
+            Energy Report
           </h2>
-          <p className="text-secondary fs-7">Generate, preview, and download billing reports, load charts, and historical power logs.</p>
+          <p className="mb-0" style={{ color: 'var(--scada-text-muted)', fontSize: '0.85rem' }}>
+            <Clock size={13} className="me-1" style={{ opacity: 0.6 }} />
+            {currentDate}
+          </p>
+        </div>
+
+        {/* Stats Badges */}
+        <div className="d-flex gap-2 flex-wrap">
+          {subMeterOptions.length > 0 && (
+            <div className="emr-stat-badge emr-stat-sub">
+              <Activity size={14} />
+              <span>{subMeterOptions.length} Sub Meter{subMeterOptions.length > 1 ? 's' : ''}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* FILTER CONTROL CARD */}
-      <Card className="scada-card border-0 text-white mb-4" style={{ background: '#0f172a' }}>
-        <Card.Body className="p-4">
-          <h5 className="mb-4 fw-black text-white d-flex align-items-center gap-2 uppercase tracking-wide fs-11">
-            <Calendar className="text-info" size={18} /> Report Configuration
-          </h5>
-
-          <Row className="g-4 align-items-end">
-            <Col md={4}>
+      {/* Main Report Card */}
+      <Card className="emr-main-card border-0 mb-4">
+        <Card.Body className="p-4 p-md-5">
+          <Row className="g-4 mb-4">
+            {/* Meter Selection */}
+            <Col md={6}>
               <Form.Group>
-                <Form.Label className="text-secondary fw-bold fs-12 uppercase tracking-wider mb-2">Select Target Meter</Form.Label>
+                <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
+                  <Zap size={14} style={{ color: 'var(--scada-accent)' }} />
+                  Select Meter
+                </Form.Label>
                 <Form.Select
-                  className="scada-input"
-                  value={filter.meter}
-                  onChange={(e) => setFilter({ ...filter, meter: e.target.value })}
+                  className="emr-select"
+                  value={selectedMeter}
+                  onChange={(e) => setSelectedMeter(e.target.value)}
                 >
-                  <option value="all">Main Incomer Feed Grid</option>
-                  <option value="wing-a">Sub-Meter: Commercial Wing A</option>
-                  <option value="server">Sub-Meter: Server & UPS Rooms</option>
-                  <option value="utility">Sub-Meter: Utility Motors Room</option>
-                  <option value="VRV">Sub-Meter: VRV Chiller Main</option>
+                  {allMeterOptions.length === 0 && (
+                    <option value="">No meters configured</option>
+                  )}
+                  {subMeterOptions.map(meter => {
+                    const isOnline = getMeterOnlineStatus(meter.id);
+                    return (
+                      <option key={meter.id} value={String(meter.id)}>
+                        {meter.label} ({isOnline ? 'Online' : 'Offline'})
+                      </option>
+                    );
+                  })}
                 </Form.Select>
               </Form.Group>
             </Col>
 
-            <Col md={4}>
+            {/* Interval Selection */}
+            <Col md={6}>
               <Form.Group>
-                <Form.Label className="text-secondary fw-bold fs-12 uppercase tracking-wider mb-2">Reporting Interval</Form.Label>
+                <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
+                  <Clock size={14} style={{ color: 'var(--scada-accent)' }} />
+                  Select Interval
+                </Form.Label>
                 <Form.Select
-                  className="scada-input"
-                  value={filter.dateRange}
-                  onChange={(e) => setFilter({ ...filter, dateRange: e.target.value })}
+                  className="emr-select"
+                  value={interval}
+                  onChange={(e) => setIntervalVal(e.target.value)}
                 >
-                  <option value="today">Today (Real-time logs)</option>
-                  <option value="yesterday">Yesterday</option>
-                  <option value="7days">Last 7 Days</option>
-                  <option value="30days">Last 30 Days</option>
-                  <option value="custom">Custom Date Range</option>
+                  <option value="MIN_15">15 Minutes</option>
+                  <option value="HOURLY">Hourly</option>
+                  <option value="DAILY">Daily</option>
                 </Form.Select>
               </Form.Group>
-            </Col>
-
-            <Col md={4} className="d-grid">
-              <Button
-                onClick={handleGenerate}
-                disabled={generating}
-                className="btn btn-info rounded-pill py-2.5 fw-black fs-11 tracking-wider uppercase shadow-lg d-flex align-items-center justify-content-center gap-2"
-              >
-                {generating ? <RefreshCw className="animate-spin" size={16} /> : <Zap size={16} />}
-                {generating ? 'COMPILING DATA...' : 'GENERATE ENERGY REPORT'}
-              </Button>
             </Col>
           </Row>
+
+          <Row className="g-4 align-items-end">
+            {/* From Date */}
+            <Col md={6} lg={4}>
+              <Form.Group>
+                <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
+                  <Calendar size={14} style={{ color: 'var(--scada-accent)' }} />
+                  From Date
+                </Form.Label>
+                <Form.Control
+                  type="date"
+                  className="emr-select text-white"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  style={{ colorScheme: 'dark' }}
+                />
+              </Form.Group>
+            </Col>
+
+            {/* To Date */}
+            <Col md={6} lg={4}>
+              <Form.Group>
+                <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
+                  <Calendar size={14} style={{ color: 'var(--scada-accent)' }} />
+                  To Date
+                </Form.Label>
+                <Form.Control
+                  type="date"
+                  className="emr-select text-white"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  style={{ colorScheme: 'dark' }}
+                />
+              </Form.Group>
+            </Col>
+
+            {/* Download Buttons */}
+            <Col lg={4}>
+              <div className="d-flex gap-3 flex-wrap">
+                <Button
+                  onClick={() => handleDownload('pdf')}
+                  disabled={generating || !selectedMeter}
+                  className="emr-dl-btn emr-dl-pdf d-flex align-items-center gap-2 flex-grow-1 justify-content-center"
+                >
+                  {generating && downloadType === 'pdf' ? (
+                    <Spinner animation="border" size="sm" />
+                  ) : (
+                    <Download size={18} />
+                  )}
+                  <span>Download PDF</span>
+                </Button>
+
+                <Button
+                  onClick={() => handleDownload('excel')}
+                  disabled={generating || !selectedMeter}
+                  className="emr-dl-btn emr-dl-excel d-flex align-items-center gap-2 flex-grow-1 justify-content-center"
+                >
+                  {generating && downloadType === 'excel' ? (
+                    <Spinner animation="border" size="sm" />
+                  ) : (
+                    <FileSpreadsheet size={18} />
+                  )}
+                  <span>Download Excel</span>
+                </Button>
+              </div>
+            </Col>
+          </Row>
+
+          {/* Error Alert */}
+          {errorMsg && (
+            <Alert variant="danger" className="mt-4 border-danger border-opacity-25 bg-danger bg-opacity-10 text-danger rounded-4 d-flex align-items-center gap-2">
+              <AlertCircle size={18} />
+              <span>{errorMsg}</span>
+            </Alert>
+          )}
+
+          {/* Success Alert */}
+          {downloadSuccess && (
+            <div className="emr-success-alert mt-4">
+              <CheckCircle2 size={18} />
+              <span>
+                {downloadSuccess === 'pdf' ? 'PDF' : 'Excel'} report for <strong>{selectedMeterInfo?.label}</strong> downloaded successfully!
+              </span>
+            </div>
+          )}
         </Card.Body>
       </Card>
 
-      {/* GENERATED REPORT DATA TABLE */}
-      <Card className="scada-card border-0 text-white mt-4" style={{ background: '#0f172a' }}>
-        <Card.Body className="p-4">
-          <div className="d-flex justify-content-between align-items-center mb-4">
-            <h5 className="fw-black text-white d-flex align-items-center gap-2 uppercase tracking-wide fs-11 mb-0">
-              <ClipboardList className="text-info" size={18} /> Available Reports History
-            </h5>
-            <PdfButton />
-          </div>
+      {/* Selected Meter Info */}
+      {selectedMeterInfo && (
+        <Card className="emr-info-card border-0">
+          <Card.Body className="p-4">
+            <Row className="align-items-center">
+              <Col md={6}>
+                <div className="d-flex align-items-center gap-3">
+                  <div className="emr-meter-icon">
+                    <BarChart3 size={24} />
+                  </div>
+                  <div>
+                    <div className="d-flex align-items-center gap-2">
+                      <h5 className="mb-0 fw-bold" style={{ color: 'var(--scada-text)' }}>{selectedMeterInfo.label}</h5>
+                      {getMeterOnlineStatus(selectedMeter) ? (
+                        <span className="badge bg-success bg-opacity-15 border border-success border-opacity-25 text-success px-2 py-1 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.65rem', fontWeight: 800, borderRadius: '12px' }}>
+                          <span className="pulse-dot-green"></span> ONLINE
+                        </span>
+                      ) : (
+                        <span className="badge bg-danger bg-opacity-15 border border-danger border-opacity-25 text-danger px-2 py-1 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.65rem', fontWeight: 800, borderRadius: '12px' }}>
+                          <span className="pulse-dot-red"></span> OFFLINE
+                        </span>
+                      )}
+                    </div>
+                    <small style={{ color: 'var(--scada-text-muted)' }}>
+                      Sub Meter • Energy Report Target
+                    </small>
+                  </div>
+                </div>
+              </Col>
+              <Col md={6}>
+                <div className="d-flex gap-2 flex-wrap justify-content-md-end mt-3 mt-md-0">
+                  <Badge className="emr-badge emr-badge-pdf">
+                    <FileText size={12} /> PDF Report
+                  </Badge>
+                  <Badge className="emr-badge emr-badge-excel">
+                    <FileSpreadsheet size={12} /> Excel Report
+                  </Badge>
+                  <Badge className="emr-badge emr-badge-type">
+                    <Zap size={12} /> Sub Meter
+                  </Badge>
+                </div>
+              </Col>
+            </Row>
+          </Card.Body>
+        </Card>
+      )}
 
-          <div className="table-responsive">
-            <Table hover borderless className="align-middle scada-table text-white mb-0">
-              <thead>
-                <tr className="border-bottom border-secondary border-opacity-15 fs-13 text-secondary text-uppercase tracking-wider">
-                  <th className="py-3">Report Reference</th>
-                  <th className="py-3">Generated Date</th>
-                  <th className="py-3">Target Feed Node</th>
-                  <th className="py-3 text-center">Consumption (kWh)</th>
-                  <th className="py-3 text-center">Peak Load demand</th>
-                  <th className="py-3 text-center">Avg cos φ</th>
-                  <th className="py-3 text-center">Estimated cost</th>
-                  <th className="py-3 text-end">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reportData.map((row, idx) => (
-                  <tr key={idx} className="border-bottom border-secondary border-opacity-5">
-                    <td className="py-3 font-monospace text-info fs-13">{row.id}</td>
-                    <td className="py-3 text-white fw-bold">{row.date}</td>
-                    <td className="py-3 text-white">{row.meter}</td>
-                    <td className="py-3 text-center text-white fw-bold">{row.consumption}</td>
-                    <td className="py-3 text-center text-secondary">{row.peakDemand}</td>
-                    <td className="py-3 text-center text-secondary font-monospace">{row.avgPf}</td>
-                    <td className="py-3 text-center text-success fw-bold">{row.cost}</td>
-                    <td className="py-3 text-end">
-                      <Button variant="outline-info" size="sm" className="rounded-pill px-3 py-1 font-bold text-uppercase fs-12 d-flex align-items-center gap-2 float-end">
-                        <Download size={12} /> Download PDF
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          </div>
-        </Card.Body>
-      </Card>
+      {/* No Meters Warning */}
+      {allMeterOptions.length === 0 && (
+        <Card className="emr-warn-card border-0 mt-4">
+          <Card.Body className="p-4 d-flex align-items-center gap-3">
+            <AlertCircle size={22} style={{ color: 'var(--scada-accent)' }} />
+            <div>
+              <strong style={{ color: 'var(--scada-text)' }}>No meters configured</strong>
+              <p className="mb-0 mt-1" style={{ color: 'var(--scada-text-muted)', fontSize: '0.85rem' }}>
+                Please configure Sub Meters in the Templates section first to generate reports.
+              </p>
+            </div>
+          </Card.Body>
+        </Card>
+      )}
 
       <style dangerouslySetInnerHTML={{
         __html: `
-        .scada-card { background: #0f172a; border-radius: 20px; transition: all 0.3s ease; box-shadow: 0 4px 20px -2px rgba(0,0,0,0.4); }
-        .scada-card:hover { transform: translateY(-2px); box-shadow: 0 10px 30px -4px rgba(0,0,0,0.5); }
-        
-        .scada-input { 
-          background-color: #030712 !important; 
-          border: 1px solid rgba(255, 255, 255, 0.08) !important; 
-          color: white !important; 
-          border-radius: 12px !important;
-          padding: 12px 16px !important;
-          font-weight: 500 !important;
-          font-size: 0.9rem !important;
+        .emr-fade-in {
+          animation: emrFadeIn 0.4s ease;
         }
-        .scada-input:focus { border-color: #0ea5e9 !important; box-shadow: 0 0 12px rgba(14, 165, 233, 0.15) !important; outline: none; }
-        .scada-table tbody tr { transition: all 0.2s; cursor: pointer; }
-        .scada-table tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
-        .animate-spin { animation: spin 1.5s linear infinite; }
-        
-        .fw-black { font-weight: 900 !important; }
-        .fs-12 { font-size: 0.65rem !important; }
-        .fs-13 { font-size: 0.8rem !important; }
-        .fs-7 { font-size: 1.1rem !important; }
-        .tracking-widest { letter-spacing: 2px !important; }
-        
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+        @keyframes emrFadeIn {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Stat badges */
+        .emr-stat-badge {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 14px;
+          border-radius: 50px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .emr-stat-sub {
+          background: rgba(56, 189, 248, 0.08);
+          color: #38bdf8;
+          border: 1px solid rgba(56, 189, 248, 0.18);
+        }
+
+        /* Main card */
+        .emr-main-card {
+          background: var(--scada-card) !important;
+          border-radius: 20px !important;
+          border: 1px solid var(--scada-border) !important;
+          box-shadow: 0 8px 40px -10px rgba(0, 0, 0, 0.5);
+          transition: box-shadow 0.3s ease;
+        }
+        .emr-main-card:hover {
+          box-shadow: 0 12px 50px -10px rgba(0, 0, 0, 0.6);
+        }
+
+        /* Label */
+        .emr-label {
+          font-size: 0.68rem;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: var(--scada-text-muted);
+        }
+
+        /* Select */
+        .emr-select {
+          background-color: rgba(0, 0, 0, 0.3) !important;
+          border: 1px solid var(--scada-border) !important;
+          color: var(--scada-text) !important;
+          border-radius: 14px !important;
+          padding: 14px 18px !important;
+          font-weight: 600 !important;
+          font-size: 0.92rem !important;
+          transition: all 0.3s ease;
+        }
+        .emr-select:focus {
+          border-color: var(--scada-accent) !important;
+          box-shadow: 0 0 0 3px rgba(224, 94, 0, 0.12) !important;
+          outline: none;
+        }
+        .emr-select option {
+          background: var(--scada-card);
+          color: var(--scada-text);
+          padding: 10px;
+        }
+        .emr-select optgroup {
+          font-weight: 800;
+          color: var(--scada-accent);
+          background: var(--scada-card);
+        }
+
+        /* Download buttons */
+        .emr-dl-btn {
+          padding: 14px 28px !important;
+          border-radius: 14px !important;
+          font-size: 0.85rem !important;
+          font-weight: 800 !important;
+          text-transform: uppercase;
+          letter-spacing: 1.2px;
+          border: none !important;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.4);
+        }
+        .emr-dl-btn:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.5);
+        }
+        .emr-dl-btn:active:not(:disabled) {
+          transform: translateY(0);
+        }
+        .emr-dl-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .emr-dl-pdf {
+          background: linear-gradient(135deg, var(--scada-accent) 0%, #b34500 100%) !important;
+          color: white !important;
+        }
+        .emr-dl-pdf:hover:not(:disabled) {
+          background: linear-gradient(135deg, #f97316 0%, #c2410c 100%) !important;
+        }
+        .emr-dl-excel {
+          background: linear-gradient(135deg, #16a34a 0%, #14532d 100%) !important;
+          color: white !important;
+        }
+        .emr-dl-excel:hover:not(:disabled) {
+          background: linear-gradient(135deg, #22c55e 0%, #15803d 100%) !important;
+        }
+
+        /* Success alert */
+        .emr-success-alert {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 14px 18px;
+          border-radius: 14px;
+          background: rgba(34, 197, 94, 0.06);
+          border: 1px solid rgba(34, 197, 94, 0.15);
+          color: #4ade80;
+          font-size: 0.85rem;
+          font-weight: 600;
+          animation: emrSlideIn 0.3s ease;
+        }
+        @keyframes emrSlideIn {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Info Card */
+        .emr-info-card {
+          background: var(--scada-card) !important;
+          border-radius: 20px !important;
+          border: 1px solid var(--scada-border) !important;
+          box-shadow: 0 4px 25px -8px rgba(0, 0, 0, 0.4);
+        }
+        .emr-meter-icon {
+          width: 48px;
+          height: 48px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 14px;
+          background: linear-gradient(135deg, rgba(224, 94, 0, 0.15) 0%, rgba(224, 94, 0, 0.05) 100%);
+          color: var(--scada-accent);
+          border: 1px solid rgba(224, 94, 0, 0.15);
+        }
+
+        /* Badges */
+        .emr-badge {
+          display: inline-flex !important;
+          align-items: center;
+          gap: 5px;
+          padding: 6px 14px !important;
+          border-radius: 50px !important;
+          font-size: 0.72rem !important;
+          font-weight: 700 !important;
+          background: transparent !important;
+        }
+        .emr-badge-pdf {
+          background: rgba(224, 94, 0, 0.08) !important;
+          color: #fb923c !important;
+          border: 1px solid rgba(224, 94, 0, 0.18) !important;
+        }
+        .emr-badge-excel {
+          background: rgba(22, 163, 74, 0.08) !important;
+          color: #4ade80 !important;
+          border: 1px solid rgba(22, 163, 74, 0.18) !important;
+        }
+        .emr-badge-type {
+          background: rgba(224, 94, 0, 0.08) !important;
+          color: var(--scada-accent) !important;
+          border: 1px solid rgba(224, 94, 0, 0.18) !important;
+        }
+
+        /* Warning card */
+        .emr-warn-card {
+          background: var(--scada-card) !important;
+          border-radius: 20px !important;
+          border: 1px solid rgba(224, 94, 0, 0.15) !important;
+        }
+
+        /* Live pulsating indicator dot */
+        .pulse-dot-green {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background-color: #22c55e;
+          box-shadow: 0 0 6px #22c55e;
+          animation: pulse-dot-key 1.5s infinite;
+          display: inline-block;
+        }
+        .pulse-dot-red {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background-color: #ef4444;
+          box-shadow: 0 0 6px #ef4444;
+          animation: pulse-dot-key 1.5s infinite;
+          display: inline-block;
+        }
+        @keyframes pulse-dot-key {
+          0% { transform: scale(0.85); opacity: 0.6; }
+          50% { transform: scale(1.2); opacity: 1; }
+          100% { transform: scale(0.85); opacity: 0.6; }
+        }
+
+        /* Light mode overrides */
+        body.light-mode .emr-select {
+          background-color: #f1f5f9 !important;
+          color: #1e293b !important;
+          border-color: rgba(0, 0, 0, 0.08) !important;
+        }
+        body.light-mode .emr-select:focus {
+          border-color: var(--scada-accent) !important;
+          box-shadow: 0 0 0 3px rgba(224, 94, 0, 0.1) !important;
+        }
+        body.light-mode .emr-select option,
+        body.light-mode .emr-select optgroup {
+          background: #ffffff !important;
+          color: #1e293b !important;
         }
       `}} />
     </div>

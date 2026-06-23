@@ -20,6 +20,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/sochiot-auth/, '')
       },
+      '/sochiot-bms': {
+        target: 'https://bms-api.sochiot.com/api/v1',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/sochiot-bms/, '')
+      },
       '/sochiot-config': {
         target: 'https://app.sochiot.com/api/config-engine',
         changeOrigin: true,

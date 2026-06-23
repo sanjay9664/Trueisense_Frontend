@@ -19,13 +19,17 @@ export const DeviceStatusProvider = ({ children }) => {
       } else {
         try {
           res = await getSochiotDeviceStatus(deviceId);
-          const isOnline = res && (
-            res.status === 'ONLINE' || 
-            res.status === 'online' ||
-            res.mode?.name === 'ONLINE' ||
-            res.we?.mode?.name === 'ONLINE' ||
-            res.online === true ||
-            res.active === true
+          const deviceData = res?.data || res;
+          const isOnline = deviceData && (
+            deviceData.status === 'ONLINE' || 
+            deviceData.status === 'online' ||
+            deviceData.status === 'Online' ||
+            deviceData.mode?.name === 'ONLINE' ||
+            deviceData.mode?.name === 'online' ||
+            deviceData.mode?.name === 'Online' ||
+            deviceData.we?.mode?.name === 'ONLINE' ||
+            deviceData.online === true ||
+            deviceData.active === true
           );
           if (isOnline) {
             lastSeenOnlineRef.current[deviceId] = Date.now();
@@ -46,13 +50,17 @@ export const DeviceStatusProvider = ({ children }) => {
           console.error(`Fallback getSochiotDeviceDetails also failed for ${deviceId}:`, detailsErr);
         }
       }
-      const isOnline = res && (
-        res.status === 'ONLINE' || 
-        res.status === 'online' ||
-        res.mode?.name === 'ONLINE' ||
-        res.we?.mode?.name === 'ONLINE' ||
-        res.online === true ||
-        res.active === true
+      const deviceData = res?.data || res;
+      const isOnline = deviceData && (
+        deviceData.status === 'ONLINE' || 
+        deviceData.status === 'online' ||
+        deviceData.status === 'Online' ||
+        deviceData.mode?.name === 'ONLINE' ||
+        deviceData.mode?.name === 'online' ||
+        deviceData.mode?.name === 'Online' ||
+        deviceData.we?.mode?.name === 'ONLINE' ||
+        deviceData.online === true ||
+        deviceData.active === true
       );
       if (isOnline) {
         lastSeenOnlineRef.current[deviceId] = Date.now();
@@ -92,13 +100,17 @@ export const DeviceStatusProvider = ({ children }) => {
 
     try {
       const res = await getSochiotGatewayStatus(clusterId);
-      const isOnline = res && (
-        res.status === 'ONLINE' || 
-        res.status === 'online' ||
-        res.mode?.name === 'ONLINE' ||
-        res.we?.mode?.name === 'ONLINE' ||
-        res.online === true ||
-        res.active === true
+      const gatewayData = res?.data || res;
+      const isOnline = gatewayData && (
+        gatewayData.status === 'ONLINE' || 
+        gatewayData.status === 'online' ||
+        gatewayData.status === 'Online' ||
+        gatewayData.mode?.name === 'ONLINE' ||
+        gatewayData.mode?.name === 'online' ||
+        gatewayData.mode?.name === 'Online' ||
+        gatewayData.we?.mode?.name === 'ONLINE' ||
+        gatewayData.online === true ||
+        gatewayData.active === true
       );
       if (isOnline) {
         lastSeenGatewayOnlineRef.current[clusterId] = Date.now();

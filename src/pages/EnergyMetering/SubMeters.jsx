@@ -453,56 +453,37 @@ const SubMeters = () => {
   const [showSaveSuccessPopup, setShowSaveSuccessPopup] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState('Group created successfully');
   const groupsHydratedRef = useRef(false);
-  const TELEMETRY_FRESHNESS_MS = 5 * 60 * 1000; // 5 minutes freshness timeout
+  const TELEMETRY_FRESHNESS_MS = 10 * 60 * 1000; // 10 minutes freshness timeout
 
   const getMeterOnlineStatus = (meterLabel) => {
+    const template = getTemplateForMeter(meterLabel);
+    
     const meter = meters.find(
       m => String(m.label).trim().toUpperCase() === String(meterLabel).trim().toUpperCase()
     );
-    const template = getTemplateForMeter(meterLabel);
-    let devOnline = false;
-    let hasMapping = false;
+    let isFreshTelemetry = false;
+    if (meter) {
+      const lastTelemetryTs = Number(meter.lastTelemetryTimestamp);
+      isFreshTelemetry =
+        Number.isFinite(lastTelemetryTs) &&
+        lastTelemetryTs > 0 &&
+        Date.now() - lastTelemetryTs < TELEMETRY_FRESHNESS_MS;
+    }
 
     if (template?.mapping) {
-      let devId = template.mapping.deviceId;
+      let devId = template.mapping.deviceId || template.mapping.emChangeConfig?.device;
       if (!devId) {
         const anyConfig = Object.values(template.mapping).find(cfg => cfg && typeof cfg === 'object' && cfg.device);
         if (anyConfig) devId = anyConfig.device;
       }
       const gatewayUuid = template.mapping.gatewayUuid;
       if (devId) {
-        hasMapping = true;
-        devOnline = !!getOverallStatus(devId, gatewayUuid);
+        const devStatusOnline = !!getOverallStatus(devId, gatewayUuid);
+        return devStatusOnline || isFreshTelemetry;
       }
     }
 
-    if (meter) {
-      const lastTelemetryTs = Number(meter.lastTelemetryTimestamp);
-      const isFreshTelemetry =
-        Number.isFinite(lastTelemetryTs) &&
-        lastTelemetryTs > 0 &&
-        Date.now() - lastTelemetryTs < TELEMETRY_FRESHNESS_MS;
-      
-      const hasV = meter.voltage !== undefined && meter.voltage !== null && Number(meter.voltage) > 0;
-      const hasI = meter.current !== undefined && meter.current !== null && Number(meter.current) > 0;
-      const hasLoad = meter.load !== undefined && meter.load !== null && Number(meter.load) > 0;
-      const hasCommStatus =
-        meter.telemetryValues?.commStatus !== undefined &&
-        meter.telemetryValues?.commStatus !== null &&
-        meter.telemetryValues?.commStatus !== '' &&
-        meter.telemetryValues?.commStatus !== 0 &&
-        meter.telemetryValues?.commStatus !== '0' &&
-        String(meter.telemetryValues?.commStatus).toLowerCase() !== 'offline';
-
-      const hasData = isFreshTelemetry && (hasV || hasI || hasLoad || hasCommStatus);
-
-      // Online only if both Sochiot connection status is online and we have fresh telemetry data.
-      if (hasMapping) {
-        return devOnline && hasData;
-      }
-      return hasData;
-    }
-    return false; // Default offline
+    return isFreshTelemetry;
   };
 
   // Helper to check if a specific meter has an active device mapping (i.e. is mapped)
@@ -1304,14 +1285,6 @@ const SubMeters = () => {
             </Form.Select>
           )}
           {groupSaveStatus && <Badge bg="success" className="px-3 py-2">{groupSaveStatus}</Badge>}
-          <button
-            onClick={() => setShowGroupingSettings(true)}
-            className="btn btn-outline-info rounded-pill px-3 py-2 d-flex align-items-center gap-2"
-            style={{ borderColor: 'rgba(56,189,248,0.35)', color: '#7dd3fc', background: 'rgba(56,189,248,0.08)' }}
-          >
-            <Settings2 size={16} /> MFM Group Settings
-          </button>
-          <PdfButton />
         </div>
       </div>
 
@@ -1388,7 +1361,7 @@ const SubMeters = () => {
                             <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
                             <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.current)} A` : '—'}</td>
                             <td className="py-3 text-center text-secondary font-monospace">{showActive ? fmtNum(meter.pf, 3) : '—'}</td>
-                            <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? meter.status : 'Offline'} /> : '—'}</td>
+                            <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? 'Online' : 'Offline'} /> : '—'}</td>
                           </tr>
                         );
                       })
@@ -1429,7 +1402,7 @@ const SubMeters = () => {
                             <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load)} kW` : '—'}</td>
                             <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
                             <td className="py-3 text-center text-secondary font-monospace">{showActive ? fmtNum(meter.pf, 3) : '—'}</td>
-                            <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? meter.status : 'Offline'} /> : '—'}</td>
+                            <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? 'Online' : 'Offline'} /> : '—'}</td>
                           </tr>
                         );
                       })

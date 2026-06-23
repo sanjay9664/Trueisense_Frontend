@@ -342,26 +342,28 @@ const MainLayout = ({ children }) => {
             const rName = (newRoleName || userRole || '').toLowerCase();
             const isRestricted = rName.includes('zone') || rName.includes('area') || rName.includes('location') || rName.includes('unit') || rName.includes('operator') || rName.includes('org') || rName.includes('organisation') || rName.includes('organization');
             const isPowerUser = (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && !isRestricted;
+            const isFpEmpty = Object.keys(newFp).length === 0;
+            const defaultVal = (isPowerUser || isFpEmpty) ? true : false;
 
             const sidebarMapping = {
-              "Dashboard": newFp.showDashboard_read ?? newFp.showDashboard ?? (isPowerUser ? true : false),
-              "Water Management": newFp.showWaterManagement_read ?? newFp.showWaterManagement ?? (isPowerUser ? true : false),
-              "Motors": newFp.showMotors_read ?? newFp.showMotors ?? (isPowerUser ? true : false),
-              "DG Set": newFp.showDGSet_read ?? newFp.showDGSet ?? (isPowerUser ? true : false),
-              "Setting Templates": newFp.showSettingTemplates_read ?? newFp.showSettingTemplates ?? (isPowerUser ? true : false),
-              "Alarm System": newFp.showAlarms_read ?? newFp.showAlarms ?? (isPowerUser ? true : false),
-              "LT Panel": newFp.showLTPanel_read ?? newFp.showLTPanel ?? (isPowerUser ? true : false),
-              "Transformer": newFp.showTransformers_read ?? newFp.showTransformers ?? (isPowerUser ? true : false),
-              "Fire": newFp.showFirePumps_read ?? newFp.showFirePumps ?? (isPowerUser ? true : false),
-              "Ticketing": newFp.showTicketing_read ?? newFp.showTicketing ?? (isPowerUser ? true : false),
-              "Maintenance": newFp.showMaintenance_read ?? newFp.showMaintenance ?? (isPowerUser ? true : false),
-              "Service History": newFp.showServiceHistory_read ?? newFp.showServiceHistory ?? (isPowerUser ? true : false),
-              "Daily DPR": newFp.showDailyDPR_read ?? newFp.showDailyDPR ?? (isPowerUser ? true : false),
-              "Energy Metering": newFp.showEnergyMetering_read ?? newFp.showEnergyMetering ?? (isPowerUser ? true : false),
-              "VRV": newFp.showVRV_read ?? newFp.showVRV ?? (isPowerUser ? true : false),
-              "AQI Sensor": newFp.showAQISensor_read ?? newFp.showAQISensor ?? (isPowerUser ? true : false),
-              "HVAC": newFp.showHVAC_read ?? newFp.showHVAC ?? (isPowerUser ? true : false),
-              "AC": newFp.showAC_read ?? newFp.showAC ?? (isPowerUser ? true : false)
+              "Dashboard": newFp.showDashboard_read ?? newFp.showDashboard ?? defaultVal,
+              "Water Management": newFp.showWaterManagement_read ?? newFp.showWaterManagement ?? defaultVal,
+              "Motors": newFp.showMotors_read ?? newFp.showMotors ?? defaultVal,
+              "DG Set": newFp.showDGSet_read ?? newFp.showDGSet ?? defaultVal,
+              "Setting Templates": newFp.showSettingTemplates_read ?? newFp.showSettingTemplates ?? defaultVal,
+              "Alarm System": newFp.showAlarms_read ?? newFp.showAlarms ?? defaultVal,
+              "LT Panel": newFp.showLTPanel_read ?? newFp.showLTPanel ?? defaultVal,
+              "Transformer": newFp.showTransformers_read ?? newFp.showTransformers ?? defaultVal,
+              "Fire": newFp.showFirePumps_read ?? newFp.showFirePumps ?? defaultVal,
+              "Ticketing": newFp.showTicketing_read ?? newFp.showTicketing ?? defaultVal,
+              "Maintenance": newFp.showMaintenance_read ?? newFp.showMaintenance ?? defaultVal,
+              "Service History": newFp.showServiceHistory_read ?? newFp.showServiceHistory ?? defaultVal,
+              "Daily DPR": newFp.showDailyDPR_read ?? newFp.showDailyDPR ?? defaultVal,
+              "Energy Metering": newFp.showEnergyMetering_read ?? newFp.showEnergyMetering ?? defaultVal,
+              "VRV": newFp.showVRV_read ?? newFp.showVRV ?? defaultVal,
+              "AQI Sensor": newFp.showAQISensor_read ?? newFp.showAQISensor ?? defaultVal,
+              "HVAC": newFp.showHVAC_read ?? newFp.showHVAC ?? defaultVal,
+              "AC": newFp.showAC_read ?? newFp.showAC ?? defaultVal
             };
             localStorage.setItem('scada_modules_config', JSON.stringify(sidebarMapping));
 

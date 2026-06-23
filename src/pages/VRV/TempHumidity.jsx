@@ -130,33 +130,55 @@ const EnvDashboard = () => {
           if (!zone.mapping || !zone.mapping.vrvConfig) return zone;
           
           let newZone = { ...zone };
+          if (!newZone.lastSeen) newZone.lastSeen = {};
           const config = zone.mapping.vrvConfig;
 
-          // Helper to extract value from stats
-          const getValue = (configField) => {
-            if (!configField || !configField.includes('::')) return null;
+          // Helper to extract value and timestamp from stats
+          const getValueAndTimestamp = (configField) => {
+            if (!configField || !configField.includes('::')) return { val: null, ts: null };
             const [moduleId, fieldId] = configField.split('::');
             const stat = stats.find(s => String(s.moduleId) === String(moduleId) || String(s.meta?.module_id) === String(moduleId));
-            if (stat && stat.meta && stat.meta[fieldId] !== undefined) {
-              return parseFloat(stat.meta[fieldId]);
+            if (stat && stat.meta) {
+              const val = stat.meta[fieldId] !== undefined ? parseFloat(stat.meta[fieldId]) : null;
+              let ts = Date.now();
+              if (stat.meta?.created_at_timestamp) {
+                const raw = stat.meta.created_at_timestamp;
+                ts = raw > 1e12 ? raw : raw * 1000;
+              }
+              return { val, ts };
             }
-            return null;
+            return { val: null, ts: null };
           };
 
-          const temp = getValue(config.temperature);
-          if (temp !== null && newZone.TEMP !== temp) { newZone.TEMP = temp; updated = true; }
+          const tempInfo = getValueAndTimestamp(config.temperature);
+          if (tempInfo.val !== null) {
+            if (newZone.TEMP !== tempInfo.val) { newZone.TEMP = tempInfo.val; updated = true; }
+            if (tempInfo.ts !== null && newZone.lastSeen.TEMP !== tempInfo.ts) { newZone.lastSeen.TEMP = tempInfo.ts; updated = true; }
+          }
 
-          const hum = getValue(config.humidity);
-          if (hum !== null && newZone.HUMIDITY !== hum) { newZone.HUMIDITY = hum; updated = true; }
+          const humInfo = getValueAndTimestamp(config.humidity);
+          if (humInfo.val !== null) {
+            if (newZone.HUMIDITY !== humInfo.val) { newZone.HUMIDITY = humInfo.val; updated = true; }
+            if (humInfo.ts !== null && newZone.lastSeen.HUMIDITY !== humInfo.ts) { newZone.lastSeen.HUMIDITY = humInfo.ts; updated = true; }
+          }
 
-          const co2 = getValue(config.co2);
-          if (co2 !== null && newZone.CO2 !== co2) { newZone.CO2 = co2; updated = true; }
+          const co2Info = getValueAndTimestamp(config.co2);
+          if (co2Info.val !== null) {
+            if (newZone.CO2 !== co2Info.val) { newZone.CO2 = co2Info.val; updated = true; }
+            if (co2Info.ts !== null && newZone.lastSeen.CO2 !== co2Info.ts) { newZone.lastSeen.CO2 = co2Info.ts; updated = true; }
+          }
 
-          const tvoc = getValue(config.tvoc);
-          if (tvoc !== null && newZone.TVOC !== tvoc) { newZone.TVOC = tvoc; updated = true; }
+          const tvocInfo = getValueAndTimestamp(config.tvoc);
+          if (tvocInfo.val !== null) {
+            if (newZone.TVOC !== tvocInfo.val) { newZone.TVOC = tvocInfo.val; updated = true; }
+            if (tvocInfo.ts !== null && newZone.lastSeen.TVOC !== tvocInfo.ts) { newZone.lastSeen.TVOC = tvocInfo.ts; updated = true; }
+          }
 
-          const aqi = getValue(config.aqi);
-          if (aqi !== null && newZone.AQI !== aqi) { newZone.AQI = aqi; updated = true; }
+          const aqiInfo = getValueAndTimestamp(config.aqi);
+          if (aqiInfo.val !== null) {
+            if (newZone.AQI !== aqiInfo.val) { newZone.AQI = aqiInfo.val; updated = true; }
+            if (aqiInfo.ts !== null && newZone.lastSeen.AQI !== aqiInfo.ts) { newZone.lastSeen.AQI = aqiInfo.ts; updated = true; }
+          }
 
           return newZone;
         });
@@ -204,7 +226,8 @@ const EnvDashboard = () => {
                   TVOC: existing?.TVOC ?? 0,
                   AQI: existing?.AQI ?? 0,
                   status: existing?.status ?? 'Optimal',
-                  mapping: t?.mapping || null
+                  mapping: t?.mapping || null,
+                  lastSeen: existing?.lastSeen || {}
                 };
               })
               .filter(z => z.mapping?.vrvConfig?.device);
@@ -463,10 +486,24 @@ const EnvDashboard = () => {
                               </h6>
                               <div className="d-flex align-items-center">
                                 {isFieldMapped ? (
-                                  <>
-                                    <div className="spinner-grow spinner-grow-sm me-2 opacity-50" style={{ color: statusColor, width: '0.75rem', height: '0.75rem' }} role="status"></div>
-                                    <span className="text-secondary opacity-75 fs-9 fw-bold uppercase tracking-widest">LIVE DATA</span>
-                                  </>
+                                  (() => {
+                                    const ts = unitData?.lastSeen?.[key];
+                                    const isLive = ts && (Date.now() - ts < 60000);
+                                    if (isLive) {
+                                      return (
+                                        <>
+                                          <div className="spinner-grow spinner-grow-sm me-2 opacity-50" style={{ color: '#10b981', width: '0.75rem', height: '0.75rem' }} role="status"></div>
+                                          <span className="text-secondary opacity-75 fs-9 fw-bold uppercase tracking-widest">LIVE DATA</span>
+                                        </>
+                                      );
+                                    } else {
+                                      return (
+                                        <span className="text-muted opacity-50 fs-9 fw-bold uppercase tracking-widest d-flex align-items-center gap-1">
+                                          <span className="rounded-circle" style={{ width: '6px', height: '6px', display: 'inline-block', background: '#64748b' }}></span> NO LIVE DATA
+                                        </span>
+                                      );
+                                    }
+                                  })()
                                 ) : (
                                   <span className="text-muted fs-9 fw-bold uppercase tracking-widest">UNMAPPED</span>
                                 )}
@@ -510,40 +547,56 @@ const EnvDashboard = () => {
                               
                               {/* Animated Live Trend Line */}
                               <div className="mt-1 pt-0 border-top border-secondary border-opacity-10 position-relative rounded-bottom-4" style={{ height: '28px', width: '100%', overflow: 'hidden' }}>
-                                <div className="position-absolute top-0 start-0 w-100 d-flex justify-content-between px-2" style={{ zIndex: 2, marginTop: '1px' }}>
-                                  <span className="text-secondary opacity-50 fw-bold" style={{ fontSize: '0.45rem', letterSpacing: '1px' }}>LIVE TELEMETRY TREND</span>
-                                  <div className="d-flex align-items-center gap-1">
-                                    <div className="spinner-grow spinner-grow-sm" style={{ width: '4px', height: '4px', background: config.color }}></div>
-                                    <span className="fw-bold" style={{ fontSize: '0.45rem', color: config.color, letterSpacing: '1px' }}>RECORDING</span>
-                                  </div>
-                                </div>
-                                <svg width="100%" height="100%" viewBox="0 0 200 40" preserveAspectRatio="none" style={{ position: 'absolute', bottom: 0, left: 0 }}>
-                                  <defs>
-                                    <linearGradient id={`grad-${key}`} x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor={config.color} stopOpacity="0.4" />
-                                      <stop offset="100%" stopColor={config.color} stopOpacity="0" />
-                                    </linearGradient>
-                                  </defs>
-                                  
-                                  {/* Grid Lines */}
-                                  <line x1="0" y1="15" x2="200" y2="15" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="2 2" />
-                                  <line x1="0" y1="25" x2="200" y2="25" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="2 2" />
-                                  
-                                  <g>
-                                    <animateTransform attributeName="transform" type="translate" from="0,0" to="-200,0" dur="3s" repeatCount="indefinite" />
-                                    <path 
-                                      d="M 0 20 C 10 15, 20 10, 30 20 C 40 30, 50 30, 60 20 C 70 10, 80 5, 100 15 C 120 25, 130 30, 140 20 C 150 10, 160 10, 170 20 C 180 30, 190 25, 200 20 C 210 15, 220 10, 230 20 C 240 30, 250 30, 260 20 C 270 10, 280 5, 300 15 C 320 25, 330 30, 340 20 C 350 10, 360 10, 370 20 C 380 30, 390 25, 400 20 L 400 40 L 0 40 Z" 
-                                      fill={`url(#grad-${key})`} 
-                                    />
-                                    <path 
-                                      d="M 0 20 C 10 15, 20 10, 30 20 C 40 30, 50 30, 60 20 C 70 10, 80 5, 100 15 C 120 25, 130 30, 140 20 C 150 10, 160 10, 170 20 C 180 30, 190 25, 200 20 C 210 15, 220 10, 230 20 C 240 30, 250 30, 260 20 C 270 10, 280 5, 300 15 C 320 25, 330 30, 340 20 C 350 10, 360 10, 370 20 C 380 30, 390 25, 400 20" 
-                                      fill="none" 
-                                      stroke={config.color} 
-                                      strokeWidth="1.5" 
-                                      strokeOpacity="0.9"
-                                    />
-                                  </g>
-                                </svg>
+                                {(() => {
+                                  const ts = unitData?.lastSeen?.[key];
+                                  const isLive = ts && (Date.now() - ts < 60000);
+                                  return (
+                                    <>
+                                      <div className="position-absolute top-0 start-0 w-100 d-flex justify-content-between px-2" style={{ zIndex: 2, marginTop: '1px' }}>
+                                        <span className="text-secondary opacity-50 fw-bold" style={{ fontSize: '0.45rem', letterSpacing: '1px' }}>LIVE TELEMETRY TREND</span>
+                                        {isFieldMapped && isLive ? (
+                                          <div className="d-flex align-items-center gap-1">
+                                            <div className="spinner-grow spinner-grow-sm" style={{ width: '4px', height: '4px', background: config.color }}></div>
+                                            <span className="fw-bold" style={{ fontSize: '0.45rem', color: config.color, letterSpacing: '1px' }}>RECORDING</span>
+                                          </div>
+                                        ) : (
+                                          <span className="text-secondary opacity-25 fw-bold" style={{ fontSize: '0.45rem', letterSpacing: '1px' }}>OFFLINE</span>
+                                        )}
+                                      </div>
+                                      {isFieldMapped && isLive ? (
+                                        <svg width="100%" height="100%" viewBox="0 0 200 40" preserveAspectRatio="none" style={{ position: 'absolute', bottom: 0, left: 0 }}>
+                                          <defs>
+                                            <linearGradient id={`grad-${key}`} x1="0" y1="0" x2="0" y2="1">
+                                              <stop offset="0%" stopColor={config.color} stopOpacity="0.4" />
+                                              <stop offset="100%" stopColor={config.color} stopOpacity="0" />
+                                            </linearGradient>
+                                          </defs>
+                                          
+                                          {/* Grid Lines */}
+                                          <line x1="0" y1="15" x2="200" y2="15" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="2 2" />
+                                          <line x1="0" y1="25" x2="200" y2="25" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="2 2" />
+                                          
+                                          <g>
+                                            <animateTransform attributeName="transform" type="translate" from="0,0" to="-200,0" dur="3s" repeatCount="indefinite" />
+                                            <path 
+                                              d="M 0 20 C 10 15, 20 10, 30 20 C 40 30, 50 30, 60 20 C 70 10, 80 5, 100 15 C 120 25, 130 30, 140 20 C 150 10, 160 10, 170 20 C 180 30, 190 25, 200 20 C 210 15, 220 10, 230 20 C 240 30, 250 30, 260 20 C 270 10, 280 5, 300 15 C 320 25, 330 30, 340 20 C 350 10, 360 10, 370 20 C 380 30, 390 25, 400 20 L 400 40 L 0 40 Z" 
+                                              fill={`url(#grad-${key})`} 
+                                            />
+                                            <path 
+                                              d="M 0 20 C 10 15, 20 10, 30 20 C 40 30, 50 30, 60 20 C 70 10, 80 5, 100 15 C 120 25, 130 30, 140 20 C 150 10, 160 10, 170 20 C 180 30, 190 25, 200 20 C 210 15, 220 10, 230 20 C 240 30, 250 30, 260 20 C 270 10, 280 5, 300 15 C 320 25, 330 30, 340 20 C 350 10, 360 10, 370 20 C 380 30, 390 25, 400 20" 
+                                              fill="none" 
+                                              stroke={config.color} 
+                                              strokeWidth="1.5" 
+                                              strokeOpacity="0.9"
+                                            />
+                                          </g>
+                                        </svg>
+                                      ) : (
+                                        <div className="position-absolute bottom-0 start-0 w-100 border-top border-secondary border-opacity-10" style={{ height: '2px', background: 'rgba(255,255,255,0.02)' }} />
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </Card.Body>

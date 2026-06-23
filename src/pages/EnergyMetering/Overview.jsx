@@ -401,7 +401,7 @@ const EnergyMeteringOverview = () => {
 
     if (matchingStats.length === 0) return false;
 
-    const TELEMETRY_FRESHNESS_MS = 5 * 60 * 1000; // 5 minutes freshness window
+    const TELEMETRY_FRESHNESS_MS = 10 * 60 * 1000; // 10 minutes freshness window
     let hasData = false;
 
     matchingStats.forEach(stat => {
@@ -424,7 +424,7 @@ const EnergyMeteringOverview = () => {
     });
 
     if (deviceId) {
-      return devOnline && hasData;
+      return devOnline || hasData;
     }
     return hasData;
   };

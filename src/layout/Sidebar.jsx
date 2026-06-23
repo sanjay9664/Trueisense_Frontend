@@ -24,27 +24,28 @@ const Sidebar = ({ collapsed }) => {
     }
 
     const savedFp = localStorage.getItem('scada_feature_permissions');
-    if (!savedFp) return {}; // Secure by default: hide everything if permissions are missing
-    const localFp = JSON.parse(savedFp);
+    const localFp = savedFp ? JSON.parse(savedFp) : {};
+    const isFpEmpty = Object.keys(localFp).length === 0;
+    const defaultVal = isFpEmpty ? true : false;
     return {
-      "Dashboard": localFp.showDashboard_read ?? localFp.showDashboard ?? false,
-      "Water Management": localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? false,
-      "Motors": localFp.showMotors_read ?? localFp.showMotors ?? false,
-      "DG Set": localFp.showDGSet_read ?? localFp.showDGSet ?? false,
-      "Setting Templates": localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? false,
-      "Alarm System": localFp.showAlarms_read ?? localFp.showAlarms ?? false,
-      "LT Panel": localFp.showLTPanel_read ?? localFp.showLTPanel ?? false,
-      "Transformer": localFp.showTransformers_read ?? localFp.showTransformers ?? false,
-      "Fire": localFp.showFirePumps_read ?? localFp.showFirePumps ?? false,
-      "Ticketing": localFp.showTicketing_read ?? localFp.showTicketing ?? false,
-      "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? false,
-      "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? false,
-      "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? false,
-      "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? false,
-      "VRV": localFp.showVRV_read ?? localFp.showVRV ?? false,
-      "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? false,
-      "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? false,
-      "AC": localFp.showAC_read ?? localFp.showAC ?? false
+      "Dashboard": localFp.showDashboard_read ?? localFp.showDashboard ?? defaultVal,
+      "Water Management": localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? defaultVal,
+      "Motors": localFp.showMotors_read ?? localFp.showMotors ?? defaultVal,
+      "DG Set": localFp.showDGSet_read ?? localFp.showDGSet ?? defaultVal,
+      "Setting Templates": localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? defaultVal,
+      "Alarm System": localFp.showAlarms_read ?? localFp.showAlarms ?? defaultVal,
+      "LT Panel": localFp.showLTPanel_read ?? localFp.showLTPanel ?? defaultVal,
+      "Transformer": localFp.showTransformers_read ?? localFp.showTransformers ?? defaultVal,
+      "Fire": localFp.showFirePumps_read ?? localFp.showFirePumps ?? defaultVal,
+      "Ticketing": localFp.showTicketing_read ?? localFp.showTicketing ?? defaultVal,
+      "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? defaultVal,
+      "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? defaultVal,
+      "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? defaultVal,
+      "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? defaultVal,
+      "VRV": localFp.showVRV_read ?? localFp.showVRV ?? defaultVal,
+      "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? defaultVal,
+      "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? defaultVal,
+      "AC": localFp.showAC_read ?? localFp.showAC ?? defaultVal
     };
   });
   const [submodulesConfig, setSubmodulesConfig] = useState(() => {
@@ -113,25 +114,27 @@ const Sidebar = ({ collapsed }) => {
       } else {
         const savedFp = localStorage.getItem('scada_feature_permissions');
         const localFp = savedFp ? JSON.parse(savedFp) : {};
+        const isFpEmpty = Object.keys(localFp).length === 0;
+        const defaultVal = isFpEmpty ? true : false;
         const calculated = {
-          "Dashboard": localFp.showDashboard_read ?? localFp.showDashboard ?? false,
-          "Water Management": localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? false,
-          "Motors": localFp.showMotors_read ?? localFp.showMotors ?? false,
-          "DG Set": localFp.showDGSet_read ?? localFp.showDGSet ?? false,
-          "Setting Templates": localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? false,
-          "Alarm System": localFp.showAlarms_read ?? localFp.showAlarms ?? false,
-          "LT Panel": localFp.showLTPanel_read ?? localFp.showLTPanel ?? false,
-          "Transformer": localFp.showTransformers_read ?? localFp.showTransformers ?? false,
-          "Fire": localFp.showFirePumps_read ?? localFp.showFirePumps ?? false,
-          "Ticketing": localFp.showTicketing_read ?? localFp.showTicketing ?? false,
-          "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? false,
-          "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? false,
-          "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? false,
-          "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? false,
-          "VRV": localFp.showVRV_read ?? localFp.showVRV ?? false,
-          "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? false,
-          "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? false,
-          "AC": localFp.showAC_read ?? localFp.showAC ?? false
+          "Dashboard": localFp.showDashboard_read ?? localFp.showDashboard ?? defaultVal,
+          "Water Management": localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? defaultVal,
+          "Motors": localFp.showMotors_read ?? localFp.showMotors ?? defaultVal,
+          "DG Set": localFp.showDGSet_read ?? localFp.showDGSet ?? defaultVal,
+          "Setting Templates": localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? defaultVal,
+          "Alarm System": localFp.showAlarms_read ?? localFp.showAlarms ?? defaultVal,
+          "LT Panel": localFp.showLTPanel_read ?? localFp.showLTPanel ?? defaultVal,
+          "Transformer": localFp.showTransformers_read ?? localFp.showTransformers ?? defaultVal,
+          "Fire": localFp.showFirePumps_read ?? localFp.showFirePumps ?? defaultVal,
+          "Ticketing": localFp.showTicketing_read ?? localFp.showTicketing ?? defaultVal,
+          "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? defaultVal,
+          "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? defaultVal,
+          "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? defaultVal,
+          "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? defaultVal,
+          "VRV": localFp.showVRV_read ?? localFp.showVRV ?? defaultVal,
+          "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? defaultVal,
+          "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? defaultVal,
+          "AC": localFp.showAC_read ?? localFp.showAC ?? defaultVal
         };
         setModulesConfig(calculated);
 
@@ -343,7 +346,13 @@ const Sidebar = ({ collapsed }) => {
         { title: "Sub Meters", path: "/energy-metering/sub" },
         { title: "Graphs", path: "/energy-metering/graphs" },
         { title: "PDF Report", path: "/energy-metering/report" }
-      ].filter((subItem) => submodulesConfig.showEnergyMetering?.[subItem.title] ?? true)
+      ].filter((subItem) => {
+        if (subItem.title === "Main Meter") {
+          const isManager = roleName.includes('manager') || roleName.includes('admin') || userRole === 'SUPER_ADMIN' || userRole === 'ADMIN';
+          if (!isManager) return false;
+        }
+        return submodulesConfig.showEnergyMetering?.[subItem.title] ?? true;
+      })
     },
     {
       title: "VRV",

@@ -111,7 +111,8 @@ const OperatorRoute = ({ children, moduleKey }) => {
   const isRestricted = roleName.includes('zone') || roleName.includes('area') || roleName.includes('location') || roleName.includes('unit') || roleName.includes('operator');
   if (isRestricted) {
     const localFp = JSON.parse(localStorage.getItem('scada_feature_permissions') || '{}');
-    const hasPerm = localFp[`${moduleKey}_read`] ?? localFp[moduleKey] ?? false;
+    const isFpEmpty = Object.keys(localFp).length === 0;
+    const hasPerm = localFp[`${moduleKey}_read`] ?? localFp[moduleKey] ?? (isFpEmpty ? true : false);
     if (!hasPerm) {
       return <Navigate to="/dashboard" replace />;
     }

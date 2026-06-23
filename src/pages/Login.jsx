@@ -159,26 +159,28 @@ const Login = ({ onLoginSuccess }) => {
 
         const isSuperRole = role === 'SUPER_ADMIN';
         const isPowerUser = role === 'SUPER_ADMIN' || role === 'ADMIN';
+        const isFpEmpty = Object.keys(localFp).length === 0;
+        const defaultVal = (isPowerUser || isFpEmpty) ? true : false;
 
         const sidebarMapping = {
-          "Dashboard": localFp.showDashboard_read ?? localFp.showDashboard ?? (isPowerUser ? true : false),
-          "Water Management": localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? (isPowerUser ? true : false),
-          "Motors": localFp.showMotors_read ?? localFp.showMotors ?? (isPowerUser ? true : false),
-          "DG Set": localFp.showDGSet_read ?? localFp.showDGSet ?? (isPowerUser ? true : false),
-          "Setting Templates": localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? (isPowerUser ? true : false),
-          "Alarm System": localFp.showAlarms_read ?? localFp.showAlarms ?? (isPowerUser ? true : false),
-          "LT Panel": localFp.showLTPanel_read ?? localFp.showLTPanel ?? (isPowerUser ? true : false),
-          "Transformer": localFp.showTransformers_read ?? localFp.showTransformers ?? (isPowerUser ? true : false),
-          "Fire": localFp.showFirePumps_read ?? localFp.showFirePumps ?? (isPowerUser ? true : false),
-          "Ticketing": localFp.showTicketing_read ?? localFp.showTicketing ?? (isPowerUser ? true : false),
-          "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? (isPowerUser ? true : false),
-          "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? (isPowerUser ? true : false),
-          "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? (isPowerUser ? true : false),
-          "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? (isPowerUser ? true : false),
-          "VRV": localFp.showVRV_read ?? localFp.showVRV ?? (isPowerUser ? true : false),
-          "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? (isPowerUser ? true : false),
-          "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? (isPowerUser ? true : false),
-          "AC": localFp.showAC_read ?? localFp.showAC ?? (isPowerUser ? true : false)
+          "Dashboard": localFp.showDashboard_read ?? localFp.showDashboard ?? defaultVal,
+          "Water Management": localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? defaultVal,
+          "Motors": localFp.showMotors_read ?? localFp.showMotors ?? defaultVal,
+          "DG Set": localFp.showDGSet_read ?? localFp.showDGSet ?? defaultVal,
+          "Setting Templates": localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? defaultVal,
+          "Alarm System": localFp.showAlarms_read ?? localFp.showAlarms ?? defaultVal,
+          "LT Panel": localFp.showLTPanel_read ?? localFp.showLTPanel ?? defaultVal,
+          "Transformer": localFp.showTransformers_read ?? localFp.showTransformers ?? defaultVal,
+          "Fire": localFp.showFirePumps_read ?? localFp.showFirePumps ?? defaultVal,
+          "Ticketing": localFp.showTicketing_read ?? localFp.showTicketing ?? defaultVal,
+          "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? defaultVal,
+          "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? defaultVal,
+          "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? defaultVal,
+          "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? defaultVal,
+          "VRV": localFp.showVRV_read ?? localFp.showVRV ?? defaultVal,
+          "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? defaultVal,
+          "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? defaultVal,
+          "AC": localFp.showAC_read ?? localFp.showAC ?? defaultVal
         };
         localStorage.setItem('scada_modules_config', JSON.stringify(sidebarMapping));
         // Reconstruct submoduleVisibility from flat keys if present
@@ -264,8 +266,8 @@ const Login = ({ onLoginSuccess }) => {
               </div>
             ))}
           </div>
-          <div className="d-flex align-items-center justify-content-center gap-2 text-white text-opacity-30 fs-12 fw-bold tracking-widest uppercase" style={{ letterSpacing: '0.15em' }}>
-             <span style={{ color: '#fb923c', fontWeight: 950 }}>SOCHIOT INNOVATIONS</span>
+          <div className="d-flex align-items-center justify-content-start gap-2 text-white text-opacity-30 fs-12 fw-bold tracking-widest uppercase" style={{ letterSpacing: '0.15em' }}>
+             <span style={{ color: '#fb923c', fontWeight: 950 }}>SOCHIOT INNOVATIONS PVT LTD</span>
              <span style={{ color: 'rgba(255, 255, 255, 0.15)' }}>|</span>
              <span>© 2026</span>
           </div>
@@ -327,7 +329,7 @@ const Login = ({ onLoginSuccess }) => {
             >
               {loading ? (
                 <div className="d-flex align-items-center gap-3">
-                  <span className="spinner-border spinner-border-sm"></span> INTEGRATING
+                  <span className="spinner-border spinner-border-sm"></span> Login
                 </div>
               ) : (
                 <> {loginMode === 'admin' ? 'Login' : 'REMOTELY ACCESS'} <ArrowRight size={20} /> </>
