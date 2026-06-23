@@ -1,0 +1,1676 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  color-scheme: dark;
+  --scada-bg: #120A05;
+  --scada-sidebar: #190e07;
+  --scada-card: #1c1008;
+  --scada-header: #120A05;
+  --scada-border: rgba(224, 94, 0, 0.18);
+  --scada-text: #f8fafc;
+  --scada-text-muted: #d69e7e;
+  --scada-accent: #e05e00;
+  
+  --status-running: #22c55e;
+  --status-fault: #ef4444;
+  --status-warning: #e05e00;
+  --status-stopped: #8c7365;
+}
+
+body.light-mode {
+  color-scheme: light;
+  --scada-bg: #f8fafc; /* Crisp premium off-white background */
+  --scada-sidebar: #ffffff; /* Pure white sidebar */
+  --scada-card: #ffffff; /* Pure white cards */
+  --scada-header: rgba(255, 255, 255, 0.85); /* Transparent glass header */
+  --scada-border: rgba(0, 0, 0, 0.06); /* Very subtle border */
+  --scada-text: #0f172a; /* Deep charcoal text */
+  --scada-text-muted: #64748b; /* Slate 500 gray */
+  --scada-accent: #e05e00; /* Signature TRUEiSENSE orange */
+
+  --status-running: #10b981; /* Premium green */
+  --status-fault: #ef4444; /* Clean rose red */
+  --status-warning: #f59e0b; /* Bright warning yellow */
+  --status-stopped: #64748b; /* Slate gray */
+  
+  background: var(--scada-bg) !important;
+  background-color: var(--scada-bg) !important;
+  background-image: none !important;
+}
+
+body.light-mode .scada-header {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-bottom: 1px solid var(--scada-border) !important;
+}
+
+body.light-mode .scada-table thead th {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  color: var(--scada-text-muted) !important;
+  border-bottom: 2px solid var(--scada-border) !important;
+}
+
+body.light-mode .scada-table tbody tr:hover td {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+  color: var(--scada-text) !important;
+}
+
+body.light-mode .scada-table tbody td {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+body.light-mode select, 
+body.light-mode .form-select, 
+body.light-mode select.form-control, 
+body.light-mode input.form-control {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+body.light-mode select option, 
+body.light-mode option {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+body.light-mode datalist, 
+body.light-mode select:focus, 
+body.light-mode .form-select:focus {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+/* Update Header dropdown text color for light mode */
+body.light-mode .dropdown-menu {
+  background-color: #f8fafc !important;
+}
+body.light-mode .dropdown-menu .dropdown-item {
+  color: #1e293b !important;
+}
+body.light-mode .dropdown-menu .dropdown-item:hover {
+  background-color: rgba(0,0,0,0.05) !important;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: linear-gradient(180deg, #8C3B06 0%, #2A1206 45%, #120A05 75%, #000000 100%) no-repeat center center fixed !important;
+  background-size: cover;
+  color: var(--scada-text);
+  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Force Light Text on common elements */
+h1, h2, h3, h4, h5, h6, p, span, div, label {
+  color: var(--scada-text);
+}
+
+.card, .card-body, .card-header, .card-footer {
+  color: var(--scada-text) !important;
+}
+
+.accordion-button, .accordion-item {
+  color: var(--scada-text) !important;
+}
+
+.form-control, .form-select, .form-label, .form-check-label {
+  color: var(--scada-text) !important;
+}
+
+.input-group-text {
+  color: var(--scada-text-muted) !important;
+}
+
+.scada-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+.scada-main-content {
+  flex-grow: 1;
+  padding: 1.5rem;
+  margin-top: 60px;
+  transition: margin-left 0.3s ease;
+}
+
+/* Sidebar Styles */
+.scada-sidebar {
+  width: 280px;
+  background-color: var(--scada-sidebar);
+  border-right: 1px solid var(--scada-border);
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1000;
+  transition: all 0.3s ease;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scada-border) transparent;
+}
+
+.scada-sidebar.collapsed {
+  width: 80px;
+}
+
+/* Header Styles */
+.scada-header {
+  height: 60px;
+  background-color: var(--scada-header);
+  border-bottom: 1px solid var(--scada-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 280px;
+  z-index: 999;
+  transition: left 0.3s ease;
+  backdrop-filter: blur(8px);
+  background-color: rgba(15, 23, 42, 0.8);
+}
+
+.scada-header.collapsed {
+  left: 80px;
+}
+
+/* Page Header */
+.page-header {
+  margin-bottom: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Card Styling */
+.scada-card {
+  background-color: var(--scada-card);
+  border: 1px solid var(--scada-border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.scada-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-color: var(--scada-accent);
+}
+
+/* Status Indicators */
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.status-running { background-color: rgba(34, 197, 94, 0.1); color: var(--status-running); border: 1px solid rgba(34, 197, 94, 0.2); }
+.status-fault { background-color: rgba(239, 68, 68, 0.1); color: var(--status-fault); border: 1px solid rgba(239, 68, 68, 0.2); }
+.status-warning { background-color: rgba(245, 158, 11, 0.1); color: var(--status-warning); border: 1px solid rgba(245, 158, 11, 0.2); }
+.status-stopped { background-color: rgba(148, 163, 184, 0.1); color: var(--status-stopped); border: 1px solid rgba(148, 163, 184, 0.2); }
+.status-not-mapped { background-color: rgba(100, 116, 139, 0.08); color: #475569; border: 1px solid rgba(100, 116, 139, 0.15); font-style: italic; opacity: 0.7; }
+
+/* Table Styles */
+.scada-table {
+  color: var(--scada-text) !important;
+  border-color: var(--scada-border) !important;
+  background-color: transparent !important;
+  --bs-table-bg: transparent !important;
+}
+
+.scada-table thead th {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+  color: var(--scada-text-muted) !important;
+  border-bottom: 2px solid var(--scada-border) !important;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  padding: 12px 16px !important;
+}
+
+.scada-table tbody tr {
+  background-color: transparent !important;
+  transition: all 0.2s ease;
+}
+
+.scada-table tbody tr:hover td {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+  color: white !important;
+}
+
+.scada-table tbody td {
+  background-color: transparent !important;
+  color: var(--scada-text) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  vertical-align: middle;
+  padding: 14px 16px !important;
+}
+
+/* Animations */
+.fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Utility */
+.text-muted { color: var(--scada-text-muted) !important; }
+.text-white { color: var(--scada-text) !important; }
+.accent-glow { text-shadow: 0 0 10px rgba(56, 189, 248, 0.5); }
+
+/* Bootstrap Override */
+.accordion-button:not(.collapsed) {
+  background-color: rgba(56, 189, 248, 0.1) !important;
+  color: var(--scada-accent) !important;
+}
+
+.accordion-button::after {
+  filter: invert(1);
+}
+
+.form-control:focus, .form-select:focus {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: white !important;
+  border-color: var(--scada-accent) !important;
+  box-shadow: 0 0 0 0.25rem rgba(56, 189, 248, 0.25) !important;
+}
+
+/* Global Native Dropdown Styles for consistent Dark Theme */
+select, .form-select, select.form-control, input.form-control {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border: 1px solid var(--scada-border) !important;
+}
+
+select option, option {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  padding: 10px !important;
+}
+
+/* Fix browser autocomplete / datalist list options */
+datalist, select:focus, .form-select:focus {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+}
+
+body.light-mode {
+  color-scheme: light;
+  --scada-bg: #f8fafc; /* Crisp premium off-white background */
+  --scada-sidebar: #ffffff; /* Pure white sidebar */
+  --scada-card: #ffffff; /* Pure white cards */
+  --scada-header: rgba(255, 255, 255, 0.85); /* Transparent glass header */
+  --scada-border: rgba(0, 0, 0, 0.06); /* Very subtle border */
+  --scada-text: #0f172a; /* Deep charcoal text */
+  --scada-text-muted: #64748b; /* Slate 500 gray */
+  --scada-accent: #e05e00; /* Signature TRUEiSENSE orange */
+
+  --status-running: #10b981; /* Premium green */
+  --status-fault: #ef4444; /* Clean rose red */
+  --status-warning: #f59e0b; /* Bright warning yellow */
+  --status-stopped: #64748b; /* Slate gray */
+  
+  background: var(--scada-bg) !important;
+  background-color: var(--scada-bg) !important;
+  background-image: none !important;
+}
+
+body.light-mode .scada-header {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-bottom: 1px solid var(--scada-border) !important;
+}
+
+body.light-mode .scada-table thead th {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  color: var(--scada-text-muted) !important;
+  border-bottom: 2px solid var(--scada-border) !important;
+}
+
+body.light-mode .scada-table tbody tr:hover td {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+  color: var(--scada-text) !important;
+}
+
+body.light-mode .scada-table tbody td {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+body.light-mode select, 
+body.light-mode .form-select, 
+body.light-mode select.form-control, 
+body.light-mode input.form-control {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+body.light-mode select option, 
+body.light-mode option {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+body.light-mode datalist, 
+body.light-mode select:focus, 
+body.light-mode .form-select:focus {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+/* Update Header dropdown text color for light mode */
+body.light-mode .dropdown-menu {
+  background-color: #f8fafc !important;
+}
+body.light-mode .dropdown-menu .dropdown-item {
+  color: #1e293b !important;
+}
+body.light-mode .dropdown-menu .dropdown-item:hover {
+  background-color: rgba(0,0,0,0.05) !important;
+}
+/*
+trigger
+rebuild
+*/
+
+
+/* GLOBAL LIGHT MODE OVERRIDES FOR BOOTSTRAP AND INLINE STYLES */
+body.light-mode .text-white,
+body.light-mode .text-light,
+body.light-mode [class*="text-white"] {
+  color: var(--scada-text) !important;
+}
+
+body.light-mode .bg-dark,
+body.light-mode [class*="bg-dark"] {
+  background-color: var(--scada-sidebar) !important;
+}
+
+body.light-mode .text-secondary,
+body.light-mode .text-muted {
+  color: var(--scada-text-muted) !important;
+}
+
+body.light-mode .border-secondary,
+body.light-mode .border-white,
+body.light-mode [class*="border-white"] {
+  border-color: var(--scada-border) !important;
+}
+
+body.light-mode [style*="rgba(15, 23, 42"],
+body.light-mode [style*="rgba(30, 41, 59"],
+body.light-mode [style*="rgba(0, 0, 0, 0.4)"] {
+  background-color: var(--scada-card) !important;
+  background-image: none !important;
+}
+
+body.light-mode .modal-content,
+body.light-mode .modal-header,
+body.light-mode .modal-body,
+body.light-mode .modal-footer {
+  background-color: var(--scada-card) !important;
+  background: var(--scada-card) !important;
+  color: var(--scada-text) !important;
+  border-color: var(--scada-border) !important;
+}
+
+body.light-mode .VRV-room-card {
+  background: var(--scada-card) !important;
+  border-color: var(--scada-border) !important;
+}
+
+body.light-mode .bg-info.bg-opacity-10 {
+  background-color: rgba(2, 132, 199, 0.15) !important;
+}
+
+body.light-mode .scada-card {
+  background: var(--scada-card) !important;
+  background-color: var(--scada-card) !important;
+}
+
+body.light-mode [style*="color: #f8fafc"],
+body.light-mode [style*="color: '#f8fafc'"],
+body.light-mode [style*="color: #fff"],
+body.light-mode [style*="color: '#fff'"] {
+  color: var(--scada-text) !important;
+}
+
+body.light-mode .room-title {
+  color: var(--scada-text) !important;
+}
+
+body.light-mode .text-info {
+    color: #0284c7 !important;
+}
+
+body.light-mode .bg-opacity-50 {
+    background-color: rgba(248, 250, 252, 0.5) !important;
+}
+
+
+/* ADDITIONAL GLOBAL LIGHT MODE OVERRIDES */
+body.light-mode [style*="background: #0f172a"],
+body.light-mode [style*="background: '#0f172a'"],
+body.light-mode [style*="backgroundColor: '#0f172a'"],
+body.light-mode [style*="backgroundColor: #0f172a"],
+body.light-mode [style*="background: #1e293b"],
+body.light-mode [style*="background: '#1e293b'"] {
+  background-color: var(--scada-card) !important;
+  background-image: none !important;
+}
+
+body.light-mode [style*="color: #0f172a"],
+body.light-mode [style*="color: '#0f172a'"] {
+  color: var(--scada-text) !important;
+}
+
+/* Linear gradients often hardcoded with dark colors */
+body.light-mode [style*="linear-gradient"] {
+  background: var(--scada-card) !important;
+}
+
+
+/* MEGA GLOBAL LIGHT MODE OVERRIDES FOR CUSTOM CLASSES */
+
+/* Cards, Panels, and Containers */
+body.light-mode .premium-figma-card,
+body.light-mode .scada-data-box,
+body.light-mode .card-action-bar-premium,
+body.light-mode .selected-premium-card,
+body.light-mode .configuration-form-wrapper,
+body.light-mode .bg-panel,
+body.light-mode .bg-gradient-scada,
+body.light-mode .scada-glass-card,
+body.light-mode .scada-tabs-container,
+body.light-mode .scada-section-box,
+body.light-mode .parameter-glass-card,
+body.light-mode .scada-gauge-card,
+body.light-mode .scada-glass-section,
+body.light-mode .telemetry-card-glow,
+body.light-mode .grouping-panel,
+body.light-mode .glass-card,
+body.light-mode .glass-tabs,
+body.light-mode .glass-panel,
+body.light-mode .admin-header-card,
+body.light-mode .submodule-grid,
+body.light-mode .hs-card-glow,
+body.light-mode .control-box,
+body.light-mode .filter-tile,
+body.light-mode .status-filter-card,
+body.light-mode .mgmt-header,
+body.light-mode .mini-sidebar-preview,
+body.light-mode .preview-item {
+  background: var(--scada-card) !important;
+  background-color: var(--scada-card) !important;
+  border-color: var(--scada-border) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.light-mode .selected-premium-card {
+  background: rgba(2, 132, 199, 0.05) !important;
+  border-color: var(--scada-accent) !important;
+}
+
+/* Inputs, Selects, and Controls */
+body.light-mode .premium-input,
+body.light-mode .premium-select,
+body.light-mode .scada-select,
+body.light-mode .grouping-input,
+body.light-mode .role-selector-container,
+body.light-mode .hs-select,
+body.light-mode .hs-small-select,
+body.light-mode .hs-segmented-control,
+body.light-mode .hs-value-display,
+body.light-mode .scada-input {
+  background: #f1f5f9 !important;
+  background-color: #f1f5f9 !important;
+  color: var(--scada-text) !important;
+  border-color: var(--scada-border) !important;
+}
+
+body.light-mode .premium-input option,
+body.light-mode .premium-select option,
+body.light-mode .scada-select option,
+body.light-mode .hs-select option {
+  background: #f1f5f9 !important;
+  color: var(--scada-text) !important;
+}
+
+/* Checkboxes and Radios */
+body.light-mode .scada-checkbox .form-check-input,
+body.light-mode .scada-radio .form-check-input {
+  background-color: #f8fafc !important;
+  border-color: #94a3b8 !important;
+}
+
+body.light-mode .scada-checkbox .form-check-input:checked,
+body.light-mode .scada-radio .form-check-input:checked {
+  background-color: var(--scada-accent) !important;
+  border-color: var(--scada-accent) !important;
+}
+
+/* Buttons, Pills, and Chips */
+body.light-mode .icon-box-premium,
+body.light-mode .group-ungrouped-chip,
+body.light-mode .hs-status-indicator,
+body.light-mode .valve-mode-pill,
+body.light-mode .sub-pill,
+body.light-mode .module-icon-box {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: var(--scada-text) !important;
+  border-color: var(--scada-border) !important;
+}
+
+body.light-mode .sub-pill.active,
+body.light-mode .module-icon-box.active {
+  background: rgba(2, 132, 199, 0.1) !important;
+  color: var(--scada-accent) !important;
+  border-color: rgba(2, 132, 199, 0.2) !important;
+}
+
+/* Toggle Switches */
+body.light-mode .modern-toggle {
+  background: #cbd5e1 !important;
+  border-color: #94a3b8 !important;
+}
+body.light-mode .modern-toggle.on {
+  background: rgba(2, 132, 199, 0.15) !important;
+  border-color: rgba(2, 132, 199, 0.4) !important;
+}
+body.light-mode .toggle-slider {
+  background: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+}
+body.light-mode .on .toggle-slider {
+  background: var(--scada-accent) !important;
+}
+body.light-mode .toggle-label {
+  color: var(--scada-text-muted) !important;
+}
+
+/* Catch-all for black/dark transparent backgrounds */
+body.light-mode [style*="background: rgba(0, 0, 0"],
+body.light-mode [style*="background: rgba(255, 255, 255, 0.0"],
+body.light-mode [style*="background: 'rgba(0,0,0"],
+body.light-mode [style*="background: 'rgba(255,255,255,0.0"],
+body.light-mode [style*="background-color: rgba(0, 0, 0"],
+body.light-mode [style*="backgroundColor: rgba(0, 0, 0"],
+body.light-mode [style*="background: #000"],
+body.light-mode [style*="background: '#000"],
+body.light-mode [style*="background: #111"] {
+  background: var(--scada-card) !important;
+  background-color: var(--scada-card) !important;
+}
+
+
+/* ADDITIONAL SCHEMATIC LIGHT MODE OVERRIDES */
+body.light-mode .fullscreen-scada-page,
+body.light-mode .scada-schematic-bg,
+body.light-mode .scada-selector-tile,
+body.light-mode [class*="scada-schematic-bg"],
+body.light-mode [class*="fullscreen-scada-page"] {
+  background-color: var(--scada-card) !important;
+  background-image: none !important;
+  background: var(--scada-card) !important;
+}
+
+/* Water Tank specific dark colors */
+body.light-mode [style*="#0c121e"],
+body.light-mode [style*="#111827"],
+body.light-mode [style*="#0a1118"],
+body.light-mode [style*="#020408"] {
+  background-color: var(--scada-card) !important;
+  background-image: none !important;
+}
+
+/* Override any inline background colors that use standard dark tailwind colors */
+body.light-mode [style*="background: #0f172a"],
+body.light-mode [style*="background: '#0f172a'"],
+body.light-mode [style*="background-color: #0f172a"],
+body.light-mode [style*="background-color: '#0f172a'"],
+body.light-mode [style*="background: #1e293b"],
+body.light-mode [style*="background: '#1e293b'"],
+body.light-mode [style*="background-color: #1e293b"],
+body.light-mode [style*="background-color: '#1e293b'"],
+body.light-mode [style*="background: #020617"],
+body.light-mode [style*="background: '#020617'"],
+body.light-mode [style*="background-color: #020617"],
+body.light-mode [style*="background-color: '#020617'"],
+body.light-mode [style*="background: #111827"],
+body.light-mode [style*="background: '#111827'"],
+body.light-mode [style*="background-color: #111827"],
+body.light-mode [style*="background-color: '#111827'"] {
+  background: var(--scada-card) !important;
+  background-color: var(--scada-card) !important;
+  background-image: none !important;
+}
+
+body.light-mode [style*="background-color: '#111827'"] {
+  background: var(--scada-card) !important;
+  background-color: var(--scada-card) !important;
+  background-image: none !important;
+}
+
+/* ULTIMATE INLINE STYLE OVERRIDES FOR DARK BACKGROUNDS */
+body.light-mode [style*="rgb(15, 23, 42)"],
+body.light-mode [style*="#0f172a"],
+body.light-mode [style*="rgb(30, 41, 59)"],
+body.light-mode [style*="#1e293b"],
+body.light-mode [style*="rgb(2, 6, 23)"],
+body.light-mode [style*="#020617"],
+body.light-mode [style*="rgb(17, 24, 39)"],
+body.light-mode [style*="#111827"],
+body.light-mode [style*="rgb(12, 18, 30)"],
+body.light-mode [style*="#0c121e"],
+body.light-mode [style*="rgb(11, 17, 33)"],
+body.light-mode [style*="#0b1121"],
+body.light-mode [style*="rgb(11, 17, 32)"],
+body.light-mode [style*="#0b1120"],
+body.light-mode [style*="rgb(17, 21, 28)"],
+body.light-mode [style*="#11151c"],
+body.light-mode [style*="rgb(15, 19, 26)"],
+body.light-mode [style*="#0f131a"],
+body.light-mode [style*="rgb(3, 7, 18)"],
+body.light-mode [style*="#030712"],
+body.light-mode [style*="rgb(5, 7, 10)"],
+body.light-mode [style*="#05070a"],
+body.light-mode [style*="rgb(13, 21, 37)"],
+body.light-mode [style*="#0d1525"],
+body.light-mode [style*="rgb(51, 65, 85)"],
+body.light-mode [style*="#334155"],
+body.light-mode [style*="rgb(30, 30, 30)"],
+body.light-mode [style*="#1e1e1e"],
+body.light-mode [style*="rgb(18, 18, 18)"],
+body.light-mode [style*="#121212"],
+body.light-mode [style*="rgb(10, 10, 10)"],
+body.light-mode [style*="#0a0a0a"],
+body.light-mode [style*="rgb(0, 0, 0)"],
+body.light-mode [style*="#000000"],
+body.light-mode [style*="rgb(17, 17, 17)"],
+body.light-mode [style*="#111111"],
+body.light-mode [style*="rgb(26, 26, 26)"],
+body.light-mode [style*="#1a1a1a"],
+body.light-mode [style*="rgb(26, 32, 44)"],
+body.light-mode [style*="#1a202c"],
+body.light-mode [style*="rgb(45, 55, 72)"],
+body.light-mode [style*="#2d3748"],
+body.light-mode [style*="rgb(32, 42, 59)"],
+body.light-mode [style*="#202a3b"],
+body.light-mode [style*="rgba(0, 0, 0, 0.2)"],
+body.light-mode [style*="rgba(0,0,0,0.2)"],
+body.light-mode [style*="rgba(0,  0,  0,  0.2)"],
+body.light-mode [style*="rgba(0,0,0,0.2)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.2)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.3)"],
+body.light-mode [style*="rgba(0,0,0,0.3)"],
+body.light-mode [style*="rgba(0,  0,  0,  0.3)"],
+body.light-mode [style*="rgba(0,0,0,0.3)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.3)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.4)"],
+body.light-mode [style*="rgba(0,0,0,0.4)"],
+body.light-mode [style*="rgba(0,  0,  0,  0.4)"],
+body.light-mode [style*="rgba(0,0,0,0.4)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.4)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.5)"],
+body.light-mode [style*="rgba(0,0,0,0.5)"],
+body.light-mode [style*="rgba(0,  0,  0,  0.5)"],
+body.light-mode [style*="rgba(0,0,0,0.5)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.5)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.6)"],
+body.light-mode [style*="rgba(0,0,0,0.6)"],
+body.light-mode [style*="rgba(0,  0,  0,  0.6)"],
+body.light-mode [style*="rgba(0,0,0,0.6)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.6)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.7)"],
+body.light-mode [style*="rgba(0,0,0,0.7)"],
+body.light-mode [style*="rgba(0,  0,  0,  0.7)"],
+body.light-mode [style*="rgba(0,0,0,0.7)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.7)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.8)"],
+body.light-mode [style*="rgba(0,0,0,0.8)"],
+body.light-mode [style*="rgba(0,  0,  0,  0.8)"],
+body.light-mode [style*="rgba(0,0,0,0.8)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.8)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.9)"],
+body.light-mode [style*="rgba(0,0,0,0.9)"],
+body.light-mode [style*="rgba(0,  0,  0,  0.9)"],
+body.light-mode [style*="rgba(0,0,0,0.9)"],
+body.light-mode [style*="rgba(0, 0, 0, 0.9)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.4)"],
+body.light-mode [style*="rgba(15,23,42,0.4)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.4)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.6)"],
+body.light-mode [style*="rgba(15,23,42,0.6)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.6)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.8)"],
+body.light-mode [style*="rgba(15,23,42,0.8)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.8)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.95)"],
+body.light-mode [style*="rgba(15,23,42,0.95)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.95)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.55)"],
+body.light-mode [style*="rgba(15,23,42,0.55)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.55)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.94)"],
+body.light-mode [style*="rgba(15,23,42,0.94)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.94)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.7)"],
+body.light-mode [style*="rgba(15,23,42,0.7)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.7)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.85)"],
+body.light-mode [style*="rgba(15,23,42,0.85)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.85)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.5)"],
+body.light-mode [style*="rgba(15,23,42,0.5)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.5)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.9)"],
+body.light-mode [style*="rgba(15,23,42,0.9)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.9)"],
+body.light-mode [style*="rgba(15, 23, 42, 1)"],
+body.light-mode [style*="rgba(15,23,42,1)"],
+body.light-mode [style*="rgba(15,  23,  42,  1)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.45)"],
+body.light-mode [style*="rgba(15,23,42,0.45)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.45)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.2)"],
+body.light-mode [style*="rgba(15,23,42,0.2)"],
+body.light-mode [style*="rgba(15,  23,  42,  0.2)"],
+body.light-mode [style*="rgba(15,23,42,0.6)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.6)"],
+body.light-mode [style*="rgba(15,23,42,0.72)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.72)"],
+body.light-mode [style*="rgba(15,23,42,0.92)"],
+body.light-mode [style*="rgba(15, 23, 42, 0.92)"],
+body.light-mode [style*="rgba(30, 41, 59, 0.3)"],
+body.light-mode [style*="rgba(30,41,59,0.3)"],
+body.light-mode [style*="rgba(30,  41,  59,  0.3)"],
+body.light-mode [style*="rgba(30, 41, 59, 0.4)"],
+body.light-mode [style*="rgba(30,41,59,0.4)"],
+body.light-mode [style*="rgba(30,  41,  59,  0.4)"],
+body.light-mode [style*="rgba(30, 41, 59, 0.55)"],
+body.light-mode [style*="rgba(30,41,59,0.55)"],
+body.light-mode [style*="rgba(30,  41,  59,  0.55)"],
+body.light-mode [style*="rgba(30, 41, 59, 0.8)"],
+body.light-mode [style*="rgba(30,41,59,0.8)"],
+body.light-mode [style*="rgba(30,  41,  59,  0.8)"],
+body.light-mode [style*="rgba(10, 15, 30, 0.7)"],
+body.light-mode [style*="rgba(10,15,30,0.7)"],
+body.light-mode [style*="rgba(10,  15,  30,  0.7)"],
+body.light-mode [style*="rgba(2, 6, 23, 0.6)"],
+body.light-mode [style*="rgba(2,6,23,0.6)"],
+body.light-mode [style*="rgba(2,  6,  23,  0.6)"],
+body.light-mode [style*="rgba(20, 22, 27, 0.65)"],
+body.light-mode [style*="rgba(20,22,27,0.65)"],
+body.light-mode [style*="rgba(20,  22,  27,  0.65)"] {
+  background: var(--scada-card) !important;
+  background-color: var(--scada-card) !important;
+  background-image: none !important;
+}
+
+/* BOOTSTRAP DARK UTILITY OVERRIDES FOR LIGHT MODE */
+body.light-mode .bg-black,
+body.light-mode .bg-dark,
+body.light-mode .bg-secondary,
+body.light-mode .table-dark,
+body.light-mode .table-dark th,
+body.light-mode .table-dark td,
+body.light-mode .table-dark tr {
+  background-color: var(--scada-card) !important;
+  background: var(--scada-card) !important;
+}
+
+body.light-mode .table-dark {
+  color: var(--scada-text) !important;
+  border-color: var(--scada-border) !important;
+}
+
+body.light-mode .table-dark th,
+body.light-mode .table-dark td {
+  border-color: var(--scada-border) !important;
+}
+
+/* Also handle any text-white or text-light inside these containers if they need to be readable */
+body.light-mode .bg-black .text-white,
+body.light-mode .bg-dark .text-white,
+body.light-mode .bg-black .text-light,
+body.light-mode .bg-dark .text-light {
+  color: var(--scada-text) !important;
+}
+
+body.light-mode .bg-black .text-muted,
+body.light-mode .bg-dark .text-muted {
+  color: var(--scada-text-muted) !important;
+}
+
+
+/* =========================================================
+   NUCLEAR OPTION FOR INLINE BACKGROUNDS IN LIGHT MODE
+   ========================================================= */
+
+body.light-mode .fade-in,
+body.light-mode .min-vh-100,
+body.light-mode .vh-100,
+body.light-mode .energy-overview-page,
+body.light-mode .VRV-full-panel,
+body.light-mode .scada-config-page,
+body.light-mode [style*="min-height: 100vh"],
+body.light-mode [style*="minHeight: 100vh"],
+body.light-mode [style*="height: 100vh"] {
+  background: var(--scada-bg) !important;
+  background-color: var(--scada-bg) !important;
+  background-image: none !important; /* Removes inline dark gradients */
+}
+
+/* Ensure CARDS remain card-colored even if they have fade-in */
+body.light-mode .card,
+body.light-mode .scada-card,
+body.light-mode .glass-card,
+body.light-mode .premium-figma-card,
+body.light-mode .scada-data-box {
+  background: var(--scada-card) !important;
+  background-color: var(--scada-card) !important;
+}
+
+/* Specific fix for Ticket Manifest table header which might be pitch black */
+body.light-mode thead,
+body.light-mode .table-dark thead,
+body.light-mode [style*="background: black"],
+body.light-mode [style*="background: #000"] {
+  background: var(--scada-card) !important;
+  background-color: var(--scada-card) !important;
+  color: var(--scada-text) !important;
+}
+
+/* Fix for HMI Control Center top black bar */
+body.light-mode .bg-black.border-opacity-10 {
+  background: var(--scada-card) !important;
+}
+
+
+/* =========================================================
+   SVG NUCLEAR OVERRIDES FOR LIGHT MODE
+   ========================================================= */
+
+/* Override dark fills in SVGs */
+body.light-mode svg rect[fill="#0c121e"],
+body.light-mode svg rect[fill="#0f172a"],
+body.light-mode svg rect[fill="#111827"],
+body.light-mode svg rect[fill="#1e293b"],
+body.light-mode svg circle[fill="#0c121e"],
+body.light-mode svg circle[fill="#0f172a"],
+body.light-mode svg circle[fill="#111827"],
+body.light-mode svg circle[fill="#1e293b"],
+body.light-mode svg path[fill="#0c121e"],
+body.light-mode svg path[fill="#0f172a"],
+body.light-mode svg path[fill="#111827"],
+body.light-mode svg path[fill="#1e293b"] {
+  fill: var(--scada-card) !important;
+}
+
+/* Override dark strokes in SVGs */
+body.light-mode svg rect[stroke="#334155"],
+body.light-mode svg rect[stroke="#1e293b"],
+body.light-mode svg circle[stroke="#334155"],
+body.light-mode svg circle[stroke="#475569"],
+body.light-mode svg path[stroke="#334155"],
+body.light-mode svg path[stroke="#1e293b"] {
+  stroke: #cbd5e1 !important;
+}
+
+/* 
+  Fix for boxes that might use bg-black with bg-opacity-X 
+  Bootstrap uses --bs-bg-opacity, but we need to force it to 1 
+  if we are replacing black with white, otherwise white becomes transparent!
+*/
+body.light-mode .bg-black,
+body.light-mode .bg-dark,
+body.light-mode .bg-black.bg-opacity-10,
+body.light-mode .bg-black.bg-opacity-20,
+body.light-mode .bg-black.bg-opacity-50 {
+  background-color: var(--scada-card) !important;
+  --bs-bg-opacity: 1 !important;
+  opacity: 1 !important;
+}
+
+/* Ensure text inside these formally dark boxes is dark */
+body.light-mode .bg-black .text-white,
+body.light-mode .bg-dark .text-white {
+  color: var(--scada-text) !important;
+}
+
+/* Specific fix for Power & Billing boxes */
+body.light-mode .data-grid.bg-black {
+  background-color: var(--scada-card) !important;
+  border-color: #e2e8f0 !important;
+}
+
+
+/* =========================================================
+   SVG NEEDLE & TEXT FIXES FOR LIGHT MODE
+   ========================================================= */
+
+/* The gauge needle and center dot use #1e293b. We previously turned this white. 
+   We must turn it dark (scada-text) so it's visible on the white gauge face! */
+body.light-mode svg path[fill="#1e293b"],
+body.light-mode svg circle[fill="#1e293b"] {
+  fill: var(--scada-text) !important;
+}
+
+/* The gauge text ("12.6 BAR") uses fill="#fff". 
+   Since the background is now white, white text is invisible. 
+   Convert it to dark text! */
+body.light-mode svg text[fill="#fff"],
+body.light-mode svg text[fill="#ffffff"] {
+  fill: var(--scada-text) !important;
+  text-shadow: none !important; /* Remove any glowing shadow if present */
+}
+
+/* Also fix the line ticks in the gauge if they became invisible */
+body.light-mode svg line[stroke="#1e293b"] {
+  stroke: var(--scada-text) !important;
+}
+
+
+/* =========================================================
+   ANNUNCIATOR STATUS FIX FOR LIGHT MODE
+   ========================================================= */
+
+body.light-mode .annunciator-cell {
+    background-color: var(--scada-card) !important;
+    border-color: #cbd5e1 !important;
+    color: #94a3b8 !important; /* Inactive text color */
+}
+
+body.light-mode .annunciator-cell.active {
+    background-color: #ef4444 !important;
+    color: #fff !important;
+    border-color: #f87171 !important;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.5) !important;
+}
+
+
+/* =========================================================
+   DASHBOARD FIX FOR LIGHT MODE
+   ========================================================= */
+
+body.light-mode .dashboard-wrapper {
+    background: var(--scada-bg) !important;
+}
+
+body.light-mode .bg-panel {
+    background-color: var(--scada-card) !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
+}
+
+body.light-mode .dash-card {
+    background: var(--scada-card) !important;
+    border: 1px solid #e2e8f0 !important;
+}
+
+body.light-mode .dash-card:hover {
+    border-color: #0ea5e9 !important;
+}
+
+body.light-mode .dashboard-wrapper .text-white {
+    color: var(--scada-text) !important;
+}
+
+/* Specific text color fixes for Dashboard */
+body.light-mode .dashboard-wrapper h1,
+body.light-mode .dashboard-wrapper h3,
+body.light-mode .dashboard-wrapper h4,
+body.light-mode .dashboard-wrapper h6 {
+    color: var(--scada-text) !important;
+}
+
+/* Fix table text colors */
+body.light-mode .scada-table tbody td {
+    color: var(--scada-text) !important;
+    border-bottom-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+body.light-mode .scada-table thead th {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #64748b !important;
+}
+
+/* Ensure background of inline style linear gradients is overwritten */
+body.light-mode [style*="linear-gradient(145deg, #0f172a"] {
+    background: var(--scada-card) !important;
+}
+
+
+/* =========================================================
+   TABLE HOVER FIX FOR LIGHT MODE
+   ========================================================= */
+
+/* Override Bootstrap's dark table hover in light mode */
+body.light-mode .table-dark.table-hover > tbody > tr:hover > *,
+body.light-mode .table.table-hover > tbody > tr:hover > *,
+body.light-mode .table-hover > tbody > tr:hover > td,
+body.light-mode .table-hover > tbody > tr:hover > th {
+    background-color: #f1f5f9 !important;
+    color: var(--scada-text) !important;
+}
+
+/* Also ensure text inside hover state remains dark */
+body.light-mode .table-hover > tbody > tr:hover td .text-white,
+body.light-mode .table-hover > tbody > tr:hover td .text-secondary {
+    color: var(--scada-text) !important;
+}
+
+/* Fix specific custom hover classes */
+body.light-mode .hover-bg-blue:hover {
+    background: #e0f2fe !important; /* light blue for light mode */
+}
+
+
+
+
+/* =========================================================
+   HVAC DIAGRAM FIXES FOR LIGHT MODE (Chiller, AHU, Cooling Tower)
+   ========================================================= */
+
+/* 
+   Since the 3D images have baked-in solid black backgrounds, 
+   we CANNOT invert them or put them on a white background without them looking like x-rays.
+   SOLUTION: Keep the diagram containers as "Dark Mode Islands" even in Light Mode.
+*/
+
+/* Keep diagram containers dark */
+body.light-mode .chiller-diagram-container,
+body.light-mode .ahu-diagram-container,
+body.light-mode .cooling-diagram-container {
+    background: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+}
+
+/* Revert images to normal (remove inversion) */
+body.light-mode .chiller-diagram-container img,
+body.light-mode .ahu-diagram-container img,
+body.light-mode .cooling-diagram-container img {
+    filter: contrast(1.1) brightness(0.9) !important;
+    mix-blend-mode: screen !important; /* Restore screen mode so black background hides in dark container */
+}
+body.light-mode .chiller-diagram-container img {
+    filter: contrast(1.2) brightness(1.2) !important;
+}
+
+/* Force tiles/cards inside the diagram to be dark so white text shows up properly */
+body.light-mode .chiller-diagram-container .scada-tile,
+body.light-mode .ahu-diagram-container .position-absolute.p-3,
+body.light-mode .cooling-diagram-container .position-absolute.p-3,
+body.light-mode .ahu-diagram-container .position-absolute.start-50,
+body.light-mode .cooling-diagram-container .position-absolute.start-50 {
+    background: rgba(15, 23, 42, 0.85) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: #fff !important;
+}
+
+/* Force text inside the dark island to remain white */
+body.light-mode .chiller-diagram-container .text-white,
+body.light-mode .ahu-diagram-container .text-white,
+body.light-mode .cooling-diagram-container .text-white,
+body.light-mode .chiller-diagram-container [style*="color: var(--scada-text)"],
+body.light-mode .ahu-diagram-container [style*="color: var(--scada-text)"] {
+    color: #fff !important;
+}
+
+/* Fix specific center badge in Chiller */
+body.light-mode .chiller-diagram-container .rounded-3.px-4.py-3.text-center {
+    background-color: #a855f7 !important;
+    border: 2px solid #d8b4fe !important;
+}
+body.light-mode .chiller-diagram-container .rounded-3.px-4.py-3.text-center h3 {
+    color: #fff !important;
+}
+
+/* Revert text shadows for SVG overlays */
+body.light-mode .chiller-diagram-container svg text,
+body.light-mode .ahu-diagram-container svg text,
+body.light-mode .cooling-diagram-container svg text {
+    text-shadow: 2px 2px 4px #000, -1px -1px 4px #000 !important;
+}
+
+/* Ensure small muted texts stay visible in the dark island */
+body.light-mode .ahu-diagram-container .text-muted,
+body.light-mode .cooling-diagram-container .text-muted {
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+
+/* =========================================================
+   DATABOX FIX FOR LIGHT MODE (DG SET)
+   ========================================================= */
+
+body.light-mode .data-box-label {
+    /* If the label background is a dark color, we want the text to remain white, 
+       so we don't force var(--scada-text) like we did for .text-white */
+    color: #ffffff !important;
+}
+
+body.light-mode .data-box-value {
+    background-color: var(--scada-card) !important;
+    /* Force text to be dark since background is now light */
+    color: var(--scada-text) !important;
+}
+
+
+/* =========================================================
+   LIGHT MODE BEAUTIFICATION (PREMIUM LOOK)
+   ========================================================= */
+
+/* 1. Subtle Premium Background */
+body.light-mode {
+    --scada-bg: #f4f7f9 !important; 
+    --scada-text: #0f172a !important; 
+}
+
+body.light-mode #root > div,
+body.light-mode .min-vh-100,
+body.light-mode .dashboard-wrapper {
+    background: linear-gradient(135deg, #f8fafc 0%, #eef2f6 100%) !important;
+}
+
+/* 2. Beautiful Soft Shadows & Borders for Cards */
+body.light-mode .scada-card,
+body.light-mode .premium-figma-card,
+body.light-mode .bg-panel,
+body.light-mode .dash-card {
+    background: #ffffff !important;
+    border: 1px solid rgba(226, 232, 240, 0.9) !important;
+    box-shadow: 0 10px 40px -10px rgba(15, 23, 42, 0.06), 0 4px 10px -2px rgba(15, 23, 42, 0.03) !important;
+    border-radius: 16px !important;
+    backdrop-filter: none !important; /* Remove blur to keep it sharp and clean */
+}
+
+/* 3. Deep Text Gradient for Main Headings */
+body.light-mode h2, 
+body.light-mode h3, 
+body.light-mode .page-header h2 {
+    color: #0f172a !important;
+    text-shadow: none !important;
+    letter-spacing: -0.5px !important;
+}
+
+body.light-mode h6 {
+    color: #475569 !important;
+    font-weight: 800 !important;
+}
+
+/* 4. Elegant Inputs and Search boxes */
+body.light-mode .premium-input,
+body.light-mode .form-control {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02) !important;
+}
+body.light-mode .premium-input:focus,
+body.light-mode .form-control:focus {
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.15) !important;
+}
+
+/* 5. Fix internal dark boxes (like the ones in panels) to look like soft inner cards */
+body.light-mode .bg-dark.bg-opacity-50,
+body.light-mode .bg-dark.bg-opacity-20,
+body.light-mode .bg-black.bg-opacity-30 {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+}
+
+/* 6. Fix bright borders (border-secondary etc) to be soft gray */
+body.light-mode .border-secondary.border-opacity-10,
+body.light-mode .border-white.border-opacity-5 {
+    border-color: #e2e8f0 !important;
+}
+
+/* 7. Enhance DataBox labels (make them pop slightly in light mode) */
+body.light-mode .data-box-label {
+    background: #334155 !important;
+    border-radius: 4px 0 0 4px !important;
+}
+body.light-mode .data-box-value {
+    border-radius: 0 4px 4px 0 !important;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02) !important;
+    border: 1px solid #e2e8f0 !important;
+    border-left: none !important;
+}
+
+
+/* =========================================================
+   TEXT SHADOW & GLOW FIX FOR LIGHT MODE
+   ========================================================= */
+
+/* Remove dark text-shadows from colored text/arcs that look dirty on white backgrounds */
+body.light-mode .current-temp {
+    text-shadow: none !important;
+}
+
+body.light-mode .VRV-dial-svg {
+    filter: none !important;
+}
+
+/* Fix any generic text-glows that use dark shadows */
+body.light-mode .text-glow,
+body.light-mode .text-glow-blue,
+body.light-mode .text-glow-white,
+body.light-mode .shadow-glow-blue,
+body.light-mode .shadow-glow-green,
+body.light-mode .glow-text-info,
+body.light-mode .glow-text-warning,
+body.light-mode .glow-text-success,
+body.light-mode .glow-text-danger {
+    text-shadow: none !important;
+    filter: none !important;
+}
+
+/* For SVG filters causing dirty shadows in light mode (e.g. TempHumidity gauge) */
+body.light-mode svg filter#shadow feDropShadow,
+body.light-mode svg filter#glow feDropShadow {
+    flood-opacity: 0.1 !important; /* Make shadows very faint in light mode if they can't be removed */
+}
+
+
+/* =========================================================
+   SMOOTH & BEAUTIFUL THEME TRANSITION
+   ========================================================= */
+
+/* Core layout elements transition smoothly */
+body, 
+#root > div,
+.min-vh-100,
+.vh-100,
+.dashboard-wrapper,
+.sidebar-container,
+.scada-card,
+.premium-figma-card,
+.bg-panel,
+.dash-card,
+.card,
+.card-header,
+.card-body,
+.modal-content,
+.table-responsive,
+.data-box-label,
+.data-box-value {
+    transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+                background 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+                border-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), 
+                box-shadow 0.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Typography transitions smoothly */
+body h1, body h2, body h3, body h4, body h5, body h6, body p, body th, body td {
+    transition: color 0.4s cubic-bezier(0.4, 0, 0.2, 1), text-shadow 0.4s ease !important;
+}
+
+/* Specific background utilities used for cards/panels */
+.bg-black, .bg-dark, .bg-white, .bg-transparent {
+    transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Theme Toggle Button smooth spin animation */
+.theme-toggle-btn svg {
+    transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease !important;
+}
+.theme-toggle-btn:active svg {
+    transform: rotate(180deg) scale(0.8) !important;
+}
+
+
+/* =========================================================
+   LOGO FIX FOR LIGHT MODE
+   ========================================================= */
+
+/* The logo has white text which is invisible in light mode. 
+   We invert the lightness but keep the hue (blue stays blue-ish, white becomes black) */
+body.light-mode .sidebar-brand img,
+body.light-mode img[alt="Sochiot"],
+body.light-mode img[alt="Company Logo"] {
+    filter: invert(1) hue-rotate(180deg) brightness(1.2) contrast(1.2) !important;
+}
+
+
+/* =========================================================
+   LOGO VISIBILITY FIX FOR LIGHT MODE
+   ========================================================= */
+
+/* Place the white/blue dark-mode logo inside a beautiful premium dark badge */
+body.light-mode img[src*="logo.png"] {
+    background: linear-gradient(145deg, #0f172a 0%, #1e293b 100%) !important;
+    padding: 10px 20px !important;
+    border-radius: 14px !important;
+    box-shadow: 0 8px 25px -5px rgba(15, 23, 42, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(10px) !important;
+    
+    /* Ensure the image scales correctly within its new padding */
+    object-fit: contain !important;
+}
+
+
+/* =========================================================
+   LIGHT MODE: ELEVATED TILES / CARDS (USER REQUESTED SHADOW)
+   ========================================================= */
+
+body.light-mode .card,
+body.light-mode .scada-card,
+body.light-mode .premium-figma-card,
+body.light-mode .dash-card,
+body.light-mode .bg-panel,
+body.light-mode .VRV-room-card,
+body.light-mode .login-form-container,
+body.light-mode .scada-data-box {
+    box-shadow: rgba(0, 0, 0, 0.35) 0px 5px 15px !important;
+}
+
+/* On hover, maybe lift them slightly more to make them feel interactive */
+body.light-mode .card:hover,
+body.light-mode .scada-card:hover,
+body.light-mode .VRV-room-card:hover {
+    box-shadow: rgba(0, 0, 0, 0.45) 0px 8px 20px !important;
+    transform: translateY(-2px);
+}
+
+/* =========================================================
+   GLOBAL ORANGE/BROWN THEME ACCENTS AND UTILITIES OVERRIDES
+   ========================================================= */
+
+/* Bootstrap Overrides */
+.text-info {
+  color: var(--scada-accent) !important;
+}
+.bg-info {
+  background-color: rgba(224, 94, 0, var(--bs-bg-opacity, 1)) !important;
+}
+.border-info {
+  border-color: rgba(224, 94, 0, var(--bs-border-opacity, 1)) !important;
+}
+.text-primary {
+  color: var(--scada-accent) !important;
+}
+.bg-primary {
+  background-color: rgba(224, 94, 0, var(--bs-bg-opacity, 1)) !important;
+}
+.border-primary {
+  border-color: rgba(224, 94, 0, var(--bs-border-opacity, 1)) !important;
+}
+
+/* Glow styles */
+.accent-glow {
+  text-shadow: 0 0 10px rgba(224, 94, 0, 0.5) !important;
+}
+
+/* Button primary override for orange-brown theme */
+.btn-primary {
+  background: linear-gradient(135deg, #e05e00, #8c3b06) !important;
+  border-color: #8c3b06 !important;
+  color: #ffffff !important;
+}
+.btn-primary:hover, .btn-primary:focus, .btn-primary:active {
+  background: linear-gradient(135deg, #f97316, #b45309) !important;
+  border-color: #b45309 !important;
+  box-shadow: 0 0 0 0.25rem rgba(224, 94, 0, 0.25) !important;
+}
+
+/* Accordion Active overrides */
+.accordion-button:not(.collapsed) {
+  background-color: rgba(224, 94, 0, 0.15) !important;
+  color: var(--scada-accent) !important;
+}
+
+/* Form inputs focus override */
+.form-control:focus, .form-select:focus {
+  border-color: var(--scada-accent) !important;
+  box-shadow: 0 0 0 0.25rem rgba(224, 94, 0, 0.25) !important;
+}
+
+/* Custom styles for inline blue properties */
+
+/* Text colors */
+[style*="color"][style*="#0ea5e9"],
+[style*="color"][style*="#0EA5E9"],
+[style*="color"][style*="#38bdf8"],
+[style*="color"][style*="#38BDF8"],
+[style*="color"][style*="#3b82f6"],
+[style*="color"][style*="#2563eb"],
+[style*="color"][style*="#0284c7"] {
+  color: var(--scada-accent) !important;
+}
+
+/* Background colors */
+[style*="background"][style*="#0ea5e9"],
+[style*="background"][style*="#0EA5E9"],
+[style*="background"][style*="#38bdf8"],
+[style*="background"][style*="#38BDF8"],
+[style*="background"][style*="#3b82f6"],
+[style*="background"][style*="#2563eb"],
+[style*="background"][style*="#0284c7"],
+[style*="backgroundColor"][style*="#0ea5e9"],
+[style*="backgroundColor"][style*="#0EA5E9"],
+[style*="backgroundColor"][style*="#38bdf8"],
+[style*="backgroundColor"][style*="#38BDF8"],
+[style*="backgroundColor"][style*="#3b82f6"],
+[style*="backgroundColor"][style*="#2563eb"],
+[style*="backgroundColor"][style*="#0284c7"] {
+  background-color: var(--scada-card) !important;
+  background-image: none !important;
+}
+
+/* Gradients containing blue/cyan */
+[style*="linear-gradient"][style*="#0ea5e9"],
+[style*="linear-gradient"][style*="#38bdf8"],
+[style*="linear-gradient"][style*="#3b82f6"],
+[style*="linear-gradient"][style*="#2563eb"],
+[style*="linear-gradient"][style*="#0284c7"] {
+  background: linear-gradient(135deg, #e05e00, #8c3b06) !important;
+}
+
+/* Borders */
+[style*="border"][style*="#0ea5e9"],
+[style*="border"][style*="#38bdf8"],
+[style*="border"][style*="#3b82f6"],
+[style*="border"][style*="#2563eb"],
+[style*="border"][style*="#0284c7"],
+[style*="borderColor"][style*="#0ea5e9"],
+[style*="borderColor"][style*="#38bdf8"],
+[style*="borderColor"][style*="#3b82f6"],
+[style*="borderColor"][style*="#2563eb"],
+[style*="borderColor"][style*="#0284c7"] {
+  border-color: var(--scada-accent) !important;
+}
+
+/* Active highlights on all pages */
+.text-accent {
+  color: var(--scada-accent) !important;
+}
+.bg-accent {
+  background-color: var(--scada-accent) !important;
+}
+
+/* =========================================================
+   GLOBAL CARD & CONTAINER ACCENTS AND THEME OVERRIDES
+   ========================================================= */
+
+/* Overriding all card/panel containers globally to match the warm dark brown theme */
+.card,
+.scada-card,
+.bg-panel,
+.dash-card,
+.premium-figma-card,
+.selected-premium-card,
+.configuration-form-wrapper,
+.scada-glass-card,
+.scada-section-box,
+.parameter-glass-card,
+.scada-gauge-card,
+.scada-glass-section,
+.telemetry-card-glow,
+.grouping-panel,
+.glass-card,
+.glass-panel,
+.admin-header-card,
+.VRV-room-card,
+.hs-card-glow,
+.control-box,
+.filter-tile,
+.status-filter-card,
+.mgmt-header,
+.preview-item,
+.mini-sidebar-preview {
+  background-color: var(--scada-card) !important;
+  background: var(--scada-card) !important;
+  border: 1px solid var(--scada-border) !important;
+  border-color: var(--scada-border) !important;
+  box-shadow: rgba(0, 0, 0, 0.45) 0px 5px 15px, inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  color: var(--scada-text) !important;
+}
+
+/* Hover elevation/raised look for cards */
+.card:hover,
+.scada-card:hover,
+.bg-panel:hover,
+.dash-card:hover,
+.premium-figma-card:hover,
+.VRV-room-card:hover,
+.preview-item:hover {
+  border-color: var(--scada-accent) !important;
+  box-shadow: rgba(224, 94, 0, 0.15) 0px 8px 24px, rgba(0, 0, 0, 0.5) 0px 8px 20px !important;
+  transform: translateY(-2px);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* Intercept inline style backgrounds matching slate-blue #0f172a and #1e293b */
+[style*="#0f172a"],
+[style*="#0F172A"],
+[style*="#1e293b"],
+[style*="#1E293B"] {
+  background-color: var(--scada-card) !important;
+  background: var(--scada-card) !important;
+  border-color: var(--scada-border) !important;
+}
+
+/* Intercept specific inline gradients matching dark blue */
+[style*="linear-gradient"][style*="#0f172a"],
+[style*="linear-gradient"][style*="#020617"],
+[style*="linear-gradient"][style*="#1e293b"] {
+  background: linear-gradient(145deg, var(--scada-card) 0%, var(--scada-bg) 100%) !important;
+}
+
+/* =========================================================
+   GLOBAL FORM CHECK SWITCHES, TOGGLES, RADIOS, AND CHECKBOXES OVERRIDES
+   ========================================================= */
+
+/* Overriding checked switches, checkboxes, and radios globally to match the warm theme */
+.form-check-input:checked,
+.form-check-input[type="checkbox"]:checked,
+.form-check-input[type="radio"]:checked,
+.scada-switch .form-check-input:checked,
+.scada-switch.success .form-check-input:checked,
+.scada-radio .form-check-input:checked,
+.scada-checkbox .form-check-input:checked,
+.hs-custom-switch .form-check-input:checked,
+.custom-switch-success .form-check-input:checked,
+.custom-switch .form-check-input:checked,
+.form-switch .form-check-input:checked {
+  background-color: var(--scada-accent) !important;
+  border-color: var(--scada-accent) !important;
+  box-shadow: 0 0 10px rgba(224, 94, 0, 0.5) !important;
+}
+
+/* Checkbox specific ticks styling to ensure they remain visible and white */
+.form-check-input[type="checkbox"]:checked,
+.scada-checkbox .form-check-input:checked {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e") !important;
+}
+
+/* Round switch toggle knobs styling */
+.form-switch .form-check-input:checked {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3ccircle cx='10' cy='10' r='6' fill='%23fff'/%3e%3c/svg%3e") !important;
+}
+
+/* Custom switch sliders like SiteManagement's .sm2-switch */
+.sm2-switch input:checked + .sm2-slider {
+  background-color: rgba(224, 94, 0, 0.18) !important;
+  border-color: rgba(224, 94, 0, 0.5) !important;
+  box-shadow: none !important;
+}
+.sm2-switch input:checked + .sm2-slider:before {
+  background-color: #e05e00 !important;
+  transform: translateX(18px) !important;
+  box-shadow: 0 0 8px rgba(224, 94, 0, 0.55) !important;
+}
+
+/* =========================================================
+   GLOBAL BOOTSTRAP INFO BUTTONS & GLOW UTILITIES OVERRIDES
+   ========================================================= */
+
+/* Overriding Bootstrap Info Buttons globally */
+.btn-info {
+  background: linear-gradient(135deg, #e05e00, #8c3b06) !important;
+  border-color: #8c3b06 !important;
+  color: #ffffff !important;
+}
+.btn-info:hover, .btn-info:focus, .btn-info:active {
+  background: linear-gradient(135deg, #f97316, #b45309) !important;
+  border-color: #b45309 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 0.25rem rgba(224, 94, 0, 0.25) !important;
+}
+.btn-outline-info {
+  color: var(--scada-accent) !important;
+  border-color: var(--scada-accent) !important;
+}
+.btn-outline-info:hover, .btn-outline-info:focus, .btn-outline-info:active {
+  background-color: var(--scada-accent) !important;
+  border-color: var(--scada-accent) !important;
+  color: #ffffff !important;
+}
+
+/* Custom glow utility overrides */
+.shadow-glow {
+  box-shadow: 0 0 20px rgba(224, 94, 0, 0.25) !important;
+}
+.shadow-glow-blue {
+  box-shadow: 0 0 15px rgba(224, 94, 0, 0.25) !important;
+}
+.text-glow-blue {
+  text-shadow: 0 0 15px rgba(224, 94, 0, 0.6) !important;
+}
+.hover-border-info:hover {
+  border-color: var(--scada-accent) !important;
+}
+.icon-box-premium.info {
+  border-color: rgba(224, 94, 0, 0.3) !important;
+  box-shadow: 0 0 12px rgba(224, 94, 0, 0.1) !important;
+  color: var(--scada-accent) !important;
+}
+
+/* Selected premium active cards */
+.selected-premium-card {
+  background: linear-gradient(145deg, rgba(224, 94, 0, 0.1) 0%, #160C06 100%) !important;
+  border-color: rgba(224, 94, 0, 0.6) !important;
+  box-shadow: 0 0 40px rgba(224, 94, 0, 0.2), inset 0 0 20px rgba(224, 94, 0, 0.05) !important;
+}
+.selected-premium-card::after {
+  background: radial-gradient(circle at top left, rgba(224, 94, 0, 0.15), transparent 70%) !important;
+}
+
+
