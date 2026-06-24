@@ -9,7 +9,14 @@ import {
 import { Accordion } from 'react-bootstrap';
 import logo from "../assets/logo.png";
 
-const Sidebar = ({ collapsed }) => {
+const Sidebar = ({ collapsed, setCollapsed }) => {
+  const handleNavClick = (e) => {
+    // If a link is clicked, close sidebar on mobile
+    const clickedLink = e.target.closest('a');
+    if (clickedLink && window.innerWidth < 992 && setCollapsed) {
+      setCollapsed(true);
+    }
+  };
   const [modulesConfig, setModulesConfig] = useState(() => {
     const uRole = localStorage.getItem('userRole') || 'USER';
     const userDataObj = JSON.parse(localStorage.getItem('userData') || '{}');
@@ -408,7 +415,11 @@ const Sidebar = ({ collapsed }) => {
         />
       </div>
 
-      <div className="sidebar-nav py-3" style={{ height: 'calc(100vh - 100px)', overflowY: 'auto' }}>
+      <div 
+        className="sidebar-nav py-3" 
+        style={{ height: 'calc(100vh - 100px)', overflowY: 'auto' }}
+        onClick={handleNavClick}
+      >
 
         {/* Verification Mode Banner */}
         {isImpersonating && (

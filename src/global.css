@@ -130,9 +130,15 @@ h1, h2, h3, h4, h5, h6, p, span, div, label {
 
 .scada-main-content {
   flex-grow: 1;
+  min-width: 0;
   padding: 1.5rem;
   margin-top: 60px;
+  margin-left: 280px;
   transition: margin-left 0.3s ease;
+}
+
+.scada-main-content.sidebar-collapsed {
+  margin-left: 80px;
 }
 
 /* Sidebar Styles */
@@ -147,6 +153,7 @@ h1, h2, h3, h4, h5, h6, p, span, div, label {
   z-index: 1000;
   transition: all 0.3s ease;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: var(--scada-border) transparent;
 }
@@ -1671,6 +1678,173 @@ body.light-mode .VRV-room-card:hover {
 }
 .selected-premium-card::after {
   background: radial-gradient(circle at top left, rgba(224, 94, 0, 0.15), transparent 70%) !important;
+}
+
+/* =========================================================
+   COMPREHENSIVE RESPONSIVE STYLING FOR ALL DEVICES
+   ========================================================= */
+
+/* Main Layout & Sidebar overrides for Tablets and Mobile Devices */
+@media (max-width: 991.98px) {
+  /* Hide default sidebar inline styling & let CSS control layout */
+  .scada-main-content {
+    margin-left: 0 !important;
+    padding: 1rem !important;
+    margin-top: 60px !important;
+  }
+  
+  .scada-main-content.sidebar-collapsed {
+    margin-left: 0 !important;
+  }
+
+  /* Absolute position sidebar drawer overlay */
+  .scada-sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 280px !important;
+    height: 100vh !important;
+    z-index: 1050 !important;
+    box-shadow: 5px 0 30px rgba(0, 0, 0, 0.7) !important;
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  }
+
+  /* Slide off-screen when collapsed */
+  .scada-sidebar.collapsed {
+    left: -280px !important;
+    width: 280px !important; /* Keep it full width so sliding matches size */
+  }
+
+  /* Adjust Header position to take full screen width */
+  .scada-header,
+  .scada-header.collapsed {
+    left: 0 !important;
+    padding: 0 1rem !important;
+  }
+
+  /* Mobile Backdrop Overlay */
+  .sidebar-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 1040;
+    transition: opacity 0.3s ease;
+  }
+  
+  /* Fallback responsive table layout to prevent horizontal screen breakage */
+  table, .table, .scada-table {
+    display: block !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  table th, table td,
+  .table th, .table td,
+  .scada-table th, .scada-table td {
+    white-space: nowrap !important;
+  }
+  
+  /* Form filters layout adjustment */
+  .scope-filter-panel {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+  
+  .scope-filter-panel > div, 
+  .scope-filter-panel > button,
+  .scope-filter-panel .scada-dropdown-toggle {
+    width: 100% !important;
+    text-align: left !important;
+  }
+  
+  .scope-filter-panel .ms-auto {
+    margin-left: 0 !important;
+    width: 100% !important;
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  /* Modal responsiveness for smaller viewports */
+  .custom-modal-wide {
+    width: 95% !important;
+    max-width: 95% !important;
+    margin: 0.5rem auto !important;
+  }
+  
+  /* Form group layouts */
+  .d-flex.gap-3.align-items-center {
+    flex-wrap: wrap !important;
+  }
+}
+
+/* Typography scaling and smaller sizing for Mobile viewports */
+@media (max-width: 767.98px) {
+  h1, .size-2 {
+    font-size: 1.8rem !important;
+    letter-spacing: -0.5px !important;
+  }
+  
+  h2 {
+    font-size: 1.5rem !important;
+  }
+  
+  h3 {
+    font-size: 1.3rem !important;
+  }
+  
+  h4 {
+    font-size: 1.15rem !important;
+  }
+
+  .display-4 {
+    font-size: 2.2rem !important;
+  }
+
+  /* Adjust page headers to reflow vertically on mobile */
+  .page-header,
+  .d-flex.justify-content-between.align-items-start,
+  .d-flex.justify-content-between.align-items-center {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 1rem !important;
+  }
+
+  .d-flex.justify-content-between.align-items-start > div,
+  .d-flex.justify-content-between.align-items-center > div {
+    width: 100% !important;
+  }
+
+  .d-flex.justify-content-between.align-items-start .d-flex,
+  .d-flex.justify-content-between.align-items-center .d-flex {
+    width: 100% !important;
+    flex-wrap: wrap !important;
+  }
+
+  /* Quick metrics and status cards column spacing */
+  .row.g-4 > [class*="col-"] {
+    margin-bottom: 0.5rem !important;
+  }
+}
+
+@media (max-width: 575.98px) {
+  /* Quick stats submeter boxes row text squeeze fix */
+  .row.text-center > .col-3,
+  .row.text-center > .col-xs-3 {
+    width: 50% !important;
+    margin-bottom: 1rem !important;
+  }
+  
+  .row.text-center {
+    flex-wrap: wrap !important;
+  }
 }
 
 

@@ -4,8 +4,20 @@ import Header from './Header';
 import { io } from 'socket.io-client';
 
 const MainLayout = ({ children }) => {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(window.innerWidth < 992);
   const [isImpersonating, setIsImpersonating] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 992) {
+        setCollapsed(true);
+      } else {
+        setCollapsed(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     setIsImpersonating(!!localStorage.getItem('impersonator_backup_role'));
@@ -390,10 +402,15 @@ const MainLayout = ({ children }) => {
 
   return (
     <div className="scada-container">
-      <Sidebar collapsed={collapsed} />
+      <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
+      {!collapsed && (
+        <div 
+          className="sidebar-backdrop d-lg-none"
+          onClick={() => setCollapsed(true)}
+        />
+      )}
       <div 
-        className={`scada-main-content w-100 ${collapsed ? 'sidebar-collapsed' : ''}`}
-        style={{ marginLeft: collapsed ? '80px' : '280px' }}
+        className={`scada-main-content ${collapsed ? 'sidebar-collapsed' : ''}`}
       >
         {isImpersonating && (
           <div className="bg-warning text-dark px-4 py-2 d-flex justify-content-between align-items-center position-sticky top-0 z-3 shadow-sm border-bottom border-warning">

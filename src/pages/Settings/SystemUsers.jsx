@@ -2460,9 +2460,9 @@ const ScopedStyles = () => (
 
     /* Columns Container Layout */
     .su-columns-container {
-      display: flex;
-      gap: 1.25rem;
-      overflow-x: auto;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 1rem;
       padding: 0.5rem 0.25rem;
       margin-bottom: 1.5rem;
     }
@@ -2482,7 +2482,6 @@ const ScopedStyles = () => (
 
     /* Column Styles */
     .su-column {
-      flex: 0 0 290px;
       display: flex;
       flex-direction: column;
       background: var(--scada-card);
@@ -2713,6 +2712,12 @@ const ScopedStyles = () => (
       border-color: rgba(0, 0, 0, 0.06);
     }
 
+    @media (max-width: 1200px) {
+      .su-columns-container {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      }
+    }
+
     @media (max-width:768px) {
       .su-form-row { grid-template-columns:1fr; }
       .su-view-role-grid { grid-template-columns:1fr; }
@@ -2721,8 +2726,8 @@ const ScopedStyles = () => (
       .su-perm-grid-2col { grid-template-columns:1fr; }
       .su-location-panel { width:100%; }
       .su-form-body { flex-direction:column; }
-      .su-columns-container { flex-direction:column; }
-      .su-column { flex:unset; width:100%; height:auto; max-height:400px; }
+      .su-columns-container { grid-template-columns: 1fr; }
+      .su-column { width:100%; height:auto; max-height:400px; }
     }
   `}} />
 );

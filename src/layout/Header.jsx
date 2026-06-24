@@ -48,6 +48,9 @@ const Header = ({ collapsed, toggleSidebar }) => {
         <h5 className="mb-0 fw-bold tracking-tight d-none d-md-block">
            TRUEiSENSE Smart Monitoring System
         </h5>
+        <span className="text-white fw-bold tracking-tight ms-1 d-md-none fs-6">
+          TRUEiSENSE
+        </span>
       </div>
 
       <div className="header-center d-none d-lg-block">
@@ -82,7 +85,7 @@ const Header = ({ collapsed, toggleSidebar }) => {
           style={{ borderRadius: '20px', padding: '6px 16px', background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', backdropFilter: 'blur(10px)', border: '1px solid var(--scada-border)' }}
         >
           {isDark ? <Sun size={14}/> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>}
-          {isDark ? 'LIGHT MODE' : 'DARK MODE'}
+          <span className="d-none d-sm-inline">{isDark ? 'LIGHT MODE' : 'DARK MODE'}</span>
         </Button>
         
         <Button variant="link" className="text-muted p-2 me-2 position-relative">
