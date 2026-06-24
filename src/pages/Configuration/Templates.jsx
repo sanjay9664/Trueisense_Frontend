@@ -1333,7 +1333,8 @@ const ConfigTemplates = () => {
     return null;
   };
 
-  const handleConfigChange = async (config, setter, key, value) => {
+  const handleConfigChange = async (config, setter, key, rawValue) => {
+    const value = rawValue === 'UNSELECT' ? '' : rawValue;
     console.log(`Config Change: ${key} = ${value}`);
 
     if (key === 'device' && value) {
@@ -4206,6 +4207,7 @@ const ConfigTemplates = () => {
                                                   onChange={(e) => handleConfigChange(section.state, section.setter, f.key, e.target.value)}
                                                 >
                                                   <option value="">SELECT PARAMETER</option>
+                                                  <option value="UNSELECT" style={{ color: '#ef4444', fontWeight: 'bold' }}>UNSELECT</option>
                                                   {section.state[f.key] && !sortedOptions.some(opt => String(opt.id) === String(section.state[f.key])) && (
                                                     <option value={section.state[f.key]}>{section.state[f.key]}</option>
                                                   )}
@@ -4476,6 +4478,7 @@ const ConfigTemplates = () => {
                                                       onChange={(e) => handleConfigChange(section.state, section.setter, f.key, e.target.value)}
                                                     >
                                                       <option value="">SELECT PARAMETER</option>
+                                                      <option value="UNSELECT" style={{ color: '#ef4444', fontWeight: 'bold' }}>UNSELECT</option>
                                                       {section.state[f.key] && !sortedOptions.some(opt => String(opt.id) === String(section.state[f.key])) && (
                                                         <option value={section.state[f.key]}>{section.state[f.key]}</option>
                                                       )}
@@ -4732,6 +4735,7 @@ const ConfigTemplates = () => {
                                                       onChange={(e) => handleConfigChange(section.state, section.setter, f.key, e.target.value)}
                                                     >
                                                       <option value="">SELECT PARAMETER</option>
+                                                      <option value="UNSELECT" style={{ color: '#ef4444', fontWeight: 'bold' }}>UNSELECT</option>
                                                       {section.state[f.key] && !sortedOptions.some(opt => String(opt.id) === String(section.state[f.key])) && (
                                                         <option value={section.state[f.key]}>{section.state[f.key]}</option>
                                                       )}
@@ -4841,6 +4845,7 @@ const ConfigTemplates = () => {
                                                   onChange={(e) => handleConfigChange(section.state, section.setter, f.key, e.target.value)}
                                                 >
                                                   <option value="">SELECT PARAMETER</option>
+                                                  <option value="UNSELECT" style={{ color: '#ef4444', fontWeight: 'bold' }}>UNSELECT</option>
                                                   {section.state[f.key] && !sortedOptions.some(opt => String(opt.id) === String(section.state[f.key])) && (
                                                     <option value={section.state[f.key]}>{section.state[f.key]}</option>
                                                   )}
