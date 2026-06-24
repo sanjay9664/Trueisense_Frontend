@@ -757,16 +757,19 @@ const EnergyGraphs = () => {
     const fetchStats = async () => {
       try {
         const modulesToPoll = new Set();
-        const extractModuleId = (config, keys) => {
-          if (!config) return null;
-          if (config.module && config.module !== 'ALL') return config.module;
+        const addModuleIdsToPoll = (config, keys) => {
+          if (!config) return;
+          if (config.module && config.module !== 'ALL') {
+            modulesToPoll.add(String(config.module));
+          }
           for (const k of keys) {
             if (config[k] && typeof config[k] === 'string' && config[k].includes(':')) {
               const parts = config[k].split(':');
-              if (parts[0]) return parts[0];
+              if (parts[0]) {
+                modulesToPoll.add(String(parts[0]));
+              }
             }
           }
-          return config.module || null;
         };
 
         if (mainMeterTemplateRef.current?.mapping) {
@@ -782,8 +785,7 @@ const EnergyGraphs = () => {
 
           configFieldsMap.forEach(({ config, fields }) => {
             if (config && config.enabled !== false) {
-              const modId = extractModuleId(config, fields);
-              if (modId) modulesToPoll.add(String(modId));
+              addModuleIdsToPoll(config, fields);
             }
           });
         }

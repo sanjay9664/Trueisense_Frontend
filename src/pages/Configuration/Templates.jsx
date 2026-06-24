@@ -190,7 +190,7 @@ const ConfigTemplates = () => {
   const [emPowerConfig, setEmPowerConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', activePower: '', reactivePower: '', apparentPower: '', enabled: true });
   const [emSystemConfig, setEmSystemConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', pf: '', freq: '', commStatus: '', enabled: true });
   const [emConsumptionConfig, setEmConsumptionConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', cumulativekWh: '', enabled: true });
-  const [emChangeConfig, setEmChangeConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', vLLAvg: '', vLNAvg: '', iAvg: '', kvaAvg: '', kvarAvg: '', pfAvg: '', vRY: '', vYB: '', vBR: '', pfR: '', pfY: '', pfB: '', loadHrs: '', loadMin: '', noLoadHrs: '', noLoadMin: '', loadPct: '', enabled: true });
+  const [emChangeConfig, setEmChangeConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', vLLAvg: '', vLNAvg: '', iAvg: '', kvaAvg: '', kvarAvg: '', pfAvg: '', vRY: '', vYB: '', vBR: '', pfR: '', pfY: '', pfB: '', loadHrs: '', loadMin: '', noLoadHrs: '', noLoadMin: '', loadPct: '', freq: '', enabled: true });
   const [emWarningConfig, setEmWarningConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', lowBalanceCut: '', overloadTrip: '', overloadLimitReached: '', connectedStatus: '', forceOff: '', enabled: true });
   const [emReadConfig, setEmReadConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', meterSrno: '', noOfOverloadCheck: '', ebDgStatus: '', ebTariff: '', dgTariff: '', ebRLoadSet: '', ebYLoadSet: '', ebBLoadSet: '', dgRLoadSet: '', dgYLoadSet: '', dgBLoadSet: '', enabled: true });
   const [emLimitsConfig, setEmLimitsConfig] = useState({
@@ -877,7 +877,7 @@ const ConfigTemplates = () => {
             const updated = { ...prev, module: changeModule.id };
             const keys = [
               'ebKvah', 'ebKwh', 'balance', 'totalKw', 'vR', 'vY', 'vB',
-              'iR', 'iY', 'iB', 'pf', 'totalKva', 'dgKwh'
+              'iR', 'iY', 'iB', 'pf', 'totalKva', 'dgKwh', 'freq'
             ];
             keys.forEach(k => {
               if (isNewDevice || !prev[k]) {
@@ -2591,7 +2591,7 @@ const ConfigTemplates = () => {
     setEmPowerConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', activePower: '', reactivePower: '', apparentPower: '', enabled: true });
     setEmSystemConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', pf: '', freq: '', commStatus: '', enabled: true });
     setEmConsumptionConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', cumulativekWh: '', enabled: true });
-    setEmChangeConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', enabled: true });
+    setEmChangeConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', freq: '', enabled: true });
     setEmWarningConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', lowBalanceCut: '', overloadTrip: '', overloadLimitReached: '', connectedStatus: '', forceOff: '', enabled: true });
     setEmReadConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', meterSrno: '', noOfOverloadCheck: '', ebDgStatus: '', ebTariff: '', dgTariff: '', ebRLoadSet: '', ebYLoadSet: '', ebBLoadSet: '', dgRLoadSet: '', dgYLoadSet: '', dgBLoadSet: '', enabled: true });
     setEmLimitsConfig({
@@ -2701,7 +2701,7 @@ const ConfigTemplates = () => {
       setEmPowerConfig(template.mapping.emPowerConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', activePower: '', reactivePower: '', apparentPower: '', enabled: true });
       setEmSystemConfig(template.mapping.emSystemConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', pf: '', freq: '', commStatus: '', enabled: true });
       setEmConsumptionConfig(template.mapping.emConsumptionConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', cumulativekWh: '', enabled: true });
-      setEmChangeConfig(template.mapping.emChangeConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', enabled: true });
+      setEmChangeConfig(template.mapping.emChangeConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', freq: '', enabled: true });
       setEmWarningConfig(template.mapping.emWarningConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', lowBalanceCut: '', overloadTrip: '', overloadLimitReached: '', connectedStatus: '', forceOff: '', enabled: true });
       setEmReadConfig(template.mapping.emReadConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', meterSrno: '', noOfOverloadCheck: '', ebDgStatus: '', ebTariff: '', dgTariff: '', ebRLoadSet: '', ebYLoadSet: '', ebBLoadSet: '', dgRLoadSet: '', dgYLoadSet: '', dgBLoadSet: '', enabled: true });
       setEmLimitsConfig(template.mapping.emLimitsConfig || {
@@ -2899,7 +2899,7 @@ const ConfigTemplates = () => {
                 setEmPowerConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', activePower: '', reactivePower: '', apparentPower: '', enabled: true });
                 setEmSystemConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', pf: '', freq: '', commStatus: '', enabled: true });
                 setEmConsumptionConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', cumulativekWh: '', enabled: true });
-                setEmChangeConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', enabled: true });
+                setEmChangeConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', freq: '', enabled: true });
                 setEmWarningConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', lowBalanceCut: '', overloadTrip: '', overloadLimitReached: '', connectedStatus: '', forceOff: '', enabled: true });
                 setEmReadConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', meterSrno: '', noOfOverloadCheck: '', ebDgStatus: '', ebTariff: '', dgTariff: '', ebRLoadSet: '', ebYLoadSet: '', ebBLoadSet: '', dgRLoadSet: '', dgYLoadSet: '', dgBLoadSet: '', enabled: true });
                 setEmLimitsConfig({
@@ -2965,7 +2965,7 @@ const ConfigTemplates = () => {
                 setEmPowerConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', activePower: '', reactivePower: '', apparentPower: '', enabled: true });
                 setEmSystemConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', pf: '', freq: '', commStatus: '', enabled: true });
                 setEmConsumptionConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', cumulativekWh: '', enabled: true });
-                setEmChangeConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', enabled: true });
+                setEmChangeConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', freq: '', enabled: true });
                 setEmWarningConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', lowBalanceCut: '', overloadTrip: '', overloadLimitReached: '', connectedStatus: '', forceOff: '', enabled: true });
                 setEmReadConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', meterSrno: '', noOfOverloadCheck: '', ebDgStatus: '', ebTariff: '', dgTariff: '', ebRLoadSet: '', ebYLoadSet: '', ebBLoadSet: '', dgRLoadSet: '', dgYLoadSet: '', dgBLoadSet: '', enabled: true });
                 setEmLimitsConfig({
@@ -4261,7 +4261,7 @@ const ConfigTemplates = () => {
                                 setEmPowerConfig(existing.mapping.emPowerConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', activePower: '', reactivePower: '', apparentPower: '', enabled: true });
                                 setEmSystemConfig(existing.mapping.emSystemConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', pf: '', freq: '', commStatus: '', enabled: true });
                                 setEmConsumptionConfig(existing.mapping.emConsumptionConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', cumulativekWh: '', enabled: true });
-                                setEmChangeConfig(existing.mapping.emChangeConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', vLLAvg: '', vLNAvg: '', iAvg: '', kvaAvg: '', kvarAvg: '', pfAvg: '', vRY: '', vYB: '', vBR: '', pfR: '', pfY: '', pfB: '', loadHrs: '', loadMin: '', noLoadHrs: '', noLoadMin: '', loadPct: '', enabled: true });
+                                setEmChangeConfig(existing.mapping.emChangeConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', vLLAvg: '', vLNAvg: '', iAvg: '', kvaAvg: '', kvarAvg: '', pfAvg: '', vRY: '', vYB: '', vBR: '', pfR: '', pfY: '', pfB: '', loadHrs: '', loadMin: '', noLoadHrs: '', noLoadMin: '', loadPct: '', freq: '', enabled: true });
                                 setEmWarningConfig(existing.mapping.emWarningConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', lowBalanceCut: '', overloadTrip: '', overloadLimitReached: '', connectedStatus: '', forceOff: '', enabled: true });
                                 setEmReadConfig(existing.mapping.emReadConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', meterSrno: '', noOfOverloadCheck: '', ebDgStatus: '', ebTariff: '', dgTariff: '', ebRLoadSet: '', ebYLoadSet: '', ebBLoadSet: '', dgRLoadSet: '', dgYLoadSet: '', dgBLoadSet: '', enabled: true });
                                 setEmLimitsConfig(existing.mapping.emLimitsConfig || {
@@ -4282,7 +4282,7 @@ const ConfigTemplates = () => {
                                 setEmPowerConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', activePower: '', reactivePower: '', apparentPower: '', enabled: true });
                                 setEmSystemConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', pf: '', freq: '', commStatus: '', enabled: true });
                                 setEmConsumptionConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', cumulativekWh: '', enabled: true });
-                                setEmChangeConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', vLLAvg: '', vLNAvg: '', iAvg: '', kvaAvg: '', kvarAvg: '', pfAvg: '', vRY: '', vYB: '', vBR: '', pfR: '', pfY: '', pfB: '', loadHrs: '', loadMin: '', noLoadHrs: '', noLoadMin: '', loadPct: '', enabled: true });
+                                setEmChangeConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', ebKvah: '', ebKwh: '', balance: '', totalKw: '', vR: '', vY: '', vB: '', iR: '', iY: '', iB: '', pf: '', totalKva: '', dgKwh: '', vLLAvg: '', vLNAvg: '', iAvg: '', kvaAvg: '', kvarAvg: '', pfAvg: '', vRY: '', vYB: '', vBR: '', pfR: '', pfY: '', pfB: '', loadHrs: '', loadMin: '', noLoadHrs: '', noLoadMin: '', loadPct: '', freq: '', enabled: true });
                                 setEmWarningConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', lowBalanceCut: '', overloadTrip: '', overloadLimitReached: '', connectedStatus: '', forceOff: '', enabled: true });
                                 setEmReadConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', meterSrno: '', noOfOverloadCheck: '', ebDgStatus: '', ebTariff: '', dgTariff: '', ebRLoadSet: '', ebYLoadSet: '', ebBLoadSet: '', dgRLoadSet: '', dgYLoadSet: '', dgBLoadSet: '', enabled: true });
                                 setEmLimitsConfig({
@@ -4373,7 +4373,8 @@ const ConfigTemplates = () => {
                                 { label: 'LOAD MIN', key: 'loadMin' },
                                 { label: 'NO LOAD HRS', key: 'noLoadHrs' },
                                 { label: 'NO LOAD MIN', key: 'noLoadMin' },
-                                { label: 'LOAD %', key: 'loadPct' }
+                                { label: 'LOAD %', key: 'loadPct' },
+                                { label: 'FREQUENCY (Hz)', key: 'freq' }
                               ]
                             },
                             {

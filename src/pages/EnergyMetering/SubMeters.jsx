@@ -453,7 +453,7 @@ const SubMeters = () => {
   const [showSaveSuccessPopup, setShowSaveSuccessPopup] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState('Group created successfully');
   const groupsHydratedRef = useRef(false);
-  const TELEMETRY_FRESHNESS_MS = 10 * 60 * 1000; // 10 minutes freshness timeout
+  const TELEMETRY_FRESHNESS_MS = 24 * 60 * 60 * 1000; // 24 hours freshness timeout (consistent with MainMeter.jsx)
 
   const getMeterOnlineStatus = (meterLabel) => {
     const template = getTemplateForMeter(meterLabel);
@@ -462,12 +462,24 @@ const SubMeters = () => {
       m => String(m.label).trim().toUpperCase() === String(meterLabel).trim().toUpperCase()
     );
     let isFreshTelemetry = false;
+    let hasTelemetryDataFallback = false;
     if (meter) {
       const lastTelemetryTs = Number(meter.lastTelemetryTimestamp);
       isFreshTelemetry =
         Number.isFinite(lastTelemetryTs) &&
         lastTelemetryTs > 0 &&
         Date.now() - lastTelemetryTs < TELEMETRY_FRESHNESS_MS;
+
+      if (isFreshTelemetry && meter.telemetryValues) {
+        const tv = meter.telemetryValues;
+        const hasV = tv.vR !== undefined && tv.vR !== null && Number(tv.vR) > 0;
+        const hasI = tv.iR !== undefined && tv.iR !== null && Number(tv.iR) > 0;
+        const hasLoad = (tv.totalKw !== undefined && tv.totalKw !== null && Number(tv.totalKw) > 0) || (tv.activePower !== undefined && tv.activePower !== null && Number(tv.activePower) > 0);
+        const hasSr = tv.meterSrno !== undefined && tv.meterSrno !== null && tv.meterSrno !== '';
+        if (hasV || hasI || hasLoad || hasSr) {
+          hasTelemetryDataFallback = true;
+        }
+      }
     }
 
     if (template?.mapping) {
@@ -479,11 +491,18 @@ const SubMeters = () => {
       const gatewayUuid = template.mapping.gatewayUuid;
       if (devId) {
         const devStatusOnline = !!getOverallStatus(devId, gatewayUuid);
-        return devStatusOnline || isFreshTelemetry;
+        if (devStatusOnline || hasTelemetryDataFallback) {
+          return true;
+        }
       }
     }
 
-    return isFreshTelemetry;
+    // Fallback to legacy commStatus
+    if (meter?.telemetryValues?.commStatus !== undefined && meter.telemetryValues.commStatus !== null && meter.telemetryValues.commStatus !== '') {
+      return !(meter.telemetryValues.commStatus === 0 || meter.telemetryValues.commStatus === '0' || String(meter.telemetryValues.commStatus).toLowerCase() === 'offline');
+    }
+
+    return hasTelemetryDataFallback || isFreshTelemetry;
   };
 
   // Helper to check if a specific meter has an active device mapping (i.e. is mapped)
@@ -1034,7 +1053,7 @@ const SubMeters = () => {
             { config: mapping.emConsumptionConfig, fields: ['cumulativekWh'] },
             {
               config: mapping.emChangeConfig,
-              fields: ['ebKvah', 'ebKwh', 'balance', 'totalKw', 'vR', 'vY', 'vB', 'iR', 'iY', 'iB', 'pf', 'totalKva', 'dgKwh']
+              fields: ['ebKvah', 'ebKwh', 'balance', 'totalKw', 'vR', 'vY', 'vB', 'iR', 'iY', 'iB', 'pf', 'totalKva', 'dgKwh', 'freq']
             },
             {
               config: mapping.emWarningConfig,
@@ -1180,16 +1199,19 @@ const SubMeters = () => {
       try {
         const modulesToPoll = new Set();
 
-        const extractModuleId = (config, keys) => {
-          if (!config) return null;
-          if (config.module && config.module !== 'ALL') return config.module;
+        const addModuleIdsToPoll = (config, keys) => {
+          if (!config) return;
+          if (config.module && config.module !== 'ALL') {
+            modulesToPoll.add(String(config.module));
+          }
           for (const k of keys) {
             if (config[k] && typeof config[k] === 'string' && config[k].includes(':')) {
               const parts = config[k].split(':');
-              if (parts[0]) return parts[0];
+              if (parts[0]) {
+                modulesToPoll.add(String(parts[0]));
+              }
             }
           }
-          return config.module || null;
         };
 
         meters.forEach(meter => {
@@ -1204,7 +1226,7 @@ const SubMeters = () => {
               { config: mapping.emConsumptionConfig, fields: ['cumulativekWh'] },
               {
                 config: mapping.emChangeConfig,
-                fields: ['ebKvah', 'ebKwh', 'balance', 'totalKw', 'vR', 'vY', 'vB', 'iR', 'iY', 'iB', 'pf', 'totalKva', 'dgKwh']
+                fields: ['ebKvah', 'ebKwh', 'balance', 'totalKw', 'vR', 'vY', 'vB', 'iR', 'iY', 'iB', 'pf', 'totalKva', 'dgKwh', 'freq']
               },
               {
                 config: mapping.emWarningConfig,
@@ -1218,10 +1240,7 @@ const SubMeters = () => {
 
             configFieldsMap.forEach(({ config, fields }) => {
               if (config && config.enabled !== false) {
-                const modId = extractModuleId(config, fields);
-                if (modId) {
-                  modulesToPoll.add(String(modId));
-                }
+                addModuleIdsToPoll(config, fields);
               }
             });
           }
