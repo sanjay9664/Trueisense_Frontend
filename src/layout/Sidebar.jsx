@@ -371,7 +371,8 @@ const Sidebar = ({ collapsed }) => {
       disabled: modulesConfig ? !modulesConfig["AQI Sensor"] : false,
       subItems: [
         { title: "Overview", path: "/aqi-sensor/overview" },
-        { title: "Temp & Humidity", path: "/aqi-sensor/temp-humidity" }
+        { title: "Temp & Humidity", path: "/aqi-sensor/temp-humidity" },
+        { title: "PDF Report", path: "/aqi-sensor/report" }
       ].filter((subItem) => submodulesConfig.showAQISensor?.[subItem.title] ?? true)
     },
     {

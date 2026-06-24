@@ -307,10 +307,73 @@
           }
         }
 
-        .scada-gauge-card {
-          background: linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(0, 0, 0, 0.12) 100%);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-        }
+.scada-gauge-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(0, 0, 0, 0.12) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* White screen styling for APM meters */
+.mfm-lcd-screen.white-screen {
+  background: #ffffff !important;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.04) 1.2px, transparent 1.2px) !important;
+  background-size: 5px 5px !important;
+  box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.2) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+.mfm-lcd-screen.white-screen .text-success {
+  color: #0c111d !important;
+  opacity: 0.95 !important;
+}
+.mfm-lcd-screen.white-screen .border-success {
+  border-color: rgba(12, 17, 29, 0.12) !important;
+}
+.mfm-lcd-screen.white-screen .bg-success {
+  background-color: rgba(12, 17, 29, 0.08) !important;
+  color: #0c111d !important;
+}
+.mfm-lcd-screen.white-screen::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, transparent 100%) !important;
+}
+.mfm-lcd-screen.white-screen span, 
+.mfm-lcd-screen.white-screen div {
+  color: #0c111d !important;
+}
+.mfm-lcd-screen.white-screen .lcd-grid-overlay {
+  background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px) !important;
+}
+
+/* Dropdown styling for Orange & Black theme */
+.scada-dropdown-toggle {
+  border: 1px solid rgba(224, 94, 0, 0.25) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  background: rgba(9, 13, 22, 0.85) !important;
+  transition: all 0.3s ease !important;
+}
+.scada-dropdown-toggle:hover, 
+.scada-dropdown-toggle:focus {
+  border-color: #e05e00 !important;
+  box-shadow: 0 0 0 3px rgba(224, 94, 0, 0.15) !important;
+  color: #ffffff !important;
+}
+
+.scada-dropdown-menu {
+  background-color: #090d16 !important;
+  border: 1px solid rgba(224, 94, 0, 0.25) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+}
+
+.scada-dropdown-item {
+  color: #cbd5e1 !important;
+  transition: all 0.2s ease !important;
+}
+.scada-dropdown-item:hover,
+.scada-dropdown-item:focus {
+  background-color: rgba(224, 94, 0, 0.08) !important;
+  color: #ffffff !important;
+}

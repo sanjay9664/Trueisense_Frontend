@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Row, Col, Card, Badge } from 'react-bootstrap';
 import { Thermometer, Droplets, Activity, Wind, Leaf, Sparkles } from 'lucide-react';
+import PdfButton from '../../components/PdfButton';
 import './VRVOverview.css';
 
 const metricsConfig = {
@@ -94,10 +95,36 @@ import { io } from 'socket.io-client';
 let globalCachedZones = null;
 let globalCachedSelectedUnit = 'Common';
 
+const getLatestLastSeen = (lastSeenObj) => {
+  if (!lastSeenObj || typeof lastSeenObj !== 'object') return null;
+  const timestamps = Object.values(lastSeenObj).filter(Number.isFinite);
+  if (timestamps.length === 0) return null;
+  return Math.max(...timestamps);
+};
+
+const formatLastUpdated = (timestamp) => {
+  if (!timestamp) return '—';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return '—';
+  const pad = (n) => String(n).padStart(2, '0');
+  const day = pad(date.getDate());
+  const month = pad(date.getMonth() + 1);
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) {
+    return `${hours}:${minutes}:${seconds}`;
+  }
+  return `${day}/${month} ${hours}:${minutes}:${seconds}`;
+};
+
 const EnvDashboard = () => {
   const [selectedUnit, setSelectedUnit] = useState(globalCachedSelectedUnit);
   const [savedZones, setSavedZones] = useState(globalCachedZones || []);
   const [isFetching, setIsFetching] = useState(!globalCachedZones || globalCachedZones.length === 0);
+
 
   React.useEffect(() => {
     if (savedZones.length > 0) {
@@ -316,15 +343,37 @@ const EnvDashboard = () => {
   return (
     <div className="fade-in p-3 VRV-full-panel h-100 d-flex flex-column" style={{ background: '#0f172a' }}>
       {/* Header */}
-      <div className="page-header d-flex justify-content-between align-items-center mb-4">
-        <div>
-          <h2 className="mb-1 text-white d-flex align-items-center fw-bold">
-            <Sparkles className="me-2 text-warning" size={28} /> Environmental Analytics
-          </h2>
-          <p className="text-secondary fs-7 mb-0">High-precision zone telemetry and historical tracking</p>
+      <div className="page-header d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <div className="d-flex align-items-center gap-4 flex-wrap">
+          <div>
+            <h2 className="mb-1 text-white d-flex align-items-center fw-bold">
+              <Sparkles className="me-2 text-warning" size={28} /> Environmental Analytics
+            </h2>
+            <p className="text-secondary fs-7 mb-0">High-precision zone telemetry and historical tracking</p>
+          </div>
+
+
+          {/* Last Telemetry Updated Time */}
+          {(() => {
+            const latestTs = unitData ? getLatestLastSeen(unitData.lastSeen) : null;
+            if (latestTs) {
+              return (
+                <div className="d-flex align-items-center gap-2 px-3 py-2 rounded-4 border border-success border-opacity-25" style={{ background: 'rgba(16, 185, 129, 0.08)', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.1)' }}>
+                  <div className="d-flex flex-column text-start">
+                    <span className="text-success uppercase tracking-widest fw-bold" style={{ fontSize: '0.62rem' }}>LAST UPDATED </span>
+                    <span className="text-success fw-bold font-monospace fs-5" style={{ textShadow: '0 0 10px rgba(16, 185, 129, 0.4)' }}>
+                      {formatLastUpdated(latestTs)}
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
         </div>
         {savedZones.length > 0 && (
           <div className="d-flex align-items-center gap-2">
+            <PdfButton />
             <select
               className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
               style={{ width: '220px', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
@@ -423,10 +472,12 @@ const EnvDashboard = () => {
             ) : (
             <>
               <div className="d-flex justify-content-between align-items-center mb-3 px-2">
-                <h5 className="text-white fw-bold text-uppercase fs-5 m-0 d-flex align-items-center">
-                  <Activity className="me-2 text-primary" size={24}/> 
-                  {selectedUnit} Diagnostics
-                </h5>
+                <div className="d-flex flex-column">
+                  <h5 className="text-white fw-bold text-uppercase fs-5 m-0 d-flex align-items-center">
+                    <Activity className="me-2 text-primary" size={24}/> 
+                    {selectedUnit} Diagnostics
+                  </h5>
+                </div>
                 <Badge bg="dark" className="text-white fw-bold px-4 py-2 rounded-pill border border-secondary border-opacity-25 shadow-sm" style={{ letterSpacing: '1px' }}>
                   STATUS: <span className={unitData.status === 'Optimal' ? 'text-success' : 'text-warning'}>{unitData.status.toUpperCase()}</span>
                 </Badge>

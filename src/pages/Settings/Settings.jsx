@@ -43,7 +43,7 @@ const defaultSubmoduleVisibility = {
   showDailyDPR: { 'Data Aggregation': true, 'Daily Logs': true, 'PDF Report': true },
   showEnergyMetering: { Overview: true, 'Main Meter': true, 'Sub Meters': true, 'Graphs': true, 'PDF Report': true },
   showVRV: { Overview: true, 'Control Panel': true, 'Schedule': true, 'Human Sensor': true },
-  showAQISensor: { Overview: true, 'Temp & Humidity': true },
+  showAQISensor: { Overview: true, 'Temp & Humidity': true, 'PDF Report': true },
   showHVAC: { 'Chiller': true, 'AHU': true, 'Cooling Tower': true, 'PDF Report': true },
   showAC: { 'Overview': true, 'PDF Report': true }
 };

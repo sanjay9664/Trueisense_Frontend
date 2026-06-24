@@ -41,6 +41,7 @@ import VRVTempHumidity from '../pages/VRV/TempHumidity';
 
 // AQI Sensor
 import AQIOverview from '../pages/AQISensor/Overview';
+import AQIPDFReport from '../pages/AQISensor/PDFReport';
 
 // LT Panel
 import LTRoom1 from '../pages/LTPanel/LTRoom1';
@@ -242,6 +243,7 @@ const AppRoutes = () => {
       {/* AQI Sensor */}
       <Route path="/aqi-sensor/overview" element={<OperatorRoute moduleKey="showAQISensor"><AQIOverview /></OperatorRoute>} />
       <Route path="/aqi-sensor/temp-humidity" element={<OperatorRoute moduleKey="showAQISensor"><VRVTempHumidity /></OperatorRoute>} />
+      <Route path="/aqi-sensor/report" element={<OperatorRoute moduleKey="showAQISensor"><AQIPDFReport /></OperatorRoute>} />
 
       {/* HVAC */}
       <Route path="/hvac/chiller" element={<OperatorRoute moduleKey="showHVAC"><Chiller /></OperatorRoute>} />

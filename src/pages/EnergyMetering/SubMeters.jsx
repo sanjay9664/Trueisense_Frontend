@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Row, Col, Card, Badge, Table, Tab, Tabs, Modal, Button, Form } from 'react-bootstrap';
+import { Row, Col, Card, Badge, Table, Tab, Tabs, Modal, Button, Form, Dropdown } from 'react-bootstrap';
 import { Zap, Activity, Cpu, ShieldCheck, RefreshCcw, Settings2, Plus, Trash2, FolderTree, CheckCircle2, Check } from 'lucide-react';
 import StatusBadge from '../../components/StatusBadge';
 import PdfButton from '../../components/PdfButton';
@@ -74,23 +74,40 @@ const TelemetryCard = ({ label, value, unit, colorClass, type, isMapped = true, 
   const hasVisibleValue = active || showLastKnown;
   return (
     <div
-      className={`p-2 rounded-3 telemetry-card-glow card-hover-${type} d-flex flex-column justify-content-between h-100`}
+      className={`p-3 rounded-3 telemetry-card-glow card-hover-${type} d-flex flex-column justify-content-between h-100`}
       style={{
         opacity: active ? 1 : showLastKnown ? 0.78 : 0.32,
         filter: active ? 'none' : showLastKnown ? 'none' : 'grayscale(1) brightness(0.6)',
-        pointerEvents: 'auto'
+        pointerEvents: 'auto',
+        background: 'rgba(30, 41, 59, 0.45)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.05), 0 4px 6px -1px rgba(0, 0, 0, 0.2)'
       }}
     >
-      <span className="text-secondary uppercase tracking-wide mb-1 opacity-75" style={{ fontSize: '0.62rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      <span 
+        className="uppercase tracking-wider mb-2 fw-semibold" 
+        style={{ 
+          fontSize: '0.7rem', 
+          color: '#cbd5e1', 
+          whiteSpace: 'nowrap', 
+          overflow: 'hidden', 
+          textOverflow: 'ellipsis',
+          letterSpacing: '0.8px'
+        }}
+      >
+        {label}
+      </span>
       <div className="d-flex align-items-baseline justify-content-between mt-auto">
         <span
-          className={`fw-bold font-monospace fs-5 ${active ? colorClass : showLastKnown ? 'text-warning' : 'text-secondary'}`}
+          className={`fw-bold font-monospace fs-4 ${active ? colorClass : showLastKnown ? 'text-warning' : 'text-secondary'}`}
           style={{ letterSpacing: '0.5px', opacity: showLastKnown ? 0.85 : 1 }}
         >
           {value}
         </span>
         {hasVisibleValue && unit && value !== '—' && (
-          <span className="opacity-75 ms-1" style={{ fontSize: '0.65rem', color: 'inherit' }}>{unit}</span>
+          <span className="ms-1 fw-medium" style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+            {unit}
+          </span>
         )}
       </div>
     </div>
@@ -164,17 +181,6 @@ const MiniMFMMeter = ({ meter, isMapped = true, isOnline, onClick }) => {
         <h6 className="fw-bold text-white mb-0" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }}>{meter.label}</h6>
         <div className="d-flex align-items-center justify-content-center gap-2 mt-1">
           <Badge bg="secondary" className="bg-opacity-10 border border-secondary border-opacity-10 px-2 py-0 fs-12 uppercase text-muted" style={{ fontSize: '0.6rem' }}>{meter.type}</Badge>
-          {isMapped && (
-            isOnline ? (
-              <span className="badge bg-success bg-opacity-15 border border-success border-opacity-25 text-success px-2 py-0 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.58rem', fontWeight: 800, borderRadius: '12px' }}>
-                <span className="pulse-dot-green" style={{ width: '4px', height: '4px', boxShadow: '0 0 4px #22c55e' }}></span> ONLINE
-              </span>
-            ) : (
-              <span className="badge bg-danger bg-opacity-15 border border-danger border-opacity-25 text-danger px-2 py-0 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.58rem', fontWeight: 800, borderRadius: '12px' }}>
-                <span className="pulse-dot-red" style={{ width: '4px', height: '4px', boxShadow: '0 0 4px #ef4444' }}></span> OFFLINE
-              </span>
-            )
-          )}
         </div>
       </div>
       <div className="mfm-polycarbonate-case shadow-2xl mx-auto" style={{ maxWidth: '270px', padding: '14px 10px', borderWidth: '8px', borderRadius: '24px' }}>
@@ -191,9 +197,8 @@ const MiniMFMMeter = ({ meter, isMapped = true, isOnline, onClick }) => {
             <span className="mfm-model-no" style={{ fontSize: '0.6rem', padding: '1px 4px' }}>APM Series</span>
           </div>
 
-          {/* Grid LCD Screen Window */}
           <div className="mfm-lcd-window" style={{ padding: '6px', borderWidth: '4px', borderRadius: '8px', opacity: showActive ? 1 : 0.6 }}>
-            <div className="mfm-lcd-screen" style={{ height: '185px', padding: '6px' }}>
+            <div className="mfm-lcd-screen white-screen" style={{ height: '185px', padding: '6px' }}>
               <div className="lcd-grid-overlay"></div>
 
               {/* Screen Header */}
@@ -388,6 +393,20 @@ const naturalSort = (a, b) => {
     }
   }
   return 0;
+};
+
+const formatLastUpdated = (timestamp) => {
+  if (!timestamp) return '—';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return '—';
+  const pad = (n) => String(n).padStart(2, '0');
+  const day = pad(date.getDate());
+  const month = pad(date.getMonth() + 1);
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  
+  return `${day}/${month} ${hours}:${minutes}:${seconds}`;
 };
 
 const SubMeters = () => {
@@ -1281,27 +1300,51 @@ const SubMeters = () => {
         </div>
         <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">
           {mappedMeters.length > 0 && (
-            <Form.Select
-              className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
-              style={{ width: '220px', cursor: 'pointer', background: 'rgba(15,23,42,0.85)' }}
-              value={selectedMeter?.id || ''}
-              onChange={(e) => {
-                const target = mappedMeters.find(m => m.id === e.target.value);
-                if (target) {
-                  setSelectedMeter(target);
-                  if (refreshStatuses) refreshStatuses();
-                } else {
-                  setSelectedMeter(null);
-                }
-              }}
-            >
-              <option value="">Select Sub-Meter...</option>
-              {mappedMeters.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.label} ({getMeterOnlineStatus(m.label) ? 'Online' : 'Offline'})
-                </option>
-              ))}
-            </Form.Select>
+            <Dropdown>
+              <Dropdown.Toggle 
+                variant="dark" 
+                className="scada-dropdown-toggle py-2 px-3 fs-13 rounded-pill d-flex align-items-center justify-content-between" 
+                style={{ width: '250px', cursor: 'pointer', background: 'rgba(15,23,42,0.85)' }}
+              >
+                {selectedMeter ? (() => {
+                  const isOnline = getMeterOnlineStatus(selectedMeter.label);
+                  return (
+                    <div className="d-flex align-items-center justify-content-between w-100 pe-2">
+                      <span>{selectedMeter.label}</span>
+                      <span className={`badge ${isOnline ? 'bg-success' : 'bg-danger'} bg-opacity-10 border ${isOnline ? 'border-success' : 'border-danger'} border-opacity-25 ${isOnline ? 'text-success' : 'text-danger'} px-2 py-0.5 d-inline-flex align-items-center gap-1`} style={{ fontSize: '0.6rem', borderRadius: '12px' }}>
+                        <span className={isOnline ? "pulse-dot-green" : "pulse-dot-red"} style={{ width: '4px', height: '4px' }}></span> {isOnline ? 'ONLINE' : 'OFFLINE'}
+                      </span>
+                    </div>
+                  );
+                })() : 'Select Sub-Meter...'}
+              </Dropdown.Toggle>
+              <Dropdown.Menu variant="dark" className="scada-dropdown-menu" style={{ width: '250px' }}>
+                <Dropdown.Item 
+                  onClick={() => setSelectedMeter(null)} 
+                  className="scada-dropdown-item fs-13"
+                >
+                  Select Sub-Meter...
+                </Dropdown.Item>
+                {mappedMeters.map(m => {
+                  const isOnline = getMeterOnlineStatus(m.label);
+                  return (
+                    <Dropdown.Item 
+                      key={m.id} 
+                      onClick={() => {
+                        setSelectedMeter(m);
+                        if (refreshStatuses) refreshStatuses();
+                      }} 
+                      className="scada-dropdown-item fs-13 d-flex align-items-center justify-content-between"
+                    >
+                      <span>{m.label}</span>
+                      <span className={`badge ${isOnline ? 'bg-success' : 'bg-danger'} bg-opacity-10 border ${isOnline ? 'border-success' : 'border-danger'} border-opacity-25 ${isOnline ? 'text-success' : 'text-danger'} px-2 py-0.5 d-inline-flex align-items-center gap-1`} style={{ fontSize: '0.6rem', borderRadius: '12px' }}>
+                        <span className={isOnline ? "pulse-dot-green" : "pulse-dot-red"} style={{ width: '4px', height: '4px' }}></span> {isOnline ? 'ONLINE' : 'OFFLINE'}
+                      </span>
+                    </Dropdown.Item>
+                  );
+                })}
+              </Dropdown.Menu>
+            </Dropdown>
           )}
           {groupSaveStatus && <Badge bg="success" className="px-3 py-2">{groupSaveStatus}</Badge>}
         </div>
@@ -1353,10 +1396,10 @@ const SubMeters = () => {
                     <tr className="border-bottom border-secondary border-opacity-15 fs-13 text-secondary text-uppercase tracking-wider">
                       <th className="py-3">Meter ID</th>
                       <th className="py-3">Feed Description</th>
-                      <th className="py-3 text-center">Operational Load</th>
+                      <th className="py-3 text-center">Power</th>
                       <th className="py-3 text-center">Avg. Volts</th>
                       <th className="py-3 text-center">Phase Amps</th>
-                      <th className="py-3 text-center">cos φ</th>
+                      <th className="py-3 text-center">Last Updated</th>
                       <th className="py-3 text-end">Health Status</th>
                     </tr>
                   </thead>
@@ -1376,10 +1419,10 @@ const SubMeters = () => {
                           <tr key={idx} className="border-bottom border-secondary border-opacity-5">
                             <td className="py-3 font-monospace text-info fs-13">{meter.id}</td>
                             <td className="py-3 text-white fw-bold">{meter.label}</td>
-                            <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load)} kW` : '—'}</td>
+                            <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load, 2)} kW` : '—'}</td>
                             <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
                             <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.current)} A` : '—'}</td>
-                            <td className="py-3 text-center text-secondary font-monospace">{showActive ? fmtNum(meter.pf, 3) : '—'}</td>
+                            <td className="py-3 text-center text-secondary font-monospace fs-13">{formatLastUpdated(meter.lastTelemetryTimestamp)}</td>
                             <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? 'Online' : 'Offline'} /> : '—'}</td>
                           </tr>
                         );
@@ -1396,9 +1439,9 @@ const SubMeters = () => {
                     <tr className="border-bottom border-secondary border-opacity-15 fs-13 text-secondary text-uppercase tracking-wider">
                       <th className="py-3">Meter ID</th>
                       <th className="py-3">Feed Description</th>
-                      <th className="py-3 text-center">Operational Load</th>
+                      <th className="py-3 text-center">Power</th>
                       <th className="py-3 text-center">Avg. Volts</th>
-                      <th className="py-3 text-center">cos φ</th>
+                      <th className="py-3 text-center">Last Updated</th>
                       <th className="py-3 text-end">Health Status</th>
                     </tr>
                   </thead>
@@ -1418,9 +1461,9 @@ const SubMeters = () => {
                           <tr key={idx} className="border-bottom border-secondary border-opacity-5">
                             <td className="py-3 font-monospace text-info fs-13">{meter.id}</td>
                             <td className="py-3 text-white fw-bold">{meter.label}</td>
-                            <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load)} kW` : '—'}</td>
+                            <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load, 2)} kW` : '—'}</td>
                             <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
-                            <td className="py-3 text-center text-secondary font-monospace">{showActive ? fmtNum(meter.pf, 3) : '—'}</td>
+                            <td className="py-3 text-center text-secondary font-monospace fs-13">{formatLastUpdated(meter.lastTelemetryTimestamp)}</td>
                             <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? 'Online' : 'Offline'} /> : '—'}</td>
                           </tr>
                         );
@@ -1991,6 +2034,55 @@ const SubMeters = () => {
           color: #86efac;
           background: radial-gradient(circle, rgba(34,197,94,0.28), rgba(34,197,94,0.08));
           box-shadow: 0 0 30px rgba(34,197,94,0.22);
+        }
+
+        .scada-dropdown-toggle {
+          background: rgba(15, 23, 42, 0.65) !important;
+          border: 1px solid rgba(14, 165, 233, 0.25) !important;
+          color: #cbd5e1 !important;
+          padding: 8px 16px;
+          border-radius: 9999px;
+          font-size: 0.8rem;
+          font-weight: 600;
+          letter-spacing: 0.5px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+          transition: all 0.2s ease;
+        }
+        .scada-dropdown-toggle:hover:not(:disabled), .scada-dropdown-toggle:focus:not(:disabled) {
+          background: rgba(30, 41, 59, 0.8) !important;
+          border-color: rgba(14, 165, 233, 0.6) !important;
+          box-shadow: 0 0 15px rgba(14, 165, 233, 0.2);
+        }
+        .scada-dropdown-toggle::after {
+          margin-left: 10px;
+          vertical-align: middle;
+          color: #0ea5e9;
+        }
+        .scada-dropdown-menu {
+          background: rgba(15, 23, 42, 0.95) !important;
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(14, 165, 233, 0.3) !important;
+          border-radius: 16px;
+          padding: 8px 0;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+          min-width: 220px;
+          margin-top: 8px !important;
+        }
+        .scada-dropdown-item {
+          color: #cbd5e1 !important;
+          font-size: 0.8rem;
+          font-weight: 600;
+          padding: 10px 20px;
+          letter-spacing: 0.5px;
+          transition: all 0.2s;
+        }
+        .scada-dropdown-item:hover {
+          background: rgba(14, 165, 233, 0.1) !important;
+          color: #0ea5e9 !important;
+          padding-left: 24px;
         }
       `}} />
     </div>

@@ -4,6 +4,25 @@ import { useNavigate } from 'react-router-dom';
 import { Leaf, Wind, Thermometer, Droplets, MapPin, Activity } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { io } from 'socket.io-client';
+import PdfButton from '../../components/PdfButton';
+
+const formatLastUpdated = (timestamp) => {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  const day = pad(date.getDate());
+  const month = pad(date.getMonth() + 1);
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) {
+    return `${hours}:${minutes}:${seconds}`;
+  }
+  return `${day}/${month} ${hours}:${minutes}:${seconds}`;
+};
 
 // --- HELPER FOR HISTORY DATA ---
 const createHistoryData = (baseTemp, baseHum, baseAqi, baseCo2, baseTvoc) => {
@@ -75,12 +94,7 @@ const AQIOverview = () => {
   const [channels, setChannels] = useState([]);
   const [selectedChId, setSelectedChId] = useState(null);
   const selectedCh = channels.find(ch => ch.id === selectedChId) || channels[0] || null;
-  const [currentTime, setCurrentTime] = useState(new Date());
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
@@ -108,6 +122,12 @@ const AQIOverview = () => {
             const [moduleId, fieldId] = configField.split('::');
             const stat = stats.find(s => String(s.moduleId) === String(moduleId) || String(s.meta?.module_id) === String(moduleId));
             if (stat && stat.meta && stat.meta[fieldId] !== undefined) {
+              if (stat.meta.created_at_timestamp) {
+                const tsRaw = stat.meta.created_at_timestamp;
+                newZone.lastUpdated = tsRaw > 1e12 ? tsRaw : tsRaw * 1000;
+              } else if (!newZone.lastUpdated) {
+                newZone.lastUpdated = Date.now();
+              }
               return parseFloat(stat.meta[fieldId]);
             }
             return null;
@@ -207,7 +227,8 @@ const AQIOverview = () => {
                   co2: existing?.co2 ?? Math.round(baseCo2),
                   tvoc: existing?.tvoc ?? Math.round(baseTvoc),
                   history: existing?.history ?? createHistoryData(baseTemp, baseHum, baseAqi, baseCo2, baseTvoc),
-                  mapping: t.mapping || null
+                  mapping: t.mapping || null,
+                  lastUpdated: existing?.lastUpdated || null
                 };
               })
               .filter(ch => ch.mapping?.vrvConfig?.device);
@@ -292,19 +313,37 @@ const AQIOverview = () => {
     <div className="fade-in p-3 h-100 d-flex flex-column" style={{ background: '#0b1121', minHeight: '100vh', fontFamily: "'Inter', sans-serif" }}>
       
       {/* HEADER SECTION */}
-      <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-        <div>
-          <h4 className="text-white fw-black mb-1 d-flex align-items-center" style={{ letterSpacing: '1px' }}>
-            <Leaf className="me-2 text-success" size={24} />
-            ENVIRONMENTAL SENSOR DASHBOARD
-          </h4>
-          <div className="d-flex align-items-center gap-3">
-            <span className="text-success fw-bold" style={{ fontSize: '11px', letterSpacing: '1px' }}>● SYSTEM ONLINE</span>
-            <span className="text-secondary fw-bold" style={{ fontSize: '11px' }}>{currentTime.toLocaleTimeString()}</span>
+      <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom flex-wrap gap-3" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+        <div className="d-flex align-items-center gap-4 flex-wrap">
+          <div>
+            <h4 className="text-white fw-black mb-1 d-flex align-items-center" style={{ letterSpacing: '1px' }}>
+              <Leaf className="me-2 text-success" size={24} />
+              ENVIRONMENTAL SENSOR DASHBOARD
+            </h4>
+            <div className="d-flex align-items-center gap-2">
+              <span className="text-secondary fw-bold" style={{ fontSize: '11px' }}>
+                System Active
+              </span>
+            </div>
           </div>
+
+
+          {/* Last Telemetry Updated Time */}
+          {selectedCh?.lastUpdated && (
+            <div className="d-flex align-items-center gap-2 px-3 py-2 rounded-4 border border-success border-opacity-25" style={{ background: 'rgba(16, 185, 129, 0.08)', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.1)' }}>
+              <div className="d-flex flex-column text-start">
+                <span className="text-success uppercase tracking-widest fw-bold" style={{ fontSize: '0.62rem' }}>LAST  UPDATED</span>
+                <span className="text-success fw-bold font-monospace fs-5" style={{ textShadow: '0 0 10px rgba(16, 185, 129, 0.4)' }}>
+                  {formatLastUpdated(selectedCh.lastUpdated)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
+
         {channels.length > 0 && (
           <div className="d-flex align-items-center gap-2">
+            <PdfButton />
             <select
               className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
               style={{ width: '220px', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}

@@ -918,7 +918,7 @@ const MainMeter = () => {
         footerLabels: ["<Up", ">Down", "^Menu", "vEvnt"]
       },
       {
-        title: "PREPAID DIAGNOSTICS",
+        title: "PREPAID ",
         lines: [
           { label: "Bal", value: `₹${formatNum(data.balance, 2)}`, unit: "" },
           { label: "DG", value: formatNum(data.dgKwh, 1), unit: "kWh" },

@@ -87,6 +87,45 @@ function App() {
     };
   }, []);
 
+  // Auth Token Auto-Refresh every 14 minutes
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const refreshAuthToken = async () => {
+      const email = localStorage.getItem('sochiot_email');
+      const password = localStorage.getItem('sochiot_password');
+      if (!email || !password) return;
+
+      try {
+        console.log('[Auth Token Refresh] Initiating token auto-update...');
+        const response = await fetch('https://app.sochiot.com/api/auth-engine/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.token) {
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('sochiot_token', data.token);
+            console.log('[Auth Token Refresh] Token successfully refreshed at', new Date().toLocaleTimeString());
+            window.dispatchEvent(new Event('storage-update'));
+          }
+        } else {
+          console.error('[Auth Token Refresh] Failed to refresh token, response status:', response.status);
+        }
+      } catch (error) {
+        console.error('[Auth Token Refresh] Error updating auth token:', error);
+      }
+    };
+
+    // Run interval every 14 minutes
+    const tokenInterval = setInterval(refreshAuthToken, 14 * 60 * 1000);
+    
+    return () => clearInterval(tokenInterval);
+  }, [isAuthenticated]);
+
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
     setShowSplash(true);

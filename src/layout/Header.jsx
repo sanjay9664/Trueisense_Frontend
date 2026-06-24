@@ -14,6 +14,13 @@ const Header = ({ collapsed, toggleSidebar }) => {
     }
   });
 
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   useEffect(() => {
     const handleUpdate = () => {
       try {
@@ -56,6 +63,16 @@ const Header = ({ collapsed, toggleSidebar }) => {
       </div>
 
       <div className="header-right d-flex align-items-center">
+        {/* Current Time Clock */}
+        <div className="d-flex align-items-center gap-2 px-3 py-1.5 rounded-4 me-3 d-none d-md-flex" style={{ background: isDark ? 'rgba(30, 41, 59, 0.45)' : 'rgba(0,0,0,0.03)', border: '1px solid var(--scada-border)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
+          <div className="d-flex flex-column text-start">
+            <span className="text-secondary uppercase tracking-widest fw-bold" style={{ fontSize: '0.55rem', letterSpacing: '0.5px', opacity: 0.8 }}>CURRENT CLOCK</span>
+            <span className={isDark ? "text-white fw-bold font-monospace fs-7" : "text-dark fw-bold font-monospace fs-7"}>
+              {currentTime.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • {currentTime.toLocaleTimeString()}
+            </span>
+          </div>
+        </div>
+
         {/* Toggle Theme Button */}
         <Button 
           variant={isDark ? 'outline-light' : 'outline-dark'} 
@@ -108,6 +125,8 @@ const Header = ({ collapsed, toggleSidebar }) => {
                 localStorage.removeItem('userData');
                 localStorage.removeItem('token');
                 localStorage.removeItem('sochiot_token');
+                localStorage.removeItem('sochiot_email');
+                localStorage.removeItem('sochiot_password');
                 localStorage.removeItem('scada_modules_config');
                 localStorage.removeItem('scada_submodules_config');
                 localStorage.removeItem('scada_feature_permissions');

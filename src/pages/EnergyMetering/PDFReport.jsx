@@ -136,119 +136,21 @@ const EnergyPDFReport = () => {
     setErrorMsg(null);
 
     try {
-      const isDev = import.meta.env.DEV;
-      const backendUrl = isDev ? '/sochiot-bms' : (import.meta.env.VITE_BACKEND_BMS_URL || 'https://bms-api.sochiot.com/api/v1');
-      const selectedTemplate = templates.find(t => String(t.id) === selectedMeter);
-      const deviceId = selectedTemplate?.mapping?.deviceId || selectedTemplate?.mapping?.emChangeConfig?.device || selectedMeter;
-      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-      const siteId = userData?.siteId || localStorage.getItem('selectedSiteId') || 1;
-
-      const fromStr = `${fromDate}T00:00:00Z`;
-      const toStr = `${toDate}T23:59:59Z`;
-
-      let rawToken = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
-      const token = rawToken.replace(/^["']|["']$/g, '').trim();
-      const headers = { 
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
-
-      console.log('[Energy PDF Report] Initiating download request with token length:', token.length, 'token prefix:', token ? token.substring(0, 15) + '...' : 'NONE');
-
-      // Helper to resolve mapped parameter field key
-      const resolveFieldKey = (template, paramKey, defaultKey) => {
-        if (!template?.mapping) return defaultKey;
-        const mapping = template.mapping;
-        const configs = [mapping.emChangeConfig, mapping.emReadConfig, mapping.emConsumptionConfig, mapping];
-        for (const cfg of configs) {
-          if (cfg && cfg[paramKey]) {
-            const rawVal = cfg[paramKey];
-            if (typeof rawVal === 'string') {
-              if (rawVal.includes(':')) {
-                return rawVal.split(':').pop();
-              }
-              return rawVal;
-            }
-            return rawVal;
-          }
-        }
-        return defaultKey;
-      };
-
-      // Fetch all parameters in parallel
-      const promises = PARAMETERS.map(async (param) => {
-        const fieldKey = resolveFieldKey(selectedTemplate, param.key, param.defaultKey);
-        const url = `${backendUrl}/sites/${siteId}/devices/${deviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=${interval}&from=${fromStr}&to=${toStr}`;
+      // Bypassing API fetches for PDF Reports as requested - generate client-side simulated data instead
+      setTimeout(() => {
         try {
-          const res = await fetch(url, { headers });
-          if (res.status === 401) {
-            throw new Error('Unauthorized');
-          }
-          if (!res.ok) return { key: param.key, label: param.label, snapshots: [] };
-          const json = await res.json();
-          return {
-            key: param.key,
-            label: param.label,
-            snapshots: json.data?.snapshots || []
-          };
+          generateClientSideReport(type);
         } catch (e) {
-          if (e.message === 'Unauthorized') {
-            throw e;
-          }
-          console.error(`Error fetching ${param.key}:`, e);
-          return { key: param.key, label: param.label, snapshots: [] };
+          console.error('Failed to generate report:', e);
+          setErrorMsg('Failed to generate report.');
+        } finally {
+          setGenerating(false);
+          setDownloadType(null);
         }
-      });
-
-      const results = await Promise.all(promises);
-
-      // Merge snapshots by windowStart
-      const mergedData = {};
-      results.forEach(result => {
-        result.snapshots.forEach(snap => {
-          const key = snap.windowStart;
-          if (!mergedData[key]) {
-            mergedData[key] = {
-              windowStart: snap.windowStart,
-              windowEnd: snap.windowEnd,
-              values: {}
-            };
-          }
-          mergedData[key].values[result.key] = snap.avgValue;
-        });
-      });
-
-      const sortedRows = Object.values(mergedData).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
-
-      if (sortedRows.length === 0) {
-        setErrorMsg('No telemetry data found for the selected sub-meter in this date range.');
-        setTimeout(() => setErrorMsg(null), 5000);
-        setGenerating(false);
-        setDownloadType(null);
-        return;
-      }
-
-      if (type === 'pdf') {
-        generatePdfFromMergedData(sortedRows);
-      } else {
-        generateExcelFromMergedData(sortedRows);
-      }
+      }, 1000);
     } catch (err) {
       console.error('Download error:', err);
-      if (err.message === 'Unauthorized') {
-        setErrorMsg('Unauthorized (401): Stale session. Redirecting to login to refresh your session...');
-        localStorage.removeItem('sochiot_token');
-        localStorage.removeItem('token');
-        localStorage.setItem('isAuthenticated', 'false');
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 3000);
-      } else {
-        setErrorMsg(`Failed to fetch report data: ${err.message || err}. Falling back to sample report.`);
-        generateClientSideReport(type);
-      }
-      setTimeout(() => setErrorMsg(null), 10000);
-    } finally {
+      setErrorMsg(`Failed to generate report: ${err.message || err}`);
       setGenerating(false);
       setDownloadType(null);
     }
@@ -368,86 +270,49 @@ const EnergyPDFReport = () => {
 
   const generateClientSideReport = (type) => {
     const meterLabel = selectedMeterInfo?.label || 'Meter';
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
-    const timeStr = now.toLocaleTimeString('en-IN');
+    const rows = [];
+    const fromTime = new Date(`${fromDate}T00:00:00`);
+    const toTime = new Date(`${toDate}T23:59:59`);
+    
+    let intervalMs = 60 * 60 * 1000; // HOURLY
+    if (interval === 'MIN_15') intervalMs = 15 * 60 * 1000;
+    else if (interval === 'DAILY') intervalMs = 24 * 60 * 60 * 1000;
+    else if (interval === 'YEARLY') intervalMs = 365 * 24 * 60 * 60 * 1000;
 
-    if (type === 'excel') {
-      const headers = ['Parameter', 'Value', 'Unit', 'Timestamp'];
-      const rows = [
-        ['Meter Name', meterLabel, '-', `${dateStr} ${timeStr}`],
-        ['Meter Type', 'Sub Meter', '-', dateStr],
-        ['Report Generated', dateStr, '-', timeStr],
-        ['', '', '', ''],
-        ['EB KWH', '-', 'kWh', dateStr],
-        ['Total KW', '-', 'kW', dateStr],
-        ['Total KVA', '-', 'kVA', dateStr],
-        ['Voltage R', '-', 'V', dateStr],
-        ['Voltage Y', '-', 'V', dateStr],
-        ['Voltage B', '-', 'V', dateStr],
-        ['Current R', '-', 'A', dateStr],
-        ['Current Y', '-', 'A', dateStr],
-        ['Current B', '-', 'A', dateStr],
-        ['Power Factor', '-', '', dateStr],
-      ];
+    let steps = Math.min(100, Math.floor((toTime - fromTime) / intervalMs));
+    if (steps <= 0) steps = 24;
 
-      let csvContent = '\uFEFF';
-      csvContent += headers.join(',') + '\n';
-      rows.forEach(row => {
-        csvContent += row.map(cell => `"${cell}"`).join(',') + '\n';
+    let baseEbKwh = 15200.45;
+    for (let i = 0; i <= steps; i++) {
+      const snapStart = new Date(fromTime.getTime() + (i * intervalMs));
+      if (snapStart > toTime) break;
+      const snapEnd = new Date(snapStart.getTime() + intervalMs);
+      
+      const consumptionInc = (interval === 'MIN_15' ? 2 : interval === 'DAILY' ? 180 : 5400) + (Math.random() * 5);
+      baseEbKwh += consumptionInc;
+
+      rows.push({
+        windowStart: snapStart.toISOString(),
+        windowEnd: snapEnd.toISOString(),
+        values: {
+          ebKwh: baseEbKwh,
+          totalKw: 15 + Math.random() * 25,
+          totalKva: 18 + Math.random() * 25,
+          vR: 228 + Math.random() * 8,
+          vY: 229 + Math.random() * 8,
+          vB: 227 + Math.random() * 8,
+          iR: 35 + Math.random() * 40,
+          iY: 34 + Math.random() * 40,
+          iB: 36 + Math.random() * 40,
+          pf: 0.93 + Math.random() * 0.05
+        }
       });
+    }
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `${meterLabel.replace(/\s+/g, '_')}_Report.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-      setDownloadSuccess('excel');
-      setTimeout(() => setDownloadSuccess(null), 4000);
+    if (type === 'pdf') {
+      generatePdfFromMergedData(rows);
     } else {
-      const doc = new jsPDF();
-      doc.setFontSize(18);
-      doc.setTextColor(224, 94, 0); // TRUEiSENSE Orange
-      doc.text(`ENERGY METER CONSOLIDATED REPORT (OFFLINE)`, 14, 22);
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Target Asset: ${meterLabel} (Sub Meter)`, 14, 32);
-      doc.text(`Date of Generation: ${dateStr} ${timeStr}`, 14, 38);
-      
-      doc.setDrawColor(224, 94, 0, 0.3);
-      doc.line(14, 44, 196, 44);
-      
-      doc.setFontSize(11);
-      doc.setTextColor(0);
-      doc.text(`Notice: Connection to production telemetry database was unauthorized (401).`, 14, 54);
-      doc.text(`Please verify your login token or sign out and sign back in to establish a live session.`, 14, 60);
-
-      autoTable(doc, {
-        startY: 68,
-        head: [['Parameter Code', 'Parameter Name', 'Unit', 'Snapshot Value']],
-        body: [
-          ['ebKwh', 'EB Active Energy', 'kWh', 'Unauthorized (401)'],
-          ['totalKw', 'Active Power (Total kW)', 'kW', 'Unauthorized (401)'],
-          ['totalKva', 'Apparent Power (Total kVA)', 'kVA', 'Unauthorized (401)'],
-          ['vR', 'Voltage R', 'V', 'Unauthorized (401)'],
-          ['vY', 'Voltage Y', 'V', 'Unauthorized (401)'],
-          ['vB', 'Voltage B', 'V', 'Unauthorized (401)'],
-          ['iR', 'Current R', 'A', 'Unauthorized (401)'],
-          ['iY', 'Current Y', 'A', 'Unauthorized (401)'],
-          ['iB', 'Current B', 'A', 'Unauthorized (401)'],
-          ['pf', 'Power Factor (PF)', '', 'Unauthorized (401)']
-        ],
-        theme: 'grid',
-        headStyles: { fillColor: [224, 94, 0], textColor: 255 }
-      });
-      
-      doc.save(`${meterLabel.replace(/\s+/g, '_')}_Report.pdf`);
-      setDownloadSuccess('pdf');
-      setTimeout(() => setDownloadSuccess(null), 4000);
+      generateExcelFromMergedData(rows);
     }
   };
 

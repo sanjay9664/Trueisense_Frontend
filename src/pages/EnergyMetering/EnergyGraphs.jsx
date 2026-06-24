@@ -126,7 +126,7 @@ const CustomTooltip = ({ active, payload, label, unit }) => {
   return null;
 };
 
-const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', isStacked = false, ranges = null, onUpdateRanges = null }) => {
+const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', isStacked = false, ranges = null, onUpdateRanges = null, globalInterval }) => {
   const [expanded, setExpanded] = useState(false);
   const [colors, setColors] = useState(defaultColors);
   const [showRangeModal, setShowRangeModal] = useState(false);
@@ -226,7 +226,9 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
     setColors(updated);
   };
 
-  const chartData = timeFilter === 'live' ? (data && data.length > 0 ? data : []) : localData;
+  const chartData = (globalInterval && globalInterval !== 'live')
+    ? (data && data.length > 0 ? data : [])
+    : (timeFilter === 'live' ? (data && data.length > 0 ? data : []) : localData);
 
   const renderChart = (height = 260, showLegend = true) => {
     let ChartComponent = LineChart;
@@ -328,17 +330,26 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
               <Activity size={14} className="text-info" /> {unit}
             </div>
 
-            <Form.Group className="mb-4">
-              <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{letterSpacing: '0.5px'}}>FILTER RANGE</Form.Label>
-              <Form.Select 
-                size="sm" 
-                className="bg-dark text-white border-secondary shadow-none fs-8"
-                value={timeFilter}
-                onChange={(e) => setTimeFilter(e.target.value)}
-              >
-                {TIME_FILTERS.map(tf => <option key={tf.value} value={tf.value}>{tf.label}</option>)}
-              </Form.Select>
-            </Form.Group>
+            {(!globalInterval || globalInterval === 'live') ? (
+              <Form.Group className="mb-4">
+                <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{letterSpacing: '0.5px'}}>FILTER RANGE</Form.Label>
+                <Form.Select 
+                  size="sm" 
+                  className="bg-dark text-white border-secondary shadow-none fs-8"
+                  value={timeFilter}
+                  onChange={(e) => setTimeFilter(e.target.value)}
+                >
+                  {TIME_FILTERS.map(tf => <option key={tf.value} value={tf.value}>{tf.label}</option>)}
+                </Form.Select>
+              </Form.Group>
+            ) : (
+              <div className="mb-4">
+                <div className="text-secondary fs-8 fw-bold mb-1" style={{letterSpacing: '0.5px'}}>INTERVAL</div>
+                <span className="badge bg-warning text-dark px-3 py-2 fw-bold rounded-pill uppercase" style={{ letterSpacing: '0.5px' }}>
+                  {globalInterval === 'MIN_15' ? '15 Min' : globalInterval === 'DAILY' ? 'Daily' : 'Yearly'}
+                </span>
+              </div>
+            )}
 
             <div className="mt-auto">
               <div className="fs-8 text-secondary mb-2 uppercase tracking-widest fw-bold">Graph Colors</div>
@@ -410,15 +421,21 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
                 <h4 className="mb-0 fw-bold">{title} <span className="text-secondary ms-2 fs-5 fw-normal">({unit})</span></h4>
               </div>
               <div className="d-flex gap-3 ms-4 border-start border-secondary border-opacity-25 ps-4 flex-wrap align-items-center">
-                <Form.Select 
-                  size="sm" 
-                  className="bg-dark text-info border-secondary shadow-none fs-7 me-2 fw-bold"
-                  value={timeFilter}
-                  onChange={(e) => setTimeFilter(e.target.value)}
-                  style={{ width: '130px' }}
-                >
-                  {TIME_FILTERS.map(tf => <option key={tf.value} value={tf.value}>{tf.label}</option>)}
-                </Form.Select>
+                {(!globalInterval || globalInterval === 'live') ? (
+                  <Form.Select 
+                    size="sm" 
+                    className="bg-dark text-info border-secondary shadow-none fs-7 me-2 fw-bold"
+                    value={timeFilter}
+                    onChange={(e) => setTimeFilter(e.target.value)}
+                    style={{ width: '130px' }}
+                  >
+                    {TIME_FILTERS.map(tf => <option key={tf.value} value={tf.value}>{tf.label}</option>)}
+                  </Form.Select>
+                ) : (
+                  <span className="badge bg-warning text-dark px-3 py-2 fw-bold rounded-pill uppercase me-3" style={{ letterSpacing: '0.5px' }}>
+                    {globalInterval === 'MIN_15' ? '15 Min' : globalInterval === 'DAILY' ? 'Daily' : 'Yearly'}
+                  </span>
+                )}
                 
                 {dataKeys.map((k, i) => (
                   <div key={k.key} className="d-flex align-items-center gap-2">
@@ -502,7 +519,7 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
         .modal-95w { max-width: 95% !important; }
         .scada-expanded-modal .modal-content {
           background: #0b1120;
-          border: 1px solid rgba(56, 189, 248, 0.2);
+          border: 1px solid rgba(255, 107, 0, 0.2);
           border-radius: 16px;
           overflow: hidden;
           box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
@@ -513,8 +530,8 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
           border-radius: 50%;
         }
         .hover-glow:hover {
-          box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
-          background: rgba(56, 189, 248, 0.1);
+          box-shadow: 0 0 15px rgba(255, 107, 0, 0.4);
+          background: rgba(255, 107, 0, 0.1);
         }
         @keyframes premiumSlideUp {
           0% { opacity: 0; transform: translateY(40px) scale(0.98); }
@@ -523,6 +540,20 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
         .graph-slide-up {
           opacity: 0;
           animation: premiumSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .scada-dropdown-orange {
+          background-color: #0f172a !important;
+          color: #fff !important;
+          border: 1px solid rgba(249, 115, 22, 0.25) !important;
+          font-weight: 600;
+          border-radius: 8px;
+          padding: 8px 12px;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .scada-dropdown-orange:focus, .scada-dropdown-orange:hover {
+          border-color: #f97316 !important;
+          box-shadow: 0 0 10px rgba(249, 115, 22, 0.25) !important;
+          background-color: #1e293b !important;
         }
         `
       }} />
@@ -538,9 +569,27 @@ const EnergyGraphs = () => {
     return localStorage.getItem('selected_main_meter_id') || '';
   });
   const [isSwitching, setIsSwitching] = useState(false);
-  const generateEmptyHistory = () => [];
   const [historyLog, setHistoryLog] = useState([]);
   
+  // Sites list and date range filter states
+  const [sites, setSites] = useState([]);
+  const [selectedSiteId, setSelectedSiteId] = useState(() => {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
+  });
+
+  const [globalInterval, setGlobalInterval] = useState('live'); // 'live', 'MIN_15', 'DAILY', 'YEARLY'
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [toDate, setToDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+  const [historicalData, setHistoricalData] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
   const [globalRanges, setGlobalRanges] = useState(() => {
     const saved = localStorage.getItem('scada_custom_ranges');
     if (saved) return JSON.parse(saved);
@@ -561,13 +610,46 @@ const EnergyGraphs = () => {
   const mainMeterTemplateRef = useRef(null);
   const latestRealDataRef = useRef({}); // Store the real live data so it merges properly
 
+  // Helper to filter out Main Meters unless permission is granted (default false for now)
+  const getEnergyMeters = (templateList) => {
+    const hasMainMeterPermission = false;
+    return templateList.filter(t => {
+      if (t.module === 'Main Meter') {
+        return hasMainMeterPermission;
+      }
+      return t.module === 'Sub Meters' || t.category === 'Energy Metering';
+    });
+  };
+
+  // Load sites on mount
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_BMS_URL || 'https://bms-api.sochiot.com/api/v1';
+        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
+        if (!token) return;
+        const res = await fetch(`${backendUrl}/sites/`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          setSites(json.data || []);
+        }
+      } catch (err) {
+        console.error('Error fetching sites in EnergyGraphs:', err);
+      }
+    };
+    fetchSites();
+  }, []);
+
+  // Load templates on mount
   useEffect(() => {
     const saved = localStorage.getItem('scada_templates');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         setTemplates(parsed);
-        const meters = parsed.filter(t => t.module === 'Main Meter' || t.category === 'Energy Metering');
+        const meters = getEnergyMeters(parsed);
         if (meters.length > 0) {
           const stored = localStorage.getItem('selected_main_meter_id');
           if (stored && meters.some(m => String(m.id) === String(stored))) {
@@ -599,7 +681,7 @@ const EnergyGraphs = () => {
         setTemplates(mapped);
         localStorage.setItem('scada_templates', JSON.stringify(mapped));
 
-        const meters = mapped.filter(t => t.module === 'Main Meter' || t.category === 'Energy Metering');
+        const meters = getEnergyMeters(mapped);
         if (meters.length > 0) {
           const stored = localStorage.getItem('selected_main_meter_id');
           if (stored && meters.some(m => String(m.id) === String(stored))) {
@@ -619,7 +701,7 @@ const EnergyGraphs = () => {
   }, [selectedMeterId]);
 
   const energyMeters = useMemo(() => {
-    return templates.filter(t => t.module === 'Main Meter' || t.category === 'Energy Metering');
+    return getEnergyMeters(templates);
   }, [templates]);
 
   const mainMeterTemplate = useMemo(() => {
@@ -629,6 +711,121 @@ const EnergyGraphs = () => {
     mainMeterTemplateRef.current = tpl;
     return tpl;
   }, [templates, selectedMeterId, energyMeters]);
+
+  // Fetch telemetry snapshots when interval is not live
+  useEffect(() => {
+    if (globalInterval === 'live' || !selectedMeterId) {
+      setHistoricalData([]);
+      return;
+    }
+
+    const loadHistoricalData = async () => {
+      setLoadingHistory(true);
+      try {
+        const selectedTemplate = templates.find(t => String(t.id) === String(selectedMeterId));
+        const deviceId = selectedTemplate?.mapping?.deviceId || selectedTemplate?.mapping?.emChangeConfig?.device || selectedMeterId;
+        
+        const isDev = import.meta.env.DEV;
+        const backendUrl = isDev ? '/sochiot-bms' : (import.meta.env.VITE_BACKEND_BMS_URL || 'https://bms-api.sochiot.com/api/v1');
+        
+        let rawToken = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
+        const token = rawToken.replace(/^["']|["']$/g, '').trim();
+        const headers = { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+
+        const paramsToFetch = [
+          { key: 'vRN', paramKey: 'vR', defaultKey: '3,154' },
+          { key: 'vYN', paramKey: 'vY', defaultKey: '3,155' },
+          { key: 'vBN', paramKey: 'vB', defaultKey: '3,156' },
+          { key: 'iR', paramKey: 'iR', defaultKey: '3,157' },
+          { key: 'iY', paramKey: 'iY', defaultKey: '3,158' },
+          { key: 'iB', paramKey: 'iB', defaultKey: '3,159' },
+          { key: 'totalKva', paramKey: 'totalKva', defaultKey: '3,153' },
+          { key: 'reactivePower', paramKey: 'reactivePower', defaultKey: 'reactivePower' },
+          { key: 'freq', paramKey: 'freq', defaultKey: '3,153' },
+          { key: 'ebKwh', paramKey: 'ebKwh', defaultKey: '3,151' },
+          { key: 'dgKwh', paramKey: 'dgKwh', defaultKey: '3,180' },
+          { key: 'ebKvah', paramKey: 'ebKvah', defaultKey: '3,152' }
+        ];
+
+        const resolveFieldKey = (template, paramKey, defaultKey) => {
+          if (!template?.mapping) return defaultKey;
+          const mapping = template.mapping;
+          const configs = [mapping.emChangeConfig, mapping.emReadConfig, mapping.emConsumptionConfig, mapping];
+          for (const cfg of configs) {
+            if (cfg && cfg[paramKey]) {
+              const rawVal = cfg[paramKey];
+              if (typeof rawVal === 'string') {
+                if (rawVal.includes(':')) {
+                  return rawVal.split(':').pop();
+                }
+                return rawVal;
+              }
+              return rawVal;
+            }
+          }
+          return defaultKey;
+        };
+
+        const promises = paramsToFetch.map(async (param) => {
+          const fieldKey = resolveFieldKey(selectedTemplate, param.paramKey, param.defaultKey);
+          const url = `${backendUrl}/sites/${selectedSiteId}/devices/${deviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=${globalInterval}&from=${fromDate}T00:00:00Z&to=${toDate}T23:59:59Z`;
+          try {
+            const res = await fetch(url, { headers });
+            if (res.status === 401) {
+              throw new Error('Unauthorized');
+            }
+            if (!res.ok) return { key: param.key, snapshots: [] };
+            const json = await res.json();
+            return {
+              key: param.key,
+              snapshots: json.data?.snapshots || []
+            };
+          } catch (e) {
+            console.error(`Error fetching ${param.key}:`, e);
+            return { key: param.key, snapshots: [] };
+          }
+        });
+
+        const results = await Promise.all(promises);
+
+        const mergedData = {};
+        results.forEach(result => {
+          result.snapshots.forEach(snap => {
+            const timeKey = snap.windowStart;
+            if (!mergedData[timeKey]) {
+              const dateObj = new Date(snap.windowStart);
+              let formattedTime = '';
+              if (globalInterval === 'MIN_15') {
+                formattedTime = dateObj.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+              } else if (globalInterval === 'DAILY') {
+                formattedTime = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              } else {
+                formattedTime = dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+              }
+              mergedData[timeKey] = {
+                time: formattedTime,
+                windowStart: snap.windowStart,
+                windowEnd: snap.windowEnd
+              };
+            }
+            mergedData[timeKey][result.key] = snap.avgValue !== null && snap.avgValue !== undefined ? Number(Number(snap.avgValue).toFixed(2)) : 0;
+          });
+        });
+
+        const sorted = Object.values(mergedData).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
+        setHistoricalData(sorted);
+      } catch (err) {
+        console.error('Failed to load historical snapshots:', err);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    loadHistoricalData();
+  }, [selectedSiteId, selectedMeterId, globalInterval, fromDate, toDate, templates]);
 
   useEffect(() => {
     setIsSwitching(true);
@@ -711,7 +908,6 @@ const EnergyGraphs = () => {
       if (vYN && !vYB) vYB = +(vYN * 1.732).toFixed(2);
       if (vBN && !vBR) vBR = +(vBN * 1.732).toFixed(2);
 
-      // Save to ref so the unified ticking interval picks it up
       latestRealDataRef.current = {
         vRN, vYN, vBN, vRY, vYB, vBR,
         iR: getValueForField(mapping.emChangeConfig, 'iR') ?? getValueForField(mapping.emCurrentConfig, 'iR'),
@@ -727,11 +923,9 @@ const EnergyGraphs = () => {
         reactivePower: getValueForField(mapping.emChangeConfig, 'reactivePower') ?? getValueForField(mapping.emPowerConfig, 'reactivePower')
       };
       
-      // Instantly fill history if it's empty or entirely null so line appears instantly across full width
       setHistoryLog(prev => {
         const hasValidIncomingData = Object.values(latestRealDataRef.current).some(v => v !== null && v !== undefined && !isNaN(v));
-        
-        if (!hasValidIncomingData) return prev; // Do not fill with nulls! Wait for valid data.
+        if (!hasValidIncomingData) return prev; 
 
         const hasAnyValidHistoricalData = prev.some(point => 
           Object.keys(point).some(k => k !== 'time' && point[k] !== null && point[k] !== undefined && !isNaN(point[k]))
@@ -809,7 +1003,7 @@ const EnergyGraphs = () => {
       }
     };
 
-    fetchStats(); // Instantly fetch data on load without waiting 5 seconds
+    fetchStats(); 
     const pollingInterval = setInterval(fetchStats, 5000);
 
     return () => {
@@ -834,47 +1028,139 @@ const EnergyGraphs = () => {
     apparentConsumption: checkFields('emConsumptionConfig', ['ebKvah']) || checkFields('emReadConfig', ['ebKvah']) || checkFields('emChangeConfig', ['ebKvah'])
   };
 
+  const activeData = globalInterval === 'live' ? historyLog : historicalData;
+
   return (
     <div className="fade-in px-2 px-md-4 py-3">
-      <div className="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 p-4 rounded-4" style={{ background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(15,23,42,0.7))', border: '1px solid rgba(56, 189, 248, 0.15)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+      {/* Page Header */}
+      <div className="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 p-4 rounded-4" style={{ background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(15,23,42,0.7))', border: '1px solid rgba(255, 107, 0, 0.15)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
         <div>
           <h2 className="mb-1 text-white fw-bold d-flex align-items-center gap-3 flex-wrap">
-            <div className="p-2 rounded-3" style={{ background: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56,189,248,0.3)' }}>
-              <Zap className="text-info text-shrink-0" size={28} />
+            <div className="p-2 rounded-3" style={{ background: 'rgba(255, 107, 0, 0.15)', border: '1px solid rgba(255,107,0,0.3)' }}>
+              <Zap className="text-warning text-shrink-0" size={28} />
             </div>
             Energy Advanced Analytics
           </h2>
-          <p className="text-secondary fs-7 mb-0 mt-2">Continuous live streaming graphs tracking all parameters flawlessly.</p>
-        </div>
-        <div className="d-flex flex-wrap align-items-center gap-2 gap-md-3">
-          {energyMeters.length > 0 && (
-            <Form.Select
-              size="lg"
-              className="bg-dark text-white border-secondary shadow-none fw-bold"
-              value={selectedMeterId}
-              onChange={(e) => setSelectedMeterId(e.target.value)}
-              style={{ width: 'auto', minWidth: '250px', fontSize: '0.95rem' }}
-            >
-              {energyMeters.map(meter => (
-                <option key={meter.id} value={meter.id}>
-                  {meter.name || meter.mapping?.energyMeteringTarget || 'Unnamed Meter'}
-                </option>
-              ))}
-            </Form.Select>
-          )}
+          <p className="text-secondary fs-7 mb-0 mt-2">Continuous telemetry analytics logs tracking all parameters flawlessly.</p>
         </div>
       </div>
 
+      {/* Filter Panel */}
+      <Card className="mb-4 border-0" style={{ background: 'linear-gradient(145deg, #111827 0%, #0f172a 100%)', borderRadius: '16px', border: '1px solid rgba(249, 115, 22, 0.15)', boxShadow: '0 8px 30px rgba(0,0,0,0.2)' }}>
+        <Card.Body className="p-3">
+          <Row className="g-3 align-items-center">
+            {/* Site Select */}
+            {sites.length > 0 && (
+              <Col xs={12} md={6} lg={3}>
+                <Form.Group>
+                  <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>SITE NAME</Form.Label>
+                  <Form.Select
+                    size="sm"
+                    className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
+                    value={selectedSiteId}
+                    onChange={(e) => setSelectedSiteId(e.target.value)}
+                  >
+                    {sites.map(s => (
+                      <option key={s.id} value={String(s.id)}>{s.name}</option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+            )}
+
+            {/* Meter Select */}
+            <Col xs={12} md={6} lg={sites.length > 0 ? 3 : 4}>
+              <Form.Group>
+                <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>DEVICE / METER</Form.Label>
+                <Form.Select
+                  size="sm"
+                  className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
+                  value={selectedMeterId}
+                  onChange={(e) => setSelectedMeterId(e.target.value)}
+                >
+                  {energyMeters.length === 0 && (
+                    <option value="">No sub-meters configured</option>
+                  )}
+                  {energyMeters.map(meter => (
+                    <option key={meter.id} value={meter.id}>
+                      {meter.name || meter.mapping?.energyMeteringTarget || 'Unnamed Meter'}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+            </Col>
+
+            {/* Interval Select */}
+            <Col xs={12} md={6} lg={sites.length > 0 ? 2 : 3}>
+              <Form.Group>
+                <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>CHART INTERVAL</Form.Label>
+                <Form.Select
+                  size="sm"
+                  className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
+                  value={globalInterval}
+                  onChange={(e) => setGlobalInterval(e.target.value)}
+                >
+                  <option value="live">Live Data (Real-time)</option>
+                  <option value="MIN_15">15 Minutes</option>
+                  <option value="DAILY">Daily</option>
+                  <option value="YEARLY">Yearly</option>
+                </Form.Select>
+              </Form.Group>
+            </Col>
+
+            {/* From Date */}
+            {globalInterval !== 'live' && (
+              <Col xs={6} md={3} lg={2}>
+                <Form.Group>
+                  <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>FROM DATE</Form.Label>
+                  <Form.Control
+                    type="date"
+                    size="sm"
+                    className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
+                    value={fromDate}
+                    onChange={(e) => setFromDate(e.target.value)}
+                    style={{ colorScheme: 'dark' }}
+                  />
+                </Form.Group>
+              </Col>
+            )}
+
+            {/* To Date */}
+            {globalInterval !== 'live' && (
+              <Col xs={6} md={3} lg={2}>
+                <Form.Group>
+                  <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>TO DATE</Form.Label>
+                  <Form.Control
+                    type="date"
+                    size="sm"
+                    className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
+                    value={toDate}
+                    onChange={(e) => setToDate(e.target.value)}
+                    style={{ colorScheme: 'dark' }}
+                  />
+                </Form.Group>
+              </Col>
+            )}
+          </Row>
+        </Card.Body>
+      </Card>
+
       <div className="energy-graphs-container mb-4" style={{ minHeight: '60vh' }}>
-        {isSwitching ? (
+        {loadingHistory || isSwitching ? (
           <div className="d-flex flex-column justify-content-center align-items-center h-100" style={{ minHeight: '400px' }}>
-            <div className="spinner-border text-info mb-3" role="status" style={{ width: '3rem', height: '3rem', filter: 'drop-shadow(0 0 10px rgba(56,189,248,0.8))' }}>
+            <div className="spinner-border text-warning mb-3" role="status" style={{ width: '3rem', height: '3rem', filter: 'drop-shadow(0 0 10px rgba(249,115,22,0.8))' }}>
               <span className="visually-hidden">Loading...</span>
             </div>
-            <h5 className="text-info fw-black uppercase tracking-widest" style={{ letterSpacing: '2px', animation: 'pulse 1.5s infinite' }}>
-              Fetching Meter Data...
+            <h5 className="text-warning fw-black uppercase tracking-widest" style={{ letterSpacing: '2px', animation: 'pulse 1.5s infinite' }}>
+              Fetching Telemetry Snapshots...
             </h5>
-            <small className="text-secondary opacity-50 uppercase tracking-widest">Please wait a moment</small>
+            <small className="text-secondary opacity-50 uppercase tracking-widest">Querying database</small>
+          </div>
+        ) : globalInterval !== 'live' && historicalData.length === 0 ? (
+          <div className="d-flex flex-column justify-content-center align-items-center h-100 border border-secondary border-opacity-25 rounded-4 p-5" style={{ minHeight: '400px', background: 'rgba(15, 23, 42, 0.4)' }}>
+            <Activity className="text-warning mb-3 opacity-50 animate-pulse" size={48} />
+            <h5 className="text-white fw-bold mb-2">No Historical Data Found</h5>
+            <p className="text-secondary text-center max-w-md mb-0">No telemetry snapshots are available for the selected sub-meter in this date range. Try choosing a different date range or interval.</p>
           </div>
         ) : (
           <Row className="g-4">
@@ -883,7 +1169,8 @@ const EnergyGraphs = () => {
                 <ChartRow 
                   title="Supply Voltage" 
                   unit="Volts (V)" 
-                  data={historyLog} 
+                  data={activeData} 
+                  globalInterval={globalInterval}
                   dataKeys={[
                     {key: 'vRN', name: 'VR-N'}, 
                     {key: 'vYN', name: 'VY-N'}, 
@@ -902,7 +1189,8 @@ const EnergyGraphs = () => {
                 <ChartRow 
                   title="Current" 
                   unit="Amperes (A)" 
-                  data={historyLog} 
+                  data={activeData} 
+                  globalInterval={globalInterval}
                   dataKeys={[
                     {key: 'iR', name: 'I1'}, 
                     {key: 'iY', name: 'I2'}, 
@@ -922,7 +1210,8 @@ const EnergyGraphs = () => {
                   <ChartRow 
                     title="Apparent Power" 
                     unit="kVA" 
-                    data={historyLog} 
+                    data={activeData} 
+                    globalInterval={globalInterval}
                     dataKeys={[{key: 'totalKva', name: 'kVA'}]} 
                     defaultColors={['#0ea5e9']} 
                     type="bar"
@@ -935,7 +1224,8 @@ const EnergyGraphs = () => {
                   <ChartRow 
                     title="Reactive Power" 
                     unit="kVAR" 
-                    data={historyLog} 
+                    data={activeData} 
+                    globalInterval={globalInterval}
                     dataKeys={[{key: 'reactivePower', name: 'kVAR'}]} 
                     defaultColors={['#64748b']} 
                     type="area"
@@ -949,7 +1239,8 @@ const EnergyGraphs = () => {
                 <ChartRow 
                   title="Frequency" 
                   unit="Hz" 
-                  data={historyLog} 
+                  data={activeData} 
+                  globalInterval={globalInterval}
                   dataKeys={[{key: 'freq', name: 'Freq'}]} 
                   defaultColors={['#8b5cf6']} 
                   type="bar"
@@ -964,7 +1255,8 @@ const EnergyGraphs = () => {
                 <ChartRow 
                   title="Power Consumption (Active)" 
                   unit="kWH" 
-                  data={historyLog} 
+                  data={activeData} 
+                  globalInterval={globalInterval}
                   dataKeys={[
                     {key: 'ebKwh', name: 'EB kWH'}, 
                     {key: 'dgKwh', name: 'DG kWH'}
@@ -983,7 +1275,8 @@ const EnergyGraphs = () => {
                 <ChartRow 
                   title="Power Consumption (Apparent)" 
                   unit="kVAH" 
-                  data={historyLog} 
+                  data={activeData} 
+                  globalInterval={globalInterval}
                   dataKeys={[
                     {key: 'ebKvah', name: 'EB kVAH'}
                   ]} 
