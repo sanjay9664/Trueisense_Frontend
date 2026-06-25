@@ -17,10 +17,13 @@ const PARAMETERS = [
   { key: 'iB', label: 'Current B', defaultKey: '3,159' },
   { key: 'pf', label: 'Power Factor (PF)', defaultKey: '4,24F' }
 ];
+const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3002/api/v1';
 
 const EnergyPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();
   const [templates, setTemplates] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
   const [selectedMeter, setSelectedMeter] = useState('');
   const [generating, setGenerating] = useState(false);
   const [downloadType, setDownloadType] = useState(null);
@@ -37,17 +40,57 @@ const EnergyPDFReport = () => {
   const [interval, setIntervalVal] = useState('HOURLY');
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Load templates on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('scada_templates');
-    if (saved) {
-      try {
-        setTemplates(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse templates:', e);
-      }
+  const siteId = useMemo(() => {
+    try {
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
+    } catch (e) {
+      return localStorage.getItem('selectedSiteId') || '1';
     }
+  }, []);
 
+  // Fetch dynamic devices on mount
+  useEffect(() => {
+    const fetchDevices = async () => {
+      setLoadingDevices(true);
+      setErrorMsg(null);
+      try {
+        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token');
+        const res = await fetch(`${API_BASE_URL}/sites/${siteId}/devices`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch devices: ${res.statusText}`);
+        }
+        const result = await res.json();
+        if (result.success && Array.isArray(result.data)) {
+          setDevices(result.data);
+        } else {
+          setDevices([]);
+        }
+      } catch (err) {
+        console.error('Error fetching devices:', err);
+        setErrorMsg('Failed to fetch devices. Using cached templates.');
+        
+        // Fallback: load templates from local storage
+        const saved = localStorage.getItem('scada_templates');
+        if (saved) {
+          try {
+            setTemplates(JSON.parse(saved));
+          } catch (e) {}
+        }
+      } finally {
+        setLoadingDevices(false);
+      }
+    };
+
+    fetchDevices();
+  }, [siteId]);
+
+  // Load templates on mount as fallback
+  useEffect(() => {
     fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
@@ -84,22 +127,42 @@ const EnergyPDFReport = () => {
     return 0;
   };
 
-  // Sub meters only
-  const subMeterOptions = useMemo(() => {
+  // Filter devices to show all energy meters
+  const energyMeterOptions = useMemo(() => {
+    if (devices.length > 0) {
+      return devices
+        .filter(d => String(d.category).toUpperCase() === 'ENERGY_METER')
+        .map(d => ({
+          id: d.id,
+          label: d.name,
+          description: d.description,
+          sochiotDeviceId: d.sochiotDeviceId,
+          sochiotMeta: d.sochiotMeta,
+          isActive: d.isActive
+        }))
+        .sort((a, b) => naturalSort(a.label, b.label));
+    }
+    
+    // Fallback: templates mapping
     return templates
       .filter(t => t.module === 'Sub Meters')
       .map(t => ({
         id: t.id,
         label: t.mapping?.energyMeteringTarget || t.name,
-        type: 'sub'
+        description: 'Sub Meter • Energy Report Target',
+        sochiotDeviceId: t.mapping?.deviceId,
+        sochiotMeta: null,
+        isActive: false
       }))
       .sort((a, b) => naturalSort(a.label, b.label));
-  }, [templates]);
+  }, [devices, templates]);
 
-  // Combined meters list (only sub-meters)
+  // Combined meters list (only sub-meters / energy meters)
   const allMeterOptions = useMemo(() => {
-    return subMeterOptions;
-  }, [subMeterOptions]);
+    return energyMeterOptions;
+  }, [energyMeterOptions]);
+
+  const subMeterOptions = allMeterOptions;
 
   // Auto-select first meter
   useEffect(() => {
@@ -114,6 +177,13 @@ const EnergyPDFReport = () => {
 
   // Helper to check device online status
   const getMeterOnlineStatus = (meterId) => {
+    const option = allMeterOptions.find(m => String(m.id) === String(meterId));
+    if (!option) return false;
+    
+    if (option.sochiotMeta) {
+      return option.sochiotMeta.mode === 'ONLINE' || option.isActive;
+    }
+    
     const template = templates.find(t => String(t.id) === String(meterId));
     if (!template || !template.mapping) return false;
 
@@ -130,33 +200,76 @@ const EnergyPDFReport = () => {
   };
 
   const handleDownload = async (type) => {
+    if (!selectedMeter) return;
     setGenerating(true);
     setDownloadType(type);
     setDownloadSuccess(null);
     setErrorMsg(null);
 
+    const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token');
+    const startDate = `${fromDate}T00:00:00Z`;
+    const endDate = `${toDate}T23:59:59Z`;
+
     try {
-      // Bypassing API fetches for PDF Reports as requested - generate client-side simulated data instead
-      setTimeout(() => {
-        try {
-          generateClientSideReport(type);
-        } catch (e) {
-          console.error('Failed to generate report:', e);
-          setErrorMsg('Failed to generate report.');
-        } finally {
-          setGenerating(false);
-          setDownloadType(null);
+      if (type === 'excel') {
+        const url = `${API_BASE_URL}/reports/energy?deviceId=${selectedMeter}&startDate=${startDate}&endDate=${endDate}&interval=${interval}&format=xlsx`;
+        const res = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (!res.ok) {
+          const text = await res.text();
+          let json;
+          try { json = JSON.parse(text); } catch (e) {}
+          throw new Error(json?.message || json?.error || `Download failed: ${res.statusText}`);
         }
-      }, 1000);
+
+        const blob = await res.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${selectedMeterInfo?.label || 'Meter'}_Energy_Report_${fromDate}_to_${toDate}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+        
+        setDownloadSuccess('excel');
+        setTimeout(() => setDownloadSuccess(null), 4000);
+      } else if (type === 'pdf') {
+        const url = `${API_BASE_URL}/reports/energy?deviceId=${selectedMeter}&startDate=${startDate}&endDate=${endDate}&interval=${interval}`;
+        const res = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (!res.ok) {
+          const text = await res.text();
+          let json;
+          try { json = JSON.parse(text); } catch (e) {}
+          throw new Error(json?.message || json?.error || `Fetch failed: ${res.statusText}`);
+        }
+
+        const result = await res.json();
+        if (result.success && result.data) {
+          generatePdfFromMergedData(result.data);
+        } else {
+          throw new Error(result.error || 'Failed to retrieve report data');
+        }
+      }
     } catch (err) {
       console.error('Download error:', err);
       setErrorMsg(`Failed to generate report: ${err.message || err}`);
+    } finally {
       setGenerating(false);
       setDownloadType(null);
     }
   };
 
-  const generatePdfFromMergedData = (rows) => {
+  const generatePdfFromMergedData = (reportData) => {
     const meterLabel = selectedMeterInfo?.label || 'Meter';
     const dateStr = new Date().toLocaleString();
     const doc = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
@@ -174,36 +287,74 @@ const EnergyPDFReport = () => {
     doc.setDrawColor(224, 94, 0, 0.3);
     doc.line(14, 42, 283, 42); // Horizontal line
 
-    const fmt = (val) => val !== null && val !== undefined ? Number(val).toFixed(3) : '-';
+    const fmt = (val, dec = 2) => val !== null && val !== undefined ? Number(val).toFixed(dec) : '-';
 
-    const tableBody = rows.map(r => [
-      new Date(r.windowStart).toLocaleString('en-IN'),
-      new Date(r.windowEnd).toLocaleString('en-IN'),
-      fmt(r.values.ebKwh),
-      fmt(r.values.totalKw),
-      fmt(r.values.totalKva),
-      fmt(r.values.vR),
-      fmt(r.values.vY),
-      fmt(r.values.vB),
-      fmt(r.values.iR),
-      fmt(r.values.iY),
-      fmt(r.values.iB),
-      fmt(r.values.pf)
-    ]);
+    const summary = reportData?.summary;
+    if (summary) {
+      doc.setFontSize(10);
+      doc.setTextColor(30, 41, 59); // Slate 800
+      doc.setFont('helvetica', 'bold');
+      doc.text('SUMMARY STATISTICS', 14, 48);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105); // Slate 600
+      
+      doc.text(`Total Energy Consumed: ${fmt(summary.totalEnergyConsumed, 2)} kWh`, 14, 54);
+      doc.text(`Average Power Factor: ${fmt(summary.pfAvg, 4)}`, 14, 59);
+      doc.text(`Voltage Avg: ${fmt(summary.voltageAvg, 2)} V`, 95, 54);
+      doc.text(`Voltage Min: ${fmt(summary.voltageMin, 2)} V`, 95, 59);
+      doc.text(`Voltage Max: ${fmt(summary.voltageMax, 2)} V`, 95, 64);
+      doc.text(`Current Avg: ${fmt(summary.currentAvg, 2)} A`, 180, 54);
+      
+      doc.setDrawColor(224, 94, 0, 0.15);
+      doc.line(14, 68, 283, 68);
+    }
+
+    const rows = reportData?.data || [];
+    const tableBody = rows.map(item => {
+      const start = new Date(item.windowStart);
+      const end = new Date(item.windowEnd);
+      
+      const totalKwh = item.closingEnergy !== null && item.openingEnergy !== null
+        ? Math.max(0, item.closingEnergy - item.openingEnergy)
+        : null;
+
+      const totalKvah = item.closingKvah !== null && item.openingKvah !== null
+        ? Math.max(0, item.closingKvah - item.openingKvah)
+        : null;
+
+      return [
+        start.toLocaleString('en-IN'),
+        end.toLocaleString('en-IN'),
+        fmt(totalKwh, 2),
+        fmt(totalKvah, 2),
+        fmt(item.demandMax, 2),
+        fmt(item.voltageAvg, 2),
+        fmt(item.voltageMax, 2),
+        fmt(item.voltageMin, 2),
+        fmt(item.currentAvg, 2),
+        fmt(item.currentMax, 2),
+        fmt(item.currentMin, 2),
+        fmt(item.pfAvg, 4)
+      ];
+    });
+
+    const startTableY = summary ? 72 : 46;
 
     autoTable(doc, {
-      startY: 46,
+      startY: startTableY,
       head: [[
         'Start Time', 'End Time', 
-        'Energy (kWh)', 'Power (kW)', 'Apparent (kVA)', 
-        'Volt R (V)', 'Volt Y (V)', 'Volt B (V)', 
-        'Amp R (A)', 'Amp Y (A)', 'Amp B (A)', 
-        'PF'
+        'Energy (kWh)', 'Apparent (kVAh)', 'Max Demand (kW)', 
+        'Volt Avg (V)', 'Volt Max (V)', 'Volt Min (V)', 
+        'Amp Avg (A)', 'Amp Max (A)', 'Amp Min (A)', 
+        'Avg. PF'
       ]],
       body: tableBody,
       theme: 'grid',
       headStyles: { fillColor: [224, 94, 0], textColor: 255 },
-      styles: { fontSize: 7.5, cellPadding: 3 }
+      styles: { fontSize: 7, cellPadding: 2 }
     });
 
     const pageCount = doc.internal.getNumberOfPages();
@@ -217,103 +368,6 @@ const EnergyPDFReport = () => {
     doc.save(`${meterLabel.replace(/\s+/g, '_')}_Consolidated_Report.pdf`);
     setDownloadSuccess('pdf');
     setTimeout(() => setDownloadSuccess(null), 4000);
-  };
-
-  const generateExcelFromMergedData = (rows) => {
-    const meterLabel = selectedMeterInfo?.label || 'Meter';
-    const headers = [
-      'Start Time', 'End Time', 
-      'EB Active Energy (kWh)', 'Active Power (kW)', 'Apparent Power (kVA)', 
-      'Voltage R (V)', 'Voltage Y (V)', 'Voltage B (V)', 
-      'Current R (A)', 'Current Y (A)', 'Current B (A)', 
-      'Power Factor (PF)'
-    ];
-    
-    const fmt = (val) => val !== null && val !== undefined ? val : '-';
-
-    const csvRows = rows.map(r => [
-      new Date(r.windowStart).toLocaleString('en-IN'),
-      new Date(r.windowEnd).toLocaleString('en-IN'),
-      fmt(r.values.ebKwh),
-      fmt(r.values.totalKw),
-      fmt(r.values.totalKva),
-      fmt(r.values.vR),
-      fmt(r.values.vY),
-      fmt(r.values.vB),
-      fmt(r.values.iR),
-      fmt(r.values.iY),
-      fmt(r.values.iB),
-      fmt(r.values.pf)
-    ]);
-
-    let csvContent = '\uFEFF';
-    csvContent += `Report Title,${meterLabel} - Consolidated Telemetry Report\n`;
-    csvContent += `Asset Type,Sub Meter\n`;
-    csvContent += `Ledger Interval,${interval}\n`;
-    csvContent += `Period Date Range,${fromDate} to ${toDate}\n\n`;
-    csvContent += headers.join(',') + '\n';
-    csvRows.forEach(row => {
-      csvContent += row.map(cell => `"${cell}"`).join(',') + '\n';
-    });
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${meterLabel.replace(/\s+/g, '_')}_Consolidated_Report.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
-    setDownloadSuccess('excel');
-    setTimeout(() => setDownloadSuccess(null), 4000);
-  };
-
-  const generateClientSideReport = (type) => {
-    const meterLabel = selectedMeterInfo?.label || 'Meter';
-    const rows = [];
-    const fromTime = new Date(`${fromDate}T00:00:00`);
-    const toTime = new Date(`${toDate}T23:59:59`);
-    
-    let intervalMs = 60 * 60 * 1000; // HOURLY
-    if (interval === 'MIN_15') intervalMs = 15 * 60 * 1000;
-    else if (interval === 'DAILY') intervalMs = 24 * 60 * 60 * 1000;
-    else if (interval === 'YEARLY') intervalMs = 365 * 24 * 60 * 60 * 1000;
-
-    let steps = Math.min(100, Math.floor((toTime - fromTime) / intervalMs));
-    if (steps <= 0) steps = 24;
-
-    let baseEbKwh = 15200.45;
-    for (let i = 0; i <= steps; i++) {
-      const snapStart = new Date(fromTime.getTime() + (i * intervalMs));
-      if (snapStart > toTime) break;
-      const snapEnd = new Date(snapStart.getTime() + intervalMs);
-      
-      const consumptionInc = (interval === 'MIN_15' ? 2 : interval === 'DAILY' ? 180 : 5400) + (Math.random() * 5);
-      baseEbKwh += consumptionInc;
-
-      rows.push({
-        windowStart: snapStart.toISOString(),
-        windowEnd: snapEnd.toISOString(),
-        values: {
-          ebKwh: baseEbKwh,
-          totalKw: 15 + Math.random() * 25,
-          totalKva: 18 + Math.random() * 25,
-          vR: 228 + Math.random() * 8,
-          vY: 229 + Math.random() * 8,
-          vB: 227 + Math.random() * 8,
-          iR: 35 + Math.random() * 40,
-          iY: 34 + Math.random() * 40,
-          iB: 36 + Math.random() * 40,
-          pf: 0.93 + Math.random() * 0.05
-        }
-      });
-    }
-
-    if (type === 'pdf') {
-      generatePdfFromMergedData(rows);
-    } else {
-      generateExcelFromMergedData(rows);
-    }
   };
 
   const currentDate = new Date().toLocaleDateString('en-IN', { 

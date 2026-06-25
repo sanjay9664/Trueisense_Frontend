@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Card, Row, Col, Button, Modal, Form } from 'react-bootstrap';
 import { ResponsiveContainer, AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { Maximize2, X, Zap, Activity, Settings2 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3002/api/v1';
 
 const VOLTAGE_RANGES = [
   {
@@ -562,23 +565,24 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
 };
 
 const EnergyGraphs = () => {
-  const { getOverallStatus } = useDeviceStatus();
+  const location = useLocation();
+  const categoryContext = location.pathname.includes('/aqi-sensor') ? 'AQI_SENSOR' : 'ENERGY_METER';
 
-  const [templates, setTemplates] = useState([]);
-  const [selectedMeterId, setSelectedMeterId] = useState(() => {
-    return localStorage.getItem('selected_main_meter_id') || '';
-  });
+  const [devices, setDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [settings, setSettings] = useState([]);
+  const [selectedSettings, setSelectedSettings] = useState([]);
+  
   const [isSwitching, setIsSwitching] = useState(false);
   const [historyLog, setHistoryLog] = useState([]);
   
-  // Sites list and date range filter states
   const [sites, setSites] = useState([]);
   const [selectedSiteId, setSelectedSiteId] = useState(() => {
     const userData = JSON.parse(localStorage.getItem('userData') || '{}');
     return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
   });
 
-  const [globalInterval, setGlobalInterval] = useState('live'); // 'live', 'MIN_15', 'DAILY', 'YEARLY'
+  const [globalInterval, setGlobalInterval] = useState('live');
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
@@ -587,48 +591,18 @@ const EnergyGraphs = () => {
   const [toDate, setToDate] = useState(() => {
     return new Date().toISOString().split('T')[0];
   });
+  
   const [historicalData, setHistoricalData] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingDevices, setLoadingDevices] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(false);
 
-  const [globalRanges, setGlobalRanges] = useState(() => {
-    const saved = localStorage.getItem('scada_custom_ranges');
-    if (saved) return JSON.parse(saved);
-    return {
-      voltage: VOLTAGE_RANGES,
-      current: CURRENT_RANGES,
-      demand: DEMAND_RANGES,
-      frequency: FREQUENCY_RANGES
-    };
-  });
-
-  const handleUpdateRange = (key, newRanges) => {
-    const updated = { ...globalRanges, [key]: newRanges };
-    setGlobalRanges(updated);
-    localStorage.setItem('scada_custom_ranges', JSON.stringify(updated));
-  };
-  
-  const mainMeterTemplateRef = useRef(null);
-  const latestRealDataRef = useRef({}); // Store the real live data so it merges properly
-
-  // Helper to filter out Main Meters unless permission is granted (default false for now)
-  const getEnergyMeters = (templateList) => {
-    const hasMainMeterPermission = false;
-    return templateList.filter(t => {
-      if (t.module === 'Main Meter') {
-        return hasMainMeterPermission;
-      }
-      return t.module === 'Sub Meters' || t.category === 'Energy Metering';
-    });
-  };
-
-  // Load sites on mount
   useEffect(() => {
     const fetchSites = async () => {
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_BMS_URL || 'https://bms-api.sochiot.com/api/v1';
         const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
         if (!token) return;
-        const res = await fetch(`${backendUrl}/sites/`, {
+        const res = await fetch(`${API_BASE_URL}/sites/`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
@@ -642,79 +616,87 @@ const EnergyGraphs = () => {
     fetchSites();
   }, []);
 
-  // Load templates on mount
   useEffect(() => {
-    const saved = localStorage.getItem('scada_templates');
-    if (saved) {
+    const fetchDevices = async () => {
+      setLoadingDevices(true);
       try {
-        const parsed = JSON.parse(saved);
-        setTemplates(parsed);
-        const meters = getEnergyMeters(parsed);
-        if (meters.length > 0) {
-          const stored = localStorage.getItem('selected_main_meter_id');
-          if (stored && meters.some(m => String(m.id) === String(stored))) {
-            setSelectedMeterId(stored);
-          } else {
-            setSelectedMeterId(meters[0].id);
-          }
-        }
-      } catch (e) {
-        console.error('Failed to parse templates from local storage:', e);
-      }
-    }
-
-    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
-      .then(res => res.ok ? res.json() : [])
-      .then(data => {
-        const mapped = data.map(t => {
-          const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
-          const defValues = hasDef ? t.defaultValues : null;
-          const mappingSource = defValues || t.settings?.[0]?.meta || {};
-          return {
-            id: t.id,
-            name: t.name,
-            category: (defValues && defValues.category) || t.category || 'Water Management',
-            module: (defValues && defValues.module) || t.settings?.[0]?.eventKey || 'AG Tank',
-            mapping: mappingSource
-          };
+        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
+        const res = await fetch(`${API_BASE_URL}/sites/${selectedSiteId}/devices`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         });
-        setTemplates(mapped);
-        localStorage.setItem('scada_templates', JSON.stringify(mapped));
-
-        const meters = getEnergyMeters(mapped);
-        if (meters.length > 0) {
-          const stored = localStorage.getItem('selected_main_meter_id');
-          if (stored && meters.some(m => String(m.id) === String(stored))) {
-            setSelectedMeterId(stored);
-          } else if (!selectedMeterId) {
-            setSelectedMeterId(meters[0].id);
+        if (!res.ok) {
+          throw new Error('Failed to fetch devices');
+        }
+        const result = await res.json();
+        if (result.success && Array.isArray(result.data)) {
+          const filtered = result.data.filter(
+            d => String(d.category).toUpperCase() === categoryContext
+          );
+          setDevices(filtered);
+          if (filtered.length > 0) {
+            const cachedId = localStorage.getItem(`selected_device_${categoryContext}`);
+            if (cachedId && filtered.some(d => String(d.id) === String(cachedId))) {
+              setSelectedDeviceId(String(cachedId));
+            } else {
+              setSelectedDeviceId(String(filtered[0].id));
+            }
+          } else {
+            setSelectedDeviceId('');
           }
         }
-      })
-      .catch(err => console.error('Error fetching templates in EnergyGraphs:', err));
-  }, []);
+      } catch (err) {
+        console.error('Error fetching devices:', err);
+      } finally {
+        setLoadingDevices(false);
+      }
+    };
+    fetchDevices();
+  }, [selectedSiteId, categoryContext]);
 
   useEffect(() => {
-    if (selectedMeterId) {
-      localStorage.setItem('selected_main_meter_id', String(selectedMeterId));
+    if (selectedDeviceId) {
+      localStorage.setItem(`selected_device_${categoryContext}`, selectedDeviceId);
     }
-  }, [selectedMeterId]);
+  }, [selectedDeviceId, categoryContext]);
 
-  const energyMeters = useMemo(() => {
-    return getEnergyMeters(templates);
-  }, [templates]);
-
-  const mainMeterTemplate = useMemo(() => {
-    const tpl = selectedMeterId
-      ? templates.find(t => String(t.id) === String(selectedMeterId))
-      : (energyMeters[0] || null);
-    mainMeterTemplateRef.current = tpl;
-    return tpl;
-  }, [templates, selectedMeterId, energyMeters]);
-
-  // Fetch telemetry snapshots when interval is not live
   useEffect(() => {
-    if (globalInterval === 'live' || !selectedMeterId) {
+    if (!selectedDeviceId) {
+      setSettings([]);
+      setSelectedSettings([]);
+      return;
+    }
+    const fetchSettings = async () => {
+      setLoadingSettings(true);
+      try {
+        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
+        const res = await fetch(`${API_BASE_URL}/sites/${selectedSiteId}/devices/${selectedDeviceId}/settings`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          throw new Error('Failed to fetch device settings');
+        }
+        const result = await res.json();
+        if (result.success && Array.isArray(result.data)) {
+          const graphableSettings = result.data.filter(s => s.graphable === true);
+          setSettings(graphableSettings);
+          setSelectedSettings(graphableSettings.map(s => s.sochiotFieldName));
+        } else {
+          setSettings([]);
+          setSelectedSettings([]);
+        }
+      } catch (err) {
+        console.error('Error fetching device settings:', err);
+        setSettings([]);
+        setSelectedSettings([]);
+      } finally {
+        setLoadingSettings(false);
+      }
+    };
+    fetchSettings();
+  }, [selectedSiteId, selectedDeviceId]);
+
+  useEffect(() => {
+    if (globalInterval === 'live' || !selectedDeviceId || selectedSettings.length === 0) {
       setHistoricalData([]);
       return;
     }
@@ -722,70 +704,25 @@ const EnergyGraphs = () => {
     const loadHistoricalData = async () => {
       setLoadingHistory(true);
       try {
-        const selectedTemplate = templates.find(t => String(t.id) === String(selectedMeterId));
-        const deviceId = selectedTemplate?.mapping?.deviceId || selectedTemplate?.mapping?.emChangeConfig?.device || selectedMeterId;
-        
-        const isDev = import.meta.env.DEV;
-        const backendUrl = isDev ? '/sochiot-bms' : (import.meta.env.VITE_BACKEND_BMS_URL || 'https://bms-api.sochiot.com/api/v1');
-        
-        let rawToken = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
-        const token = rawToken.replace(/^["']|["']$/g, '').trim();
+        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
         const headers = { 
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         };
 
-        const paramsToFetch = [
-          { key: 'vRN', paramKey: 'vR', defaultKey: '3,154' },
-          { key: 'vYN', paramKey: 'vY', defaultKey: '3,155' },
-          { key: 'vBN', paramKey: 'vB', defaultKey: '3,156' },
-          { key: 'iR', paramKey: 'iR', defaultKey: '3,157' },
-          { key: 'iY', paramKey: 'iY', defaultKey: '3,158' },
-          { key: 'iB', paramKey: 'iB', defaultKey: '3,159' },
-          { key: 'totalKva', paramKey: 'totalKva', defaultKey: '3,153' },
-          { key: 'reactivePower', paramKey: 'reactivePower', defaultKey: 'reactivePower' },
-          { key: 'freq', paramKey: 'freq', defaultKey: '3,153' },
-          { key: 'ebKwh', paramKey: 'ebKwh', defaultKey: '3,151' },
-          { key: 'dgKwh', paramKey: 'dgKwh', defaultKey: '3,180' },
-          { key: 'ebKvah', paramKey: 'ebKvah', defaultKey: '3,152' }
-        ];
-
-        const resolveFieldKey = (template, paramKey, defaultKey) => {
-          if (!template?.mapping) return defaultKey;
-          const mapping = template.mapping;
-          const configs = [mapping.emChangeConfig, mapping.emReadConfig, mapping.emConsumptionConfig, mapping];
-          for (const cfg of configs) {
-            if (cfg && cfg[paramKey]) {
-              const rawVal = cfg[paramKey];
-              if (typeof rawVal === 'string') {
-                if (rawVal.includes(':')) {
-                  return rawVal.split(':').pop();
-                }
-                return rawVal;
-              }
-              return rawVal;
-            }
-          }
-          return defaultKey;
-        };
-
-        const promises = paramsToFetch.map(async (param) => {
-          const fieldKey = resolveFieldKey(selectedTemplate, param.paramKey, param.defaultKey);
-          const url = `${backendUrl}/sites/${selectedSiteId}/devices/${deviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=${globalInterval}&from=${fromDate}T00:00:00Z&to=${toDate}T23:59:59Z`;
+        const promises = selectedSettings.map(async (fieldKey) => {
+          const url = `${API_BASE_URL}/sites/${selectedSiteId}/devices/${selectedDeviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=${globalInterval}&from=${fromDate}T00:00:00Z&to=${toDate}T23:59:59Z`;
           try {
             const res = await fetch(url, { headers });
-            if (res.status === 401) {
-              throw new Error('Unauthorized');
-            }
-            if (!res.ok) return { key: param.key, snapshots: [] };
+            if (!res.ok) return { key: fieldKey, snapshots: [] };
             const json = await res.json();
             return {
-              key: param.key,
+              key: fieldKey,
               snapshots: json.data?.snapshots || []
             };
           } catch (e) {
-            console.error(`Error fetching ${param.key}:`, e);
-            return { key: param.key, snapshots: [] };
+            console.error(`Error fetching snapshots for ${fieldKey}:`, e);
+            return { key: fieldKey, snapshots: [] };
           }
         });
 
@@ -811,7 +748,7 @@ const EnergyGraphs = () => {
                 windowEnd: snap.windowEnd
               };
             }
-            mergedData[timeKey][result.key] = snap.avgValue !== null && snap.avgValue !== undefined ? Number(Number(snap.avgValue).toFixed(2)) : 0;
+            mergedData[timeKey][result.key] = snap.avgValue !== null && snap.avgValue !== undefined ? Number(Number(snap.avgValue).toFixed(2)) : null;
           });
         });
 
@@ -825,231 +762,110 @@ const EnergyGraphs = () => {
     };
 
     loadHistoricalData();
-  }, [selectedSiteId, selectedMeterId, globalInterval, fromDate, toDate, templates]);
+  }, [selectedSiteId, selectedDeviceId, selectedSettings, globalInterval, fromDate, toDate]);
 
   useEffect(() => {
+    if (globalInterval !== 'live' || !selectedDeviceId) {
+      setHistoryLog([]);
+      return;
+    }
+
     setIsSwitching(true);
-    setHistoryLog([]); // Clear old history to prevent ghost lines
+    setHistoryLog([]);
 
-    const interval = setInterval(() => {
-        setHistoryLog(prev => {
-            const real = latestRealDataRef.current;
-            if (!real) return prev;
-            
-            const hasValidData = Object.values(real).some(v => v !== null && v !== undefined && !isNaN(v));
-            if (prev.length === 0 && !hasValidData) return prev; // Wait for initial valid data before ticking
+    const fetchLiveStats = async () => {
+      try {
+        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
+        const res = await fetch(`${API_BASE_URL}/sites/${selectedSiteId}/devices/${selectedDeviceId}/live`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          throw new Error('Failed to fetch live stats');
+        }
+        const result = await res.json();
+        if (result.success && Array.isArray(result.data)) {
+          const liveFields = result.data;
+          
+          const newPoint = {
+            time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          };
+          
+          liveFields.forEach(f => {
+            newPoint[f.fieldKey] = f.numericValue !== null && f.numericValue !== undefined ? Number(Number(f.numericValue).toFixed(2)) : null;
+          });
 
-            const newPoint = {
-              time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              ...real
-            };
-
+          setHistoryLog(prev => {
             const next = [...prev, newPoint];
             return next.length > 80 ? next.slice(next.length - 80) : next;
-        });
-    }, 5000); 
-
-    return () => clearInterval(interval);
-  }, [selectedMeterId]);
-
-  useEffect(() => {
-    const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
-    const socket = io(backendUrl, { path: '/socket.io', transports: ['websocket', 'polling'] });
-
-    socket.on('connect', () => {
-      console.log('EnergyGraphs WebSocket Connected - Listening for Telemetry');
-    });
-
-    const updateRealData = (stats) => {
-      if (!Array.isArray(stats)) return;
-      const currentTemplate = mainMeterTemplateRef.current;
-      if (!currentTemplate || !currentTemplate.mapping) return;
-
-      const mapping = currentTemplate.mapping;
-
-      const getValueForField = (config, fieldKey) => {
-        if (config && config.enabled !== false && config[fieldKey]) {
-          const fieldVal = config[fieldKey];
-          let cleanKey = fieldVal;
-          let targetModuleId = config.module;
-
-          if (typeof fieldVal === 'string' && fieldVal.includes(':')) {
-            const parts = fieldVal.split(':');
-            targetModuleId = parts[0];
-            cleanKey = parts.pop();
-          }
-
-          const stat = stats.find(s => String(s.moduleId) === String(targetModuleId) || String(s.meta?.module_id) === String(targetModuleId));
-          if (stat && stat.meta) {
-            if (stat.meta[cleanKey] !== undefined) return Number(stat.meta[cleanKey]);
-            if (stat.meta[fieldVal] !== undefined) return Number(stat.meta[fieldVal]);
-            const synonyms = PARAMETER_SYNONYMS[fieldKey] || [];
-            for (const sym of synonyms) {
-              if (stat.meta[sym] !== undefined) return Number(stat.meta[sym]);
-              const matchedKey = Object.keys(stat.meta).find(k =>
-                k.toUpperCase() === sym.toUpperCase() ||
-                k.toUpperCase().replace(/[^A-Z0-9]/g, '') === sym.toUpperCase().replace(/[^A-Z0-9]/g, '')
-              );
-              if (matchedKey && stat.meta[matchedKey] !== undefined) return Number(stat.meta[matchedKey]);
-            }
-          }
-        }
-        return null;
-      };
-
-      let vRN = getValueForField(mapping.emChangeConfig, 'vR') ?? getValueForField(mapping.emVoltageConfig, 'vR');
-      let vYN = getValueForField(mapping.emChangeConfig, 'vY') ?? getValueForField(mapping.emVoltageConfig, 'vY');
-      let vBN = getValueForField(mapping.emChangeConfig, 'vB') ?? getValueForField(mapping.emVoltageConfig, 'vB');
-      let vRY = getValueForField(mapping.emChangeConfig, 'vRY') ?? getValueForField(mapping.emVoltageConfig, 'vRY');
-      let vYB = getValueForField(mapping.emChangeConfig, 'vYB') ?? getValueForField(mapping.emVoltageConfig, 'vYB');
-      let vBR = getValueForField(mapping.emChangeConfig, 'vBR') ?? getValueForField(mapping.emVoltageConfig, 'vBR');
-
-      if (vRN && !vRY) vRY = +(vRN * 1.732).toFixed(2);
-      if (vYN && !vYB) vYB = +(vYN * 1.732).toFixed(2);
-      if (vBN && !vBR) vBR = +(vBN * 1.732).toFixed(2);
-
-      latestRealDataRef.current = {
-        vRN, vYN, vBN, vRY, vYB, vBR,
-        iR: getValueForField(mapping.emChangeConfig, 'iR') ?? getValueForField(mapping.emCurrentConfig, 'iR'),
-        iY: getValueForField(mapping.emChangeConfig, 'iY') ?? getValueForField(mapping.emCurrentConfig, 'iY'),
-        iB: getValueForField(mapping.emChangeConfig, 'iB') ?? getValueForField(mapping.emCurrentConfig, 'iB'),
-        totalKw: getValueForField(mapping.emChangeConfig, 'totalKw') ?? getValueForField(mapping.emPowerConfig, 'activePower'),
-        freq: getValueForField(mapping.emChangeConfig, 'freq') ?? getValueForField(mapping.emSystemConfig, 'freq'),
-        pf: getValueForField(mapping.emChangeConfig, 'pf') ?? getValueForField(mapping.emSystemConfig, 'pf'),
-        ebKwh: getValueForField(mapping.emChangeConfig, 'ebKwh') ?? getValueForField(mapping.emReadConfig, 'ebKwh') ?? getValueForField(mapping.emConsumptionConfig, 'cumulativekWh'),
-        dgKwh: getValueForField(mapping.emChangeConfig, 'dgKwh'),
-        ebKvah: getValueForField(mapping.emChangeConfig, 'ebKvah') ?? getValueForField(mapping.emReadConfig, 'ebKvah'),
-        totalKva: getValueForField(mapping.emChangeConfig, 'totalKva') ?? getValueForField(mapping.emPowerConfig, 'apparentPower'),
-        reactivePower: getValueForField(mapping.emChangeConfig, 'reactivePower') ?? getValueForField(mapping.emPowerConfig, 'reactivePower')
-      };
-      
-      setHistoryLog(prev => {
-        const hasValidIncomingData = Object.values(latestRealDataRef.current).some(v => v !== null && v !== undefined && !isNaN(v));
-        if (!hasValidIncomingData) return prev; 
-
-        const hasAnyValidHistoricalData = prev.some(point => 
-          Object.keys(point).some(k => k !== 'time' && point[k] !== null && point[k] !== undefined && !isNaN(point[k]))
-        );
-
-        if (prev.length === 0 || !hasAnyValidHistoricalData) {
-          const instant = [];
-          const now = new Date();
-          for (let i = 79; i >= 0; i--) {
-            instant.push({
-              time: new Date(now.getTime() - i * 5000).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              ...latestRealDataRef.current
-            });
-          }
-          return instant;
-        }
-        return prev;
-      });
-    };
-
-    socket.on('telemetry_update', updateRealData);
-
-    const fetchStats = async () => {
-      try {
-        const modulesToPoll = new Set();
-        const addModuleIdsToPoll = (config, keys) => {
-          if (!config) return;
-          if (config.module && config.module !== 'ALL') {
-            modulesToPoll.add(String(config.module));
-          }
-          for (const k of keys) {
-            if (config[k] && typeof config[k] === 'string' && config[k].includes(':')) {
-              const parts = config[k].split(':');
-              if (parts[0]) {
-                modulesToPoll.add(String(parts[0]));
-              }
-            }
-          }
-        };
-
-        if (mainMeterTemplateRef.current?.mapping) {
-          const mapping = mainMeterTemplateRef.current.mapping;
-          const configFieldsMap = [
-            { config: mapping.emVoltageConfig, fields: ['vR', 'vY', 'vB'] },
-            { config: mapping.emCurrentConfig, fields: ['iR', 'iY', 'iB'] },
-            { config: mapping.emPowerConfig, fields: ['activePower', 'reactivePower', 'apparentPower'] },
-            { config: mapping.emSystemConfig, fields: ['pf', 'freq'] },
-            { config: mapping.emConsumptionConfig, fields: ['cumulativekWh'] },
-            { config: mapping.emChangeConfig, fields: ['ebKvah', 'ebKwh', 'balance', 'totalKw', 'vR', 'vY', 'vB', 'iR', 'iY', 'iB', 'pf', 'totalKva', 'dgKwh', 'reactivePower', 'apparentPower', 'freq'] }
-          ];
-
-          configFieldsMap.forEach(({ config, fields }) => {
-            if (config && config.enabled !== false) {
-              addModuleIdsToPoll(config, fields);
-            }
           });
-        }
-
-        const pollList = Array.from(modulesToPoll);
-        if (pollList.length === 0) {
-          setIsSwitching(false);
-          return;
-        }
-
-        const url = `/api/templates/stats?modules=${pollList.join(',')}`;
-        const res = await fetch(url);
-        if (res.ok) {
-          const stats = await res.json();
-          updateRealData(stats);
         }
         setIsSwitching(false);
       } catch (err) {
-        console.error('Error fetching main meter stats:', err);
+        console.error('Error polling live stats:', err);
         setIsSwitching(false);
       }
     };
 
-    fetchStats(); 
-    const pollingInterval = setInterval(fetchStats, 5000);
+    fetchLiveStats();
+    const interval = setInterval(fetchLiveStats, 5000);
 
     return () => {
-      socket.disconnect();
-      clearInterval(pollingInterval);
+      clearInterval(interval);
     };
-  }, [mainMeterTemplate]);
+  }, [selectedSiteId, selectedDeviceId, globalInterval]);
 
-  const checkFields = (configName, fields) => {
-    if (!mainMeterTemplateRef.current?.mapping) return false;
-    const config = mainMeterTemplateRef.current.mapping[configName];
-    if (!config || config.enabled === false) return false;
-    return fields.some(field => config[field] && String(config[field]).trim() !== '');
+  const getRangesForSetting = (setting) => {
+    const items = [];
+    if (setting.criticalHigh !== null && setting.criticalHigh !== undefined) {
+      items.push({ color: '#ef4444', label: 'Critical High', value: `>${setting.criticalHigh} ${setting.unit || ''}` });
+    }
+    if (setting.warningHigh !== null && setting.warningHigh !== undefined) {
+      items.push({ color: '#eab308', label: 'Warning High', value: `>${setting.warningHigh} ${setting.unit || ''}` });
+    }
+    if (setting.warningLow !== null && setting.warningLow !== undefined) {
+      items.push({ color: '#eab308', label: 'Warning Low', value: `<${setting.warningLow} ${setting.unit || ''}` });
+    }
+    if (setting.criticalLow !== null && setting.criticalLow !== undefined) {
+      items.push({ color: '#ef4444', label: 'Critical Low', value: `<${setting.criticalLow} ${setting.unit || ''}` });
+    }
+    
+    if (items.length > 0) {
+      return [{ title: 'Threshold Limits', items }];
+    }
+    return null;
   };
 
-  const chartVisibility = {
-    voltage: checkFields('emVoltageConfig', ['vR', 'vY', 'vB', 'vRY', 'vYB', 'vBR', 'vRN', 'vYN', 'vBN']) || checkFields('emChangeConfig', ['vR', 'vY', 'vB', 'vRY', 'vYB', 'vBR']),
-    current: checkFields('emCurrentConfig', ['iR', 'iY', 'iB']) || checkFields('emChangeConfig', ['iR', 'iY', 'iB']),
-    power: checkFields('emPowerConfig', ['activePower', 'reactivePower', 'apparentPower', 'totalKw', 'totalKva']) || checkFields('emChangeConfig', ['totalKw', 'totalKva', 'reactivePower', 'apparentPower']),
-    system: checkFields('emSystemConfig', ['freq', 'pf']) || checkFields('emChangeConfig', ['freq', 'pf']),
-    consumption: checkFields('emConsumptionConfig', ['cumulativekWh', 'ebKwh', 'dgKwh']) || checkFields('emReadConfig', ['ebKwh']) || checkFields('emChangeConfig', ['ebKwh', 'dgKwh']),
-    apparentConsumption: checkFields('emConsumptionConfig', ['ebKvah']) || checkFields('emReadConfig', ['ebKvah']) || checkFields('emChangeConfig', ['ebKvah'])
+  const getChartType = (name) => {
+    const n = String(name).toLowerCase();
+    if (n.includes('energy') || n.includes('consumption')) return 'bar';
+    if (n.includes('pf') || n.includes('frequency') || n.includes('freq') || n.includes('aqi') || n.includes('humidity') || n.includes('co2')) return 'area';
+    return 'line';
+  };
+
+  const getChartColor = (index) => {
+    const palette = ['#e05e00', '#0ea5e9', '#10b981', '#8b5cf6', '#ef4444', '#f59e0b', '#ec4899', '#14b8a6'];
+    return palette[index % palette.length];
   };
 
   const activeData = globalInterval === 'live' ? historyLog : historicalData;
 
   return (
     <div className="fade-in px-2 px-md-4 py-3">
-      {/* Page Header */}
       <div className="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 p-4 rounded-4" style={{ background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(15,23,42,0.7))', border: '1px solid rgba(255, 107, 0, 0.15)', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
         <div>
           <h2 className="mb-1 text-white fw-bold d-flex align-items-center gap-3 flex-wrap">
             <div className="p-2 rounded-3" style={{ background: 'rgba(255, 107, 0, 0.15)', border: '1px solid rgba(255,107,0,0.3)' }}>
               <Zap className="text-warning text-shrink-0" size={28} />
             </div>
-            Energy Advanced Analytics
+            {categoryContext === 'ENERGY_METER' ? 'Energy Advanced Analytics' : 'AQI Environmental Analytics'}
           </h2>
           <p className="text-secondary fs-7 mb-0 mt-2">Continuous telemetry analytics logs tracking all parameters flawlessly.</p>
         </div>
       </div>
 
-      {/* Filter Panel */}
       <Card className="mb-4 border-0" style={{ background: 'linear-gradient(145deg, #111827 0%, #0f172a 100%)', borderRadius: '16px', border: '1px solid rgba(249, 115, 22, 0.15)', boxShadow: '0 8px 30px rgba(0,0,0,0.2)' }}>
         <Card.Body className="p-3">
           <Row className="g-3 align-items-center">
-            {/* Site Select */}
             {sites.length > 0 && (
               <Col xs={12} md={6} lg={3}>
                 <Form.Group>
@@ -1068,29 +884,29 @@ const EnergyGraphs = () => {
               </Col>
             )}
 
-            {/* Meter Select */}
             <Col xs={12} md={6} lg={sites.length > 0 ? 3 : 4}>
               <Form.Group>
-                <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>DEVICE / METER</Form.Label>
+                <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>
+                  {categoryContext === 'ENERGY_METER' ? 'ENERGY METER / DEVICE' : 'AQI SENSOR / NODE'}
+                </Form.Label>
                 <Form.Select
                   size="sm"
                   className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
-                  value={selectedMeterId}
-                  onChange={(e) => setSelectedMeterId(e.target.value)}
+                  value={selectedDeviceId}
+                  onChange={(e) => setSelectedDeviceId(e.target.value)}
                 >
-                  {energyMeters.length === 0 && (
-                    <option value="">No sub-meters configured</option>
+                  {devices.length === 0 && (
+                    <option value="">No devices configured</option>
                   )}
-                  {energyMeters.map(meter => (
-                    <option key={meter.id} value={meter.id}>
-                      {meter.name || meter.mapping?.energyMeteringTarget || 'Unnamed Meter'}
+                  {devices.map(d => (
+                    <option key={d.id} value={String(d.id)}>
+                      {d.name || d.description || 'Unnamed Device'}
                     </option>
                   ))}
                 </Form.Select>
               </Form.Group>
             </Col>
 
-            {/* Interval Select */}
             <Col xs={12} md={6} lg={sites.length > 0 ? 2 : 3}>
               <Form.Group>
                 <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>CHART INTERVAL</Form.Label>
@@ -1108,7 +924,6 @@ const EnergyGraphs = () => {
               </Form.Group>
             </Col>
 
-            {/* From Date */}
             {globalInterval !== 'live' && (
               <Col xs={6} md={3} lg={2}>
                 <Form.Group>
@@ -1125,7 +940,6 @@ const EnergyGraphs = () => {
               </Col>
             )}
 
-            {/* To Date */}
             {globalInterval !== 'live' && (
               <Col xs={6} md={3} lg={2}>
                 <Form.Group>
@@ -1141,153 +955,88 @@ const EnergyGraphs = () => {
                 </Form.Group>
               </Col>
             )}
+
+            {settings.length > 0 && (
+              <Col xs={12} className="mt-3">
+                <div className="p-3 rounded-3" style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <div className="text-secondary fs-8 fw-bold mb-2 uppercase tracking-widest" style={{ letterSpacing: '0.5px' }}>SELECT PARAMETERS TO PLOT</div>
+                  <div className="d-flex flex-wrap gap-3">
+                    {settings.map(setting => {
+                      const isChecked = selectedSettings.includes(setting.sochiotFieldName);
+                      return (
+                        <Form.Check
+                          key={setting.sochiotFieldName}
+                          type="checkbox"
+                          id={`chk-${setting.sochiotFieldName}`}
+                          label={`${setting.displayName} ${setting.unit ? `(${setting.unit})` : ''}`}
+                          checked={isChecked}
+                          onChange={() => {
+                            setSelectedSettings(prev =>
+                              isChecked
+                                ? prev.filter(k => k !== setting.sochiotFieldName)
+                                : [...prev, setting.sochiotFieldName]
+                            );
+                          }}
+                          className="text-white fs-8 fw-medium cursor-pointer scada-checkbox"
+                          style={{ cursor: 'pointer' }}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              </Col>
+            )}
           </Row>
         </Card.Body>
       </Card>
 
       <div className="energy-graphs-container mb-4" style={{ minHeight: '60vh' }}>
-        {loadingHistory || isSwitching ? (
+        {loadingHistory || isSwitching || loadingDevices || loadingSettings ? (
           <div className="d-flex flex-column justify-content-center align-items-center h-100" style={{ minHeight: '400px' }}>
-            <div className="spinner-border text-warning mb-3" role="status" style={{ width: '3rem', height: '3rem', filter: 'drop-shadow(0 0 10px rgba(249,115,22,0.8))' }}>
+            <div className="spinner-border text-warning mb-3" role="status" style={{ width: '3rem', height: '3rem', filter: 'drop-shadow(0 0 10px rgba(224, 94, 0, 0.8))' }}>
               <span className="visually-hidden">Loading...</span>
             </div>
-            <h5 className="text-warning fw-black uppercase tracking-widest" style={{ letterSpacing: '2px', animation: 'pulse 1.5s infinite' }}>
+            <h5 className="text-warning fw-black uppercase tracking-widest" style={{ letterSpacing: '2px', animation: 'pulse 1.5s infinite', color: 'var(--scada-accent)' }}>
               Fetching Telemetry Snapshots...
             </h5>
             <small className="text-secondary opacity-50 uppercase tracking-widest">Querying database</small>
           </div>
-        ) : globalInterval !== 'live' && historicalData.length === 0 ? (
+        ) : selectedDeviceId && selectedSettings.length === 0 ? (
           <div className="d-flex flex-column justify-content-center align-items-center h-100 border border-secondary border-opacity-25 rounded-4 p-5" style={{ minHeight: '400px', background: 'rgba(15, 23, 42, 0.4)' }}>
-            <Activity className="text-warning mb-3 opacity-50 animate-pulse" size={48} />
-            <h5 className="text-white fw-bold mb-2">No Historical Data Found</h5>
-            <p className="text-secondary text-center max-w-md mb-0">No telemetry snapshots are available for the selected sub-meter in this date range. Try choosing a different date range or interval.</p>
+            <Activity className="text-warning mb-3 opacity-50" size={48} />
+            <h5 className="text-white fw-bold mb-2">No Parameters Selected</h5>
+            <p className="text-secondary text-center max-w-md mb-0">Please select at least one telemetry parameter checkbox above to plot the graphs.</p>
+          </div>
+        ) : !selectedDeviceId ? (
+          <div className="d-flex flex-column justify-content-center align-items-center h-100 border border-secondary border-opacity-25 rounded-4 p-5" style={{ minHeight: '400px', background: 'rgba(15, 23, 42, 0.4)' }}>
+            <Activity className="text-warning mb-3 opacity-50" size={48} />
+            <h5 className="text-white fw-bold mb-2">No Mapped Devices Found</h5>
+            <p className="text-secondary text-center max-w-md mb-0">Please verify that you have registered and mapped devices in the template manager.</p>
           </div>
         ) : (
           <Row className="g-4">
-            {chartVisibility.voltage && (
-              <Col lg={12} className="graph-slide-up" style={{ animationDelay: '0.1s' }}>
-                <ChartRow 
-                  title="Supply Voltage" 
-                  unit="Volts (V)" 
-                  data={activeData} 
-                  globalInterval={globalInterval}
-                  dataKeys={[
-                    {key: 'vRN', name: 'VR-N'}, 
-                    {key: 'vYN', name: 'VY-N'}, 
-                    {key: 'vBN', name: 'VB-N'}
-                  ]} 
-                  defaultColors={['#ef4444', '#facc15', '#3b82f6']} 
-                  type="line"
-                  ranges={globalRanges.voltage}
-                  onUpdateRanges={(r) => handleUpdateRange('voltage', r)}
-                />
-              </Col>
-            )}
-            
-            {chartVisibility.current && (
-              <Col lg={12} className="graph-slide-up" style={{ animationDelay: '0.2s' }}>
-                <ChartRow 
-                  title="Current" 
-                  unit="Amperes (A)" 
-                  data={activeData} 
-                  globalInterval={globalInterval}
-                  dataKeys={[
-                    {key: 'iR', name: 'I1'}, 
-                    {key: 'iY', name: 'I2'}, 
-                    {key: 'iB', name: 'I3'}
-                  ]} 
-                  defaultColors={['#ef4444', '#facc15', '#3b82f6']} 
-                  type="line"
-                  ranges={globalRanges.current}
-                  onUpdateRanges={(r) => handleUpdateRange('current', r)}
-                />
-              </Col>
-            )}
-
-            {chartVisibility.power && (
-              <>
-                <Col lg={12} className="graph-slide-up" style={{ animationDelay: '0.3s' }}>
-                  <ChartRow 
-                    title="Apparent Power" 
-                    unit="kVA" 
-                    data={activeData} 
-                    globalInterval={globalInterval}
-                    dataKeys={[{key: 'totalKva', name: 'kVA'}]} 
-                    defaultColors={['#0ea5e9']} 
-                    type="bar"
-                    ranges={globalRanges.demand}
-                    onUpdateRanges={(r) => handleUpdateRange('demand', r)}
-                  />
-                </Col>
-
-                <Col lg={12} className="graph-slide-up" style={{ animationDelay: '0.4s' }}>
-                  <ChartRow 
-                    title="Reactive Power" 
-                    unit="kVAR" 
-                    data={activeData} 
-                    globalInterval={globalInterval}
-                    dataKeys={[{key: 'reactivePower', name: 'kVAR'}]} 
-                    defaultColors={['#64748b']} 
-                    type="area"
-                  />
-                </Col>
-              </>
-            )}
-
-            {chartVisibility.system && (
-              <Col lg={12} className="graph-slide-up" style={{ animationDelay: '0.5s' }}>
-                <ChartRow 
-                  title="Frequency" 
-                  unit="Hz" 
-                  data={activeData} 
-                  globalInterval={globalInterval}
-                  dataKeys={[{key: 'freq', name: 'Freq'}]} 
-                  defaultColors={['#8b5cf6']} 
-                  type="bar"
-                  ranges={globalRanges.frequency}
-                  onUpdateRanges={(r) => handleUpdateRange('frequency', r)}
-                />
-              </Col>
-            )}
-
-            {chartVisibility.consumption && (
-              <Col lg={12} className="graph-slide-up" style={{ animationDelay: '0.6s' }}>
-                <ChartRow 
-                  title="Power Consumption (Active)" 
-                  unit="kWH" 
-                  data={activeData} 
-                  globalInterval={globalInterval}
-                  dataKeys={[
-                    {key: 'ebKwh', name: 'EB kWH'}, 
-                    {key: 'dgKwh', name: 'DG kWH'}
-                  ]} 
-                  defaultColors={['#38bdf8', '#f59e0b']} 
-                  type="bar"
-                  isStacked={true}
-                  ranges={globalRanges.demand}
-                  onUpdateRanges={(r) => handleUpdateRange('demand', r)}
-                />
-              </Col>
-            )}
-
-            {chartVisibility.apparentConsumption && (
-              <Col lg={12} className="graph-slide-up" style={{ animationDelay: '0.7s' }}>
-                <ChartRow 
-                  title="Power Consumption (Apparent)" 
-                  unit="kVAH" 
-                  data={activeData} 
-                  globalInterval={globalInterval}
-                  dataKeys={[
-                    {key: 'ebKvah', name: 'EB kVAH'}
-                  ]} 
-                  defaultColors={['#10b981']} 
-                  type="bar"
-                  ranges={globalRanges.demand}
-                  onUpdateRanges={(r) => handleUpdateRange('demand', r)}
-                />
-              </Col>
-            )}
-
+            {settings
+              .filter(setting => selectedSettings.includes(setting.sochiotFieldName))
+              .map((setting, idx) => {
+                const chartType = getChartType(setting.displayName);
+                const chartColor = getChartColor(idx);
+                const ranges = getRangesForSetting(setting);
+                
+                return (
+                  <Col lg={12} key={setting.sochiotFieldName} className="graph-slide-up" style={{ animationDelay: `${idx * 0.05}s` }}>
+                    <ChartRow 
+                      title={setting.displayName}
+                      unit={setting.unit || ''}
+                      data={activeData}
+                      globalInterval={globalInterval}
+                      dataKeys={[{ key: setting.sochiotFieldName, name: setting.displayName }]}
+                      defaultColors={[chartColor]}
+                      type={chartType}
+                      ranges={ranges}
+                    />
+                  </Col>
+                );
+              })}
           </Row>
         )}
       </div>

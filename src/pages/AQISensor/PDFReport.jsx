@@ -13,9 +13,13 @@ const PARAMETERS = [
   { key: 'aqi', label: 'AQI (Index)', defaultKey: 'aqi' }
 ];
 
+const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3002/api/v1';
+
 const AQIPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();
   const [templates, setTemplates] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
   const [selectedSensor, setSelectedSensor] = useState('');
   const [generating, setGenerating] = useState(false);
   const [downloadType, setDownloadType] = useState(null);
@@ -32,17 +36,57 @@ const AQIPDFReport = () => {
   const [interval, setIntervalVal] = useState('HOURLY');
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Load templates on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('scada_templates');
-    if (saved) {
-      try {
-        setTemplates(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse templates:', e);
-      }
+  const siteId = useMemo(() => {
+    try {
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
+    } catch (e) {
+      return localStorage.getItem('selectedSiteId') || '1';
     }
+  }, []);
 
+  // Fetch dynamic devices on mount
+  useEffect(() => {
+    const fetchDevices = async () => {
+      setLoadingDevices(true);
+      setErrorMsg(null);
+      try {
+        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token');
+        const res = await fetch(`${API_BASE_URL}/sites/${siteId}/devices`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to fetch devices: ${res.statusText}`);
+        }
+        const result = await res.json();
+        if (result.success && Array.isArray(result.data)) {
+          setDevices(result.data);
+        } else {
+          setDevices([]);
+        }
+      } catch (err) {
+        console.error('Error fetching devices:', err);
+        setErrorMsg('Failed to fetch devices. Using cached templates.');
+        
+        // Fallback: templates cache
+        const saved = localStorage.getItem('scada_templates');
+        if (saved) {
+          try {
+            setTemplates(JSON.parse(saved));
+          } catch (e) {}
+        }
+      } finally {
+        setLoadingDevices(false);
+      }
+    };
+
+    fetchDevices();
+  }, [siteId]);
+
+  // Load templates on mount as fallback
+  useEffect(() => {
     fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
@@ -81,15 +125,35 @@ const AQIPDFReport = () => {
 
   // Filter templates for AQI Sensors / Temp & Humidity
   const aqiSensorOptions = useMemo(() => {
+    if (devices.length > 0) {
+      return devices
+        .filter(d => String(d.category).toUpperCase() === 'AQI_SENSOR')
+        .map(d => ({
+          id: d.id,
+          label: d.name,
+          description: d.description,
+          areaName: d.area?.name || d.building?.name || '',
+          sochiotDeviceId: d.sochiotDeviceId,
+          sochiotMeta: d.sochiotMeta,
+          isActive: d.isActive
+        }))
+        .sort((a, b) => naturalSort(a.label, b.label));
+    }
+
+    // Fallback: templates mapping
     return templates
       .filter(t => (t.category === 'VRV' || t.category === 'AQI Sensor') && t.module === 'Temp & Humidity')
       .map(t => ({
         id: t.id,
         label: t.mapping?.vrvConfig?.vrvZone || t.name,
-        type: 'aqi'
+        description: 'AQI Sensor • Environmental target',
+        areaName: '',
+        sochiotDeviceId: t.mapping?.deviceId || t.mapping?.vrvConfig?.device,
+        sochiotMeta: null,
+        isActive: false
       }))
       .sort((a, b) => naturalSort(a.label, b.label));
-  }, [templates]);
+  }, [devices, templates]);
 
   // Auto-select first sensor
   useEffect(() => {
@@ -104,6 +168,13 @@ const AQIPDFReport = () => {
 
   // Helper to check device online status
   const getSensorOnlineStatus = (sensorId) => {
+    const option = aqiSensorOptions.find(s => String(s.id) === String(sensorId));
+    if (!option) return false;
+    
+    if (option.sochiotMeta) {
+      return option.sochiotMeta.mode === 'ONLINE' || option.isActive;
+    }
+
     const template = templates.find(t => String(t.id) === String(sensorId));
     if (!template || !template.mapping) return false;
 
@@ -120,33 +191,77 @@ const AQIPDFReport = () => {
   };
 
   const handleDownload = async (type) => {
+    if (!selectedSensor) return;
     setGenerating(true);
     setDownloadType(type);
     setDownloadSuccess(null);
     setErrorMsg(null);
 
+    const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token');
+    const startDate = `${fromDate}T00:00:00Z`;
+    const endDate = `${toDate}T23:59:59Z`;
+    const apiInterval = interval === '15_MIN' ? 'MIN_15' : interval;
+
     try {
-      // Bypassing API fetches for PDF Reports as requested - generate client-side simulated data instead
-      setTimeout(() => {
-        try {
-          generateClientSideReport(type);
-        } catch (e) {
-          console.error('Failed to generate report:', e);
-          setErrorMsg('Failed to generate report.');
-        } finally {
-          setGenerating(false);
-          setDownloadType(null);
+      if (type === 'excel') {
+        const url = `${API_BASE_URL}/reports/temperature-humidity?deviceId=${selectedSensor}&startDate=${startDate}&endDate=${endDate}&interval=${apiInterval}&format=xlsx`;
+        const res = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (!res.ok) {
+          const text = await res.text();
+          let json;
+          try { json = JSON.parse(text); } catch (e) {}
+          throw new Error(json?.message || json?.error || `Download failed: ${res.statusText}`);
         }
-      }, 1000);
+
+        const blob = await res.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `${selectedSensorInfo?.label || 'Sensor'}_Temp_Humidity_Report_${fromDate}_to_${toDate}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+        
+        setDownloadSuccess('excel');
+        setTimeout(() => setDownloadSuccess(null), 4000);
+      } else if (type === 'pdf') {
+        const url = `${API_BASE_URL}/reports/temperature-humidity?deviceId=${selectedSensor}&startDate=${startDate}&endDate=${endDate}&interval=${apiInterval}`;
+        const res = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (!res.ok) {
+          const text = await res.text();
+          let json;
+          try { json = JSON.parse(text); } catch (e) {}
+          throw new Error(json?.message || json?.error || `Fetch failed: ${res.statusText}`);
+        }
+
+        const result = await res.json();
+        if (result.success && result.data) {
+          generatePdfFromMergedData(result.data);
+        } else {
+          throw new Error(result.error || 'Failed to retrieve report data');
+        }
+      }
     } catch (err) {
       console.error('Download error:', err);
       setErrorMsg(`Failed to generate report: ${err.message || err}`);
+    } finally {
       setGenerating(false);
       setDownloadType(null);
     }
   };
 
-  const generatePdfFromMergedData = (rows) => {
+  const generatePdfFromMergedData = (reportData) => {
     const sensorLabel = selectedSensorInfo?.label || 'AQI Sensor';
     const dateStr = new Date().toLocaleString();
     const doc = new jsPDF('l', 'mm', 'a4'); // Landscape A4
@@ -166,21 +281,63 @@ const AQIPDFReport = () => {
     
     const fmt = (val, dec = 2) => val !== null && val !== undefined ? Number(val).toFixed(dec) : '-';
 
-    const tableBody = rows.map(r => [
-      new Date(r.windowStart).toLocaleString('en-IN'),
-      new Date(r.windowEnd).toLocaleString('en-IN'),
-      fmt(r.values.temp, 2),
-      fmt(r.values.hum, 1),
-      fmt(r.values.co2, 0),
-      fmt(r.values.tvoc, 0),
-      fmt(r.values.aqi, 2)
-    ]);
+    const summary = reportData?.summary;
+    if (summary) {
+      doc.setFontSize(10);
+      doc.setTextColor(30, 41, 59); // Slate 800
+      doc.setFont('helvetica', 'bold');
+      doc.text('SUMMARY STATISTICS', 14, 48);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105); // Slate 600
+      
+      doc.text(`Average Temperature: ${fmt(summary.avgTemperature, 2)} °C`, 14, 54);
+      doc.text(`Average Humidity: ${fmt(summary.avgHumidity, 2)} %`, 14, 59);
+      doc.text(`Min Temperature: ${fmt(summary.minTemperature, 2)} °C`, 95, 54);
+      doc.text(`Max Temperature: ${fmt(summary.maxTemperature, 2)} °C`, 95, 59);
+      
+      doc.setDrawColor(224, 94, 0, 0.15);
+      doc.line(14, 68, 283, 68);
+    }
+
+    const rows = reportData?.data || [];
+    const tableBody = rows.map((item, idx) => {
+      const start = new Date(item.windowStart);
+      const end = new Date(item.windowEnd);
+      const devTemp = item.temperatureAvg !== null ? item.temperatureAvg - 24 : null;
+      const devHum = item.humidityAvg !== null ? item.humidityAvg - 50 : null;
+
+      const formatDate = (d) => {
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+      };
+
+      const formatTimeRange = (s, e) => {
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(s.getUTCHours())}:${pad(s.getUTCMinutes())} - ${pad(e.getUTCHours())}:${pad(e.getUTCMinutes())}`;
+      };
+
+      return [
+        idx + 1,
+        selectedSensorInfo?.areaName || '-',
+        sensorLabel,
+        formatDate(start),
+        formatTimeRange(start, end),
+        fmt(item.temperatureAvg, 2),
+        fmt(item.humidityAvg, 2),
+        fmt(devTemp, 2),
+        fmt(devHum, 2)
+      ];
+    });
+
+    const startTableY = summary ? 72 : 46;
 
     autoTable(doc, {
-      startY: 46,
+      startY: startTableY,
       head: [[
-        'Start Time', 'End Time', 
-        'Temperature (°C)', 'Humidity (%)', 'CO2 (PPM)', 'TVOC (PPM)', 'AQI (Index)'
+        'Sr.No', 'Zone', 'Node', 'Date', 'Time', 
+        'Avg. Temp (°C)', 'Avg. Humidity (%)', 'Deviation Temp', 'Deviation Hum'
       ]],
       body: tableBody,
       theme: 'grid',
@@ -191,96 +348,23 @@ const AQIPDFReport = () => {
         fontStyle: 'bold',
         halign: 'center'
       },
-      columnStyles: {
-        0: { halign: 'left', cellWidth: 45 },
-        1: { halign: 'left', cellWidth: 45 },
-        2: { halign: 'center' },
-        3: { halign: 'center' },
-        4: { halign: 'center' },
-        5: { halign: 'center' },
-        6: { halign: 'center' }
-      },
       styles: {
         fontSize: 9,
         cellPadding: 3
       }
     });
 
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(`Page ${i} of ${pageCount} - TRUEiSENSE Smart Monitoring System`, 14, 200);
+    }
+
     doc.save(`AQI_Telemetry_Report_${sensorLabel.replace(/[^a-z0-9]/gi, '_')}.pdf`);
     setDownloadSuccess('PDF Report downloaded successfully.');
     setTimeout(() => setDownloadSuccess(null), 4000);
-  };
-
-  const generateExcelFromMergedData = (rows) => {
-    const sensorLabel = selectedSensorInfo?.label || 'AQI Sensor';
-    let csvContent = "data:text/csv;charset=utf-8,";
-    
-    // Title
-    csvContent += `"AQI & ENVIRONMENT TELEMETRY REPORT - ${sensorLabel}"\r\n`;
-    csvContent += `"Generated on: ${new Date().toLocaleString()}"\r\n`;
-    csvContent += `"Ledger Period: From ${fromDate} to ${toDate} (Interval: ${interval})"\r\n\r\n`;
-    
-    // Headers
-    csvContent += `"Start Time","End Time","Temperature (Deg.C)","Humidity (%)","CO2 (PPM)","TVOC (PPM)","AQI (Index)"\r\n`;
-
-    const fmt = (val, dec = 2) => val !== null && val !== undefined ? Number(val).toFixed(dec) : '';
-
-    rows.forEach(r => {
-      const startTime = new Date(r.windowStart).toLocaleString('en-IN');
-      const endTime = new Date(r.windowEnd).toLocaleString('en-IN');
-      csvContent += `"${startTime}","${endTime}",${fmt(r.values.temp, 2)},${fmt(r.values.hum, 1)},${fmt(r.values.co2, 0)},${fmt(r.values.tvoc, 0)},${fmt(r.values.aqi, 2)}\r\n`;
-    });
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `AQI_Telemetry_${sensorLabel.replace(/[^a-z0-9]/gi, '_')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setDownloadSuccess('CSV Spreadsheet downloaded successfully.');
-    setTimeout(() => setDownloadSuccess(null), 4000);
-  };
-
-  // Fallback client side simulator
-  const generateClientSideReport = (type) => {
-    const sensorLabel = selectedSensorInfo?.label || 'AQI Sensor';
-    const rows = [];
-    const fromTime = new Date(`${fromDate}T00:00:00`);
-    const toTime = new Date(`${toDate}T23:59:59`);
-    
-    let intervalMs = 60 * 60 * 1000; // Hourly
-    if (interval === '15_MIN') intervalMs = 15 * 60 * 1000;
-    else if (interval === 'DAILY') intervalMs = 24 * 60 * 60 * 1000;
-    else if (interval === 'YEARLY') intervalMs = 365 * 24 * 60 * 60 * 1000;
-
-    let steps = Math.min(100, Math.floor((toTime - fromTime) / intervalMs));
-    if (steps <= 0) steps = 24;
-
-    for (let i = 0; i <= steps; i++) {
-      const snapStart = new Date(fromTime.getTime() + (i * intervalMs));
-      if (snapStart > toTime) break;
-      const snapEnd = new Date(snapStart.getTime() + intervalMs);
-      
-      rows.push({
-        windowStart: snapStart.toISOString(),
-        windowEnd: snapEnd.toISOString(),
-        values: {
-          temp: 21.4 + (Math.random() * 4 - 2),
-          hum: 48.5 + (Math.random() * 10 - 5),
-          co2: 480 + Math.round(Math.random() * 80),
-          tvoc: 62 + Math.round(Math.random() * 15),
-          aqi: 22.45 + (Math.random() * 5)
-        }
-      });
-    }
-
-    if (type === 'pdf') {
-      generatePdfFromMergedData(rows);
-    } else {
-      generateExcelFromMergedData(rows);
-    }
   };
 
   return (

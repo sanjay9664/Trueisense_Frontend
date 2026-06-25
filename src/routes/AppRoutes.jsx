@@ -243,6 +243,7 @@ const AppRoutes = () => {
       {/* AQI Sensor */}
       <Route path="/aqi-sensor/overview" element={<OperatorRoute moduleKey="showAQISensor"><AQIOverview /></OperatorRoute>} />
       <Route path="/aqi-sensor/temp-humidity" element={<OperatorRoute moduleKey="showAQISensor"><VRVTempHumidity /></OperatorRoute>} />
+      <Route path="/aqi-sensor/graphs" element={<OperatorRoute moduleKey="showAQISensor"><EnergyGraphs /></OperatorRoute>} />
       <Route path="/aqi-sensor/report" element={<OperatorRoute moduleKey="showAQISensor"><AQIPDFReport /></OperatorRoute>} />
 
       {/* HVAC */}
