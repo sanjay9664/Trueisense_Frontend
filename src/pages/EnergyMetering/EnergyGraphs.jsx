@@ -8,6 +8,11 @@ import { useDeviceStatus } from '../../services/DeviceStatusContext';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3002/api/v1';
 
+const getLocalDateString = (date) => {
+  const tzOffset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - tzOffset).toISOString().slice(0, 10);
+};
+
 const VOLTAGE_RANGES = [
   {
     title: 'Single Phase',
@@ -65,17 +70,7 @@ const FREQUENCY_RANGES = [
   }
 ];
 
-const TIME_FILTERS = [
-  { label: 'Live Data', value: 'live' },
-  { label: '15 Min', value: '15m' },
-  { label: '30 Min', value: '30m' },
-  { label: '60 Min', value: '60m' },
-  { label: '12 Hours', value: '12h' },
-  { label: '24 Hours', value: '24h' },
-  { label: 'Weekly', value: 'week' },
-  { label: 'Monthly', value: 'month' },
-  { label: 'Yearly', value: 'year' },
-];
+
 
 // Synonyms mapping exactly as in MainMeter
 const PARAMETER_SYNONYMS = {
@@ -104,6 +99,10 @@ const PARAMETER_SYNONYMS = {
 
 const CustomTooltip = ({ active, payload, label, unit }) => {
   if (active && payload && payload.length) {
+    const dataPoint = payload[0].payload;
+    const displayDate = dataPoint?.fullDate || '';
+    const displayTime = dataPoint?.fullTime || dataPoint?.time || label;
+
     return (
       <div style={{
         background: 'rgba(15, 23, 42, 0.95)',
@@ -114,8 +113,13 @@ const CustomTooltip = ({ active, payload, label, unit }) => {
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
         minWidth: '180px'
       }}>
+        {displayDate && (
+          <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 'bold', marginBottom: '2px' }}>
+            Date : {displayDate}
+          </div>
+        )}
         <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '10px', borderBottom: '1px solid #334155', paddingBottom: '6px', fontWeight: 'bold' }}>
-          Time : {label}
+          Time : {displayTime}
         </div>
         {payload.map((entry, index) => (
           <div key={index} style={{ color: entry.color, fontSize: '0.95rem', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
@@ -134,8 +138,6 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
   const [colors, setColors] = useState(defaultColors);
   const [showRangeModal, setShowRangeModal] = useState(false);
   const [tempRanges, setTempRanges] = useState(ranges || []);
-  const [timeFilter, setTimeFilter] = useState('live');
-  const [localData, setLocalData] = useState([]);
 
   useEffect(() => {
     setTempRanges(ranges || []);
@@ -146,92 +148,13 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
     setShowRangeModal(false);
   };
 
-  const dataKeysRef = useRef(dataKeys);
-  useEffect(() => {
-    dataKeysRef.current = dataKeys;
-  }, [dataKeys]);
-
-  useEffect(() => {
-    if (timeFilter === 'live') {
-      if (localData.length !== 0) {
-        setLocalData([]);
-      }
-      return;
-    }
-    
-    let points = 30;
-    let labelFormat = '';
-    
-    if (timeFilter === '15m') { points = 15; labelFormat = 'minute'; }
-    if (timeFilter === '30m') { points = 30; labelFormat = 'minute'; }
-    if (timeFilter === '60m') { points = 60; labelFormat = 'minute'; }
-    if (timeFilter === '12h') { points = 12; labelFormat = 'hour'; }
-    if (timeFilter === '24h') { points = 24; labelFormat = 'hour'; }
-    if (timeFilter === 'week') { points = 7; labelFormat = 'day'; }
-    if (timeFilter === 'month') { points = 30; labelFormat = 'day'; }
-    if (timeFilter === 'year') { points = 12; labelFormat = 'month'; }
-
-    const generated = [];
-    let baseVal = {};
-    const currentDataKeys = dataKeysRef.current;
-    
-    currentDataKeys.forEach(k => { 
-      baseVal[k.key] = Math.random() * 50 + 200; 
-      if(k.key.includes('i')) baseVal[k.key] = 45;
-      if(k.key.includes('totalKva')) baseVal[k.key] = 30;
-      if(k.key.includes('reactive')) baseVal[k.key] = 10;
-      if(k.key.includes('freq')) baseVal[k.key] = 50;
-      if(k.key.includes('ebKwh')) baseVal[k.key] = 15000;
-      if(k.key.includes('ebKvah')) baseVal[k.key] = 15500;
-      if(k.key.includes('dgKwh')) baseVal[k.key] = 500;
-    });
-
-    if (data && data.length > 0) {
-      const lastPoint = data[data.length - 1];
-      currentDataKeys.forEach(k => {
-        if (lastPoint[k.key] !== undefined) baseVal[k.key] = lastPoint[k.key];
-      });
-    }
-
-    const now = new Date();
-    for (let i = points; i >= 0; i--) {
-       const pointTime = new Date(now);
-       if (timeFilter === '15m' || timeFilter === '30m' || timeFilter === '60m') pointTime.setMinutes(now.getMinutes() - i);
-       if (timeFilter === '12h' || timeFilter === '24h') pointTime.setHours(now.getHours() - i);
-       if (timeFilter === 'week' || timeFilter === 'month') pointTime.setDate(now.getDate() - i);
-       if (timeFilter === 'year') pointTime.setMonth(now.getMonth() - i);
-       
-       let timeStr = '';
-       if (labelFormat === 'minute' || labelFormat === 'hour') {
-         timeStr = pointTime.toLocaleTimeString('en-US', {hour: '2-digit', minute:'2-digit'});
-       } else if (labelFormat === 'day') {
-         timeStr = pointTime.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
-       } else {
-         timeStr = pointTime.toLocaleDateString('en-US', {month: 'short', year: 'numeric'});
-       }
-
-       const point = { time: timeStr };
-       currentDataKeys.forEach(k => {
-         const noise = (Math.random() - 0.5) * (baseVal[k.key] * 0.05);
-         let val = baseVal[k.key] + noise;
-         if (isStacked || k.key.includes('Kwh') || k.key.includes('Kvah')) val = baseVal[k.key] + Math.random() * 5;
-         point[k.key] = +val.toFixed(2);
-         baseVal[k.key] = val; 
-       });
-       generated.push(point);
-    }
-    setLocalData(generated);
-  }, [timeFilter, isStacked]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const handleColorChange = (index, newColor) => {
     const updated = [...colors];
     updated[index] = newColor;
     setColors(updated);
   };
 
-  const chartData = (globalInterval && globalInterval !== 'live')
-    ? (data && data.length > 0 ? data : [])
-    : (timeFilter === 'live' ? (data && data.length > 0 ? data : []) : localData);
+  const chartData = data && data.length > 0 ? data : [];
 
   const renderChart = (height = 260, showLegend = true) => {
     let ChartComponent = LineChart;
@@ -275,7 +198,7 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
             domain={['auto', 'auto']}
           />
           
-          <Tooltip content={<CustomTooltip unit={unit} />} cursor={type === 'bar' ? { fill: 'rgba(255,255,255,0.05)' } : { stroke: '#64748b', strokeWidth: 1, strokeDasharray: '3 3' }} />
+          <Tooltip content={<CustomTooltip unit={unit} />} cursor={type === 'bar' ? { fill: 'rgba(255,255,255,0.05)' } : { stroke: '#64748b', strokeWidth: 1, strokeDasharray: '3 3' }} wrapperStyle={{ pointerEvents: 'none' }} />
           {showLegend && <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '15px' }} iconType="circle" />}
           
           {dataKeys.map((k, i) => {
@@ -333,26 +256,20 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
               <Activity size={14} className="text-info" /> {unit}
             </div>
 
-            {(!globalInterval || globalInterval === 'live') ? (
-              <Form.Group className="mb-4">
-                <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{letterSpacing: '0.5px'}}>FILTER RANGE</Form.Label>
-                <Form.Select 
-                  size="sm" 
-                  className="bg-dark text-white border-secondary shadow-none fs-8"
-                  value={timeFilter}
-                  onChange={(e) => setTimeFilter(e.target.value)}
-                >
-                  {TIME_FILTERS.map(tf => <option key={tf.value} value={tf.value}>{tf.label}</option>)}
-                </Form.Select>
-              </Form.Group>
-            ) : (
-              <div className="mb-4">
-                <div className="text-secondary fs-8 fw-bold mb-1" style={{letterSpacing: '0.5px'}}>INTERVAL</div>
+            <div className="mb-4">
+              <div className="text-secondary fs-8 fw-bold mb-1" style={{letterSpacing: '0.5px'}}>
+                {(!globalInterval || globalInterval === 'live') ? 'FILTER RANGE' : 'INTERVAL'}
+              </div>
+              {(!globalInterval || globalInterval === 'live') ? (
+                <span className="badge bg-success text-dark px-3 py-2 fw-bold rounded-pill uppercase" style={{ letterSpacing: '0.5px' }}>
+                  Live Data
+                </span>
+              ) : (
                 <span className="badge bg-warning text-dark px-3 py-2 fw-bold rounded-pill uppercase" style={{ letterSpacing: '0.5px' }}>
                   {globalInterval === 'MIN_15' ? '15 Min' : globalInterval === 'DAILY' ? 'Daily' : 'Yearly'}
                 </span>
-              </div>
-            )}
+              )}
+            </div>
 
             <div className="mt-auto">
               <div className="fs-8 text-secondary mb-2 uppercase tracking-widest fw-bold">Graph Colors</div>
@@ -382,7 +299,7 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
             </div>
           </Col>
           
-          <Col md={ranges ? 6 : 9} xl={ranges ? 7 : 10} className="p-4">
+          <Col md={ranges ? 6 : 9} xl={ranges ? 7 : 10} className="p-4" style={{ minWidth: 0 }}>
             {renderChart(280)}
           </Col>
 
@@ -425,15 +342,9 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
               </div>
               <div className="d-flex gap-3 ms-4 border-start border-secondary border-opacity-25 ps-4 flex-wrap align-items-center">
                 {(!globalInterval || globalInterval === 'live') ? (
-                  <Form.Select 
-                    size="sm" 
-                    className="bg-dark text-info border-secondary shadow-none fs-7 me-2 fw-bold"
-                    value={timeFilter}
-                    onChange={(e) => setTimeFilter(e.target.value)}
-                    style={{ width: '130px' }}
-                  >
-                    {TIME_FILTERS.map(tf => <option key={tf.value} value={tf.value}>{tf.label}</option>)}
-                  </Form.Select>
+                  <span className="badge bg-success text-dark px-3 py-2 fw-bold rounded-pill uppercase me-3" style={{ letterSpacing: '0.5px' }}>
+                    Live Data
+                  </span>
                 ) : (
                   <span className="badge bg-warning text-dark px-3 py-2 fw-bold rounded-pill uppercase me-3" style={{ letterSpacing: '0.5px' }}>
                     {globalInterval === 'MIN_15' ? '15 Min' : globalInterval === 'DAILY' ? 'Daily' : 'Yearly'}
@@ -558,6 +469,233 @@ const ChartRow = ({ title, unit, data, dataKeys, defaultColors, type = 'line', i
           box-shadow: 0 0 10px rgba(249, 115, 22, 0.25) !important;
           background-color: #1e293b !important;
         }
+        .filter-toggle-btn {
+          background: #0f172a !important;
+          border: 1px solid rgba(249, 115, 22, 0.25) !important;
+          color: #fff !important;
+          font-weight: 600;
+          border-radius: 8px;
+          padding: 8px 12px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          transition: all 0.3s;
+        }
+        .filter-toggle-btn:hover {
+          border-color: #f97316 !important;
+          box-shadow: 0 0 10px rgba(249, 115, 22, 0.25) !important;
+          background-color: #1e293b !important;
+        }
+        
+        /* Scada Filter Modal (Orange & Black Theme) */
+        .filter-modal .modal-content {
+          background: #09090b !important;
+          border: 1px solid rgba(249, 115, 22, 0.4) !important;
+          border-radius: 16px !important;
+          overflow: hidden;
+          box-shadow: 0 10px 40px rgba(249, 115, 22, 0.15) !important;
+        }
+        .filter-modal-header {
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+          background: #09090b !important;
+          padding: 12px 16px !important;
+        }
+        .filter-tab-container {
+          background: #18181b;
+          border: 1px solid #27272a;
+          border-radius: 30px;
+          padding: 3px;
+          display: flex;
+          margin-bottom: 12px;
+        }
+        .filter-tab-btn {
+          flex: 1;
+          text-align: center;
+          padding: 6px 12px;
+          border-radius: 30px;
+          font-weight: 700;
+          font-size: 0.85rem;
+          color: #a1a1aa;
+          background: transparent;
+          border: 0;
+          cursor: pointer;
+          transition: all 0.3s ease;
+        }
+        .filter-tab-btn.active {
+          background: #f97316 !important;
+          color: #000000 !important;
+        }
+        .filter-tab-btn:hover:not(.active) {
+          color: #ffffff;
+        }
+        .filter-card-box {
+          background: #111115;
+          border: 1px solid #27272a;
+          border-radius: 12px;
+          padding: 10px 14px;
+          margin-bottom: 10px;
+        }
+        .filter-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 6px;
+        }
+        .filter-card-title {
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: #ffffff;
+        }
+        .filter-pill-container {
+          display: inline-flex;
+          background: #09090b;
+          border: 1px solid #27272a;
+          border-radius: 30px;
+          padding: 2px;
+        }
+        .filter-pill-btn {
+          padding: 3px 12px;
+          border-radius: 30px;
+          font-size: 0.7rem;
+          font-weight: 600;
+          color: #a1a1aa;
+          background: transparent;
+          border: 0;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+        .filter-pill-btn.active {
+          background: rgba(249, 115, 22, 0.1) !important;
+          color: #f97316 !important;
+          border: 1px solid rgba(249, 115, 22, 0.3) !important;
+        }
+        .filter-timezone-badge {
+          background: transparent;
+          color: #f97316;
+          border: 1px solid rgba(249, 115, 22, 0.2);
+          border-radius: 6px;
+          padding: 3px 6px;
+          font-size: 0.7rem;
+          font-weight: bold;
+        }
+        .filter-select-custom {
+          background-color: #09090b !important;
+          color: #ffffff !important;
+          border: 1px solid #27272a !important;
+          border-radius: 8px !important;
+          padding: 6px 10px !important;
+          font-size: 0.8rem !important;
+          font-weight: 600 !important;
+          width: 100%;
+          outline: none;
+          transition: border-color 0.2s ease;
+        }
+        .filter-select-custom:focus {
+          border-color: #f97316 !important;
+          box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.2) !important;
+        }
+        .filter-input-custom {
+          background-color: #09090b !important;
+          color: #ffffff !important;
+          border: 1px solid #27272a !important;
+          border-radius: 8px !important;
+          padding: 6px 10px !important;
+          font-size: 0.8rem !important;
+          width: 100%;
+          outline: none;
+        }
+        .filter-input-custom:focus {
+          border-color: #f97316 !important;
+        }
+        .filter-modal-footer {
+          border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+          background: #09090b !important;
+          padding: 10px 16px !important;
+        }
+        .btn-cancel-custom {
+          background: transparent;
+          border: 1px solid #27272a;
+          color: #a1a1aa;
+          padding: 6px 16px;
+          border-radius: 30px;
+          font-weight: 600;
+          font-size: 0.8rem;
+          transition: all 0.2s ease;
+        }
+        .btn-cancel-custom:hover {
+          color: #ffffff;
+          border-color: #3f3f46;
+          background: rgba(255, 255, 255, 0.03);
+        }
+        .btn-update-custom {
+          background: #f97316;
+          border: none;
+          color: #000000;
+          padding: 6px 20px;
+          border-radius: 30px;
+          font-weight: 700;
+          font-size: 0.8rem;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
+        }
+        .btn-update-custom:hover {
+          background: #ea580c;
+          box-shadow: 0 4px 16px rgba(249, 115, 22, 0.4);
+        }
+        
+        /* Custom SCADA checkbox styling */
+        .scada-checkbox {
+          margin-bottom: 0px !important;
+        }
+        .scada-checkbox .form-check-input {
+          background-color: #09090b !important;
+          border: 1px solid #27272a !important;
+          border-radius: 4px !important;
+          cursor: pointer;
+          width: 14px;
+          height: 14px;
+          margin-top: 0.25em;
+        }
+        .scada-checkbox .form-check-input:checked {
+          background-color: #f97316 !important;
+          border-color: #f97316 !important;
+        }
+        .scada-checkbox .form-check-input:focus {
+          box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.2) !important;
+        }
+        .scada-checkbox .form-check-label {
+          color: #a1a1aa !important;
+          font-size: 0.75rem !important;
+          font-weight: 500;
+          cursor: pointer;
+          padding-left: 4px;
+        }
+        .scada-checkbox .form-check-input:checked + .form-check-label {
+          color: #ffffff !important;
+        }
+        
+        /* Two column layout for checkboxes grid */
+        .checkbox-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 6px 12px;
+        }
+        
+        /* Custom scrollbar for parameters box */
+        .filter-card-box div::-webkit-scrollbar {
+          width: 6px;
+        }
+        .filter-card-box div::-webkit-scrollbar-track {
+          background: #09090b;
+        }
+        .filter-card-box div::-webkit-scrollbar-thumb {
+          background: #27272a;
+          border-radius: 3px;
+        }
+        .filter-card-box div::-webkit-scrollbar-thumb:hover {
+          background: #ff6b00;
+        }
         `
       }} />
     </>
@@ -582,20 +720,102 @@ const EnergyGraphs = () => {
     return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
   });
 
-  const [globalInterval, setGlobalInterval] = useState('live');
+  const [globalInterval, setGlobalInterval] = useState('MIN_15');
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
-    return d.toISOString().split('T')[0];
+    return getLocalDateString(d);
   });
   const [toDate, setToDate] = useState(() => {
-    return new Date().toISOString().split('T')[0];
+    return getLocalDateString(new Date());
   });
   
   const [historicalData, setHistoricalData] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(false);
+
+  // Filter settings state
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [aggregation, setAggregation] = useState('Average'); // 'Average' | 'Minimum' | 'Maximum'
+  const [liveWindow, setLiveWindow] = useState('5 minutes'); // '5 minutes' | '15 minutes' | '30 minutes' | '1 hour'
+  const [livePill, setLivePill] = useState('Last'); // 'Last' | 'Relative'
+  const [historyPill, setHistoryPill] = useState('Range'); // 'Last' | 'Range' | 'Relative'
+  const [pollingIntervalMs, setPollingIntervalMs] = useState(5000);
+
+  // Temp states for modal fields
+  const [tempTab, setTempTab] = useState('history'); // 'realtime' | 'history'
+  const [tempLivePill, setTempLivePill] = useState('Last');
+  const [tempHistoryPill, setTempHistoryPill] = useState('Range');
+  const [tempLiveWindow, setTempLiveWindow] = useState('5 minutes');
+  const [tempAggregation, setTempAggregation] = useState('Average');
+  const [tempGroupingInterval, setTempGroupingInterval] = useState('15 Min');
+  const [tempFromDate, setTempFromDate] = useState('');
+  const [tempToDate, setTempToDate] = useState('');
+  const [tempSelectedSettings, setTempSelectedSettings] = useState([]);
+
+  const handleOpenFilter = () => {
+    setTempTab(globalInterval === 'live' ? 'realtime' : 'history');
+    setTempLivePill(livePill);
+    setTempHistoryPill(historyPill);
+    setTempLiveWindow(liveWindow);
+    setTempAggregation(aggregation);
+    setTempSelectedSettings(selectedSettings);
+    
+    let currentGrouping = '15 Min';
+    if (globalInterval === 'DAILY') currentGrouping = 'Daily';
+    if (globalInterval === 'YEARLY') currentGrouping = 'Yearly';
+    setTempGroupingInterval(currentGrouping);
+
+    setTempFromDate(fromDate);
+    setTempToDate(toDate);
+    setShowFilterModal(true);
+  };
+
+  const handleApplyFilter = () => {
+    setLivePill(tempLivePill);
+    setHistoryPill(tempHistoryPill);
+    setLiveWindow(tempLiveWindow);
+    setAggregation(tempAggregation);
+    setSelectedSettings(tempSelectedSettings);
+    
+    let targetInterval = 'live';
+    if (tempTab === 'history') {
+      if (tempGroupingInterval === '15 Min') targetInterval = 'MIN_15';
+      if (tempGroupingInterval === 'Daily') targetInterval = 'DAILY';
+      if (tempGroupingInterval === 'Yearly') targetInterval = 'YEARLY';
+    }
+    
+    setGlobalInterval(targetInterval);
+
+    if (tempTab === 'history') {
+      if (tempHistoryPill === 'Range') {
+        setFromDate(tempFromDate);
+        setToDate(tempToDate);
+      } else {
+        const d = new Date();
+        const todayStr = getLocalDateString(d);
+        setToDate(todayStr);
+
+        let days = 7;
+        if (tempHistoryPill === 'Last 30 Days') days = 30;
+        if (tempHistoryPill === 'Last Year') days = 365;
+        
+        d.setDate(d.getDate() - days);
+        setFromDate(getLocalDateString(d));
+      }
+    } else {
+      let intervalMs = 5000;
+      if (tempGroupingInterval === '1 second') intervalMs = 1000;
+      if (tempGroupingInterval === '5 seconds') intervalMs = 5000;
+      if (tempGroupingInterval === '10 seconds') intervalMs = 10000;
+      if (tempGroupingInterval === '30 seconds') intervalMs = 30000;
+      if (tempGroupingInterval === '1 minute') intervalMs = 60000;
+      setPollingIntervalMs(intervalMs);
+    }
+
+    setShowFilterModal(false);
+  };
 
   useEffect(() => {
     const fetchSites = async () => {
@@ -742,13 +962,29 @@ const EnergyGraphs = () => {
               } else {
                 formattedTime = dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
               }
+              const fullDateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+              const fullTimeStr = dateObj.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
               mergedData[timeKey] = {
                 time: formattedTime,
+                fullDate: fullDateStr,
+                fullTime: fullTimeStr,
                 windowStart: snap.windowStart,
                 windowEnd: snap.windowEnd
               };
             }
-            mergedData[timeKey][result.key] = snap.avgValue !== null && snap.avgValue !== undefined ? Number(Number(snap.avgValue).toFixed(2)) : null;
+            let valKey = 'avgValue';
+            if (aggregation === 'Min' || aggregation === 'Minimum') valKey = 'minValue';
+            else if (aggregation === 'Max' || aggregation === 'Maximum') valKey = 'maxValue';
+            else if (aggregation === 'Average') valKey = 'avgValue';
+            else if (aggregation === 'Sum') valKey = 'sumValue';
+            else if (aggregation === 'Count') valKey = 'countValue';
+            else if (aggregation === 'None') valKey = 'avgValue';
+            
+            let finalValue = snap[valKey];
+            if (finalValue === undefined || finalValue === null) {
+              finalValue = snap.avgValue ?? snap.minValue ?? snap.maxValue ?? null;
+            }
+            mergedData[timeKey][result.key] = finalValue !== null && finalValue !== undefined ? Number(Number(finalValue).toFixed(2)) : null;
           });
         });
 
@@ -762,7 +998,7 @@ const EnergyGraphs = () => {
     };
 
     loadHistoricalData();
-  }, [selectedSiteId, selectedDeviceId, selectedSettings, globalInterval, fromDate, toDate]);
+  }, [selectedSiteId, selectedDeviceId, selectedSettings, globalInterval, fromDate, toDate, aggregation]);
 
   useEffect(() => {
     if (globalInterval !== 'live' || !selectedDeviceId) {
@@ -786,17 +1022,28 @@ const EnergyGraphs = () => {
         if (result.success && Array.isArray(result.data)) {
           const liveFields = result.data;
           
+          const now = new Date();
           const newPoint = {
-            time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            time: now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            fullDate: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            fullTime: now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
           };
           
           liveFields.forEach(f => {
             newPoint[f.fieldKey] = f.numericValue !== null && f.numericValue !== undefined ? Number(Number(f.numericValue).toFixed(2)) : null;
           });
 
+          let maxPoints = 60;
+          const basePollSecs = pollingIntervalMs / 1000;
+          let windowSecs = 300;
+          if (liveWindow === '15 minutes') windowSecs = 900;
+          if (liveWindow === '30 minutes') windowSecs = 1800;
+          if (liveWindow === '1 hour') windowSecs = 3600;
+          maxPoints = Math.ceil(windowSecs / basePollSecs);
+
           setHistoryLog(prev => {
             const next = [...prev, newPoint];
-            return next.length > 80 ? next.slice(next.length - 80) : next;
+            return next.length > maxPoints ? next.slice(next.length - maxPoints) : next;
           });
         }
         setIsSwitching(false);
@@ -807,12 +1054,12 @@ const EnergyGraphs = () => {
     };
 
     fetchLiveStats();
-    const interval = setInterval(fetchLiveStats, 5000);
+    const interval = setInterval(fetchLiveStats, pollingIntervalMs);
 
     return () => {
       clearInterval(interval);
     };
-  }, [selectedSiteId, selectedDeviceId, globalInterval]);
+  }, [selectedSiteId, selectedDeviceId, globalInterval, pollingIntervalMs, liveWindow]);
 
   const getRangesForSetting = (setting) => {
     const items = [];
@@ -907,85 +1154,21 @@ const EnergyGraphs = () => {
               </Form.Group>
             </Col>
 
-            <Col xs={12} md={6} lg={sites.length > 0 ? 2 : 3}>
-              <Form.Group>
-                <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>CHART INTERVAL</Form.Label>
-                <Form.Select
+            <Col xs={12} md={6} lg={sites.length > 0 ? 3 : 4} className="d-flex align-items-end">
+              <Form.Group className="w-100">
+                <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>FILTRATION SETTINGS</Form.Label>
+                <Button 
+                  onClick={handleOpenFilter}
+                  className="filter-toggle-btn w-100"
                   size="sm"
-                  className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
-                  value={globalInterval}
-                  onChange={(e) => setGlobalInterval(e.target.value)}
+                  style={{ height: '38px', borderRadius: '8px' }}
                 >
-                  <option value="live">Live Data (Real-time)</option>
-                  <option value="MIN_15">15 Minutes</option>
-                  <option value="DAILY">Daily</option>
-                  <option value="YEARLY">Yearly</option>
-                </Form.Select>
+                  <Activity size={16} /> {globalInterval === 'live' ? 'Realtime (Polling)' : `History (${globalInterval === 'MIN_15' ? '15m' : globalInterval === 'DAILY' ? 'Daily' : 'Yearly'})`}
+                </Button>
               </Form.Group>
             </Col>
 
-            {globalInterval !== 'live' && (
-              <Col xs={6} md={3} lg={2}>
-                <Form.Group>
-                  <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>FROM DATE</Form.Label>
-                  <Form.Control
-                    type="date"
-                    size="sm"
-                    className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
-                    value={fromDate}
-                    onChange={(e) => setFromDate(e.target.value)}
-                    style={{ colorScheme: 'dark' }}
-                  />
-                </Form.Group>
-              </Col>
-            )}
-
-            {globalInterval !== 'live' && (
-              <Col xs={6} md={3} lg={2}>
-                <Form.Group>
-                  <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>TO DATE</Form.Label>
-                  <Form.Control
-                    type="date"
-                    size="sm"
-                    className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                    style={{ colorScheme: 'dark' }}
-                  />
-                </Form.Group>
-              </Col>
-            )}
-
-            {settings.length > 0 && (
-              <Col xs={12} className="mt-3">
-                <div className="p-3 rounded-3" style={{ background: 'rgba(15, 23, 42, 0.4)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                  <div className="text-secondary fs-8 fw-bold mb-2 uppercase tracking-widest" style={{ letterSpacing: '0.5px' }}>SELECT PARAMETERS TO PLOT</div>
-                  <div className="d-flex flex-wrap gap-3">
-                    {settings.map(setting => {
-                      const isChecked = selectedSettings.includes(setting.sochiotFieldName);
-                      return (
-                        <Form.Check
-                          key={setting.sochiotFieldName}
-                          type="checkbox"
-                          id={`chk-${setting.sochiotFieldName}`}
-                          label={`${setting.displayName} ${setting.unit ? `(${setting.unit})` : ''}`}
-                          checked={isChecked}
-                          onChange={() => {
-                            setSelectedSettings(prev =>
-                              isChecked
-                                ? prev.filter(k => k !== setting.sochiotFieldName)
-                                : [...prev, setting.sochiotFieldName]
-                            );
-                          }}
-                          className="text-white fs-8 fw-medium cursor-pointer scada-checkbox"
-                          style={{ cursor: 'pointer' }}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              </Col>
-            )}
+            {/* Parameters checklist has been removed so all graphable parameters are plotted by default */}
           </Row>
         </Card.Body>
       </Card>
@@ -1004,8 +1187,8 @@ const EnergyGraphs = () => {
         ) : selectedDeviceId && selectedSettings.length === 0 ? (
           <div className="d-flex flex-column justify-content-center align-items-center h-100 border border-secondary border-opacity-25 rounded-4 p-5" style={{ minHeight: '400px', background: 'rgba(15, 23, 42, 0.4)' }}>
             <Activity className="text-warning mb-3 opacity-50" size={48} />
-            <h5 className="text-white fw-bold mb-2">No Parameters Selected</h5>
-            <p className="text-secondary text-center max-w-md mb-0">Please select at least one telemetry parameter checkbox above to plot the graphs.</p>
+            <h5 className="text-white fw-bold mb-2">No Parameters Found</h5>
+            <p className="text-secondary text-center max-w-md mb-0">No graphable parameters have been mapped for this device.</p>
           </div>
         ) : !selectedDeviceId ? (
           <div className="d-flex flex-column justify-content-center align-items-center h-100 border border-secondary border-opacity-25 rounded-4 p-5" style={{ minHeight: '400px', background: 'rgba(15, 23, 42, 0.4)' }}>
@@ -1040,6 +1223,269 @@ const EnergyGraphs = () => {
           </Row>
         )}
       </div>
+      {/* Advanced Filter Settings Modal */}
+      <Modal show={showFilterModal} onHide={() => setShowFilterModal(false)} centered dialogClassName="filter-modal">
+        <Modal.Header className="filter-modal-header border-0 px-4 py-3">
+          <Modal.Title className="text-white fw-bold d-flex align-items-center justify-content-between w-100">
+            <span className="d-flex align-items-center gap-2" style={{ fontSize: '1.2rem' }}>
+              <Activity size={20} className="text-warning animate-pulse" />
+              Advanced Filters
+            </span>
+            <Button variant="link" className="text-white p-0 opacity-75 hover-opacity-100" onClick={() => setShowFilterModal(false)}>
+              <X size={20} />
+            </Button>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-4" style={{ background: '#09090b' }}>
+          {/* Tab Selector */}
+          <div className="filter-tab-container">
+            <button 
+              type="button" 
+              className={`filter-tab-btn ${tempTab === 'realtime' ? 'active' : ''}`}
+              onClick={() => {
+                setTempTab('realtime');
+                setTempAggregation('Average');
+                setTempGroupingInterval('5 seconds');
+              }}
+            >
+              Realtime
+            </button>
+            <button 
+              type="button" 
+              className={`filter-tab-btn ${tempTab === 'history' ? 'active' : ''}`}
+              onClick={() => {
+                setTempTab('history');
+                setTempAggregation('Average');
+                setTempGroupingInterval('15 Min');
+              }}
+            >
+              History
+            </button>
+          </div>
+
+          {tempTab === 'realtime' ? (
+            <div className="fade-in">
+              {/* Time window Card */}
+              <div className="filter-card-box">
+                <div className="filter-card-header">
+                  <span className="filter-card-title">Time window</span>
+                  <div className="filter-pill-container">
+                    <button 
+                      type="button" 
+                      className={`filter-pill-btn ${tempLivePill === 'Last' ? 'active' : ''}`}
+                      onClick={() => setTempLivePill('Last')}
+                    >
+                      Last
+                    </button>
+                    <button 
+                      type="button" 
+                      className={`filter-pill-btn ${tempLivePill === 'Relative' ? 'active' : ''}`}
+                      onClick={() => setTempLivePill('Relative')}
+                    >
+                      Relative
+                    </button>
+                  </div>
+                </div>
+
+                {tempLivePill === 'Last' && (
+                  <Form.Select 
+                    className="filter-select-custom mt-2"
+                    value={tempLiveWindow}
+                    onChange={(e) => setTempLiveWindow(e.target.value)}
+                  >
+                    <option value="5 minutes">5 minutes</option>
+                    <option value="15 minutes">15 minutes</option>
+                    <option value="30 minutes">30 minutes</option>
+                    <option value="1 hour">1 hour</option>
+                  </Form.Select>
+                )}
+                
+                {tempLivePill === 'Relative' && (
+                  <div className="text-secondary fs-8 italic mt-2">Relative window matches active site timezone offset.</div>
+                )}
+                
+                <div className="text-end mt-2">
+                  <span className="text-secondary fw-bold" style={{ fontSize: '0.75rem' }}>UTC+05:30</span>
+                </div>
+              </div>
+
+              {/* Aggregation & Grouping Row */}
+              <Row className="g-2 mb-2">
+                <Col xs={6}>
+                  <div className="filter-card-box mb-0 h-100">
+                    <div className="mb-2">
+                      <span className="filter-card-title">Aggregation</span>
+                    </div>
+                    <Form.Select 
+                      className="filter-select-custom"
+                      value={tempAggregation}
+                      onChange={(e) => setTempAggregation(e.target.value)}
+                    >
+                      <option value="Min">Min</option>
+                      <option value="Max">Max</option>
+                      <option value="Average">Average</option>
+                      <option value="Sum">Sum</option>
+                      <option value="Count">Count</option>
+                      <option value="None">None</option>
+                    </Form.Select>
+                  </div>
+                </Col>
+                <Col xs={6}>
+                  <div className="filter-card-box mb-0 h-100">
+                    <div className="mb-2">
+                      <span className="filter-card-title">Grouping interval</span>
+                    </div>
+                    <Form.Select 
+                      className="filter-select-custom"
+                      value={tempGroupingInterval}
+                      onChange={(e) => setTempGroupingInterval(e.target.value)}
+                    >
+                      <option value="1 second">1 second</option>
+                      <option value="5 seconds">5 seconds</option>
+                      <option value="10 seconds">10 seconds</option>
+                      <option value="30 seconds">30 seconds</option>
+                      <option value="1 minute">1 minute</option>
+                    </Form.Select>
+                  </div>
+                </Col>
+              </Row>
+            </div>
+          ) : (
+            <div className="fade-in">
+              {/* Time window Card */}
+              <div className="filter-card-box">
+                <div className="filter-card-header">
+                  <span className="filter-card-title">Time window</span>
+                  <div className="filter-pill-container">
+                    <button 
+                      type="button" 
+                      className={`filter-pill-btn ${tempHistoryPill.startsWith('Last') ? 'active' : ''}`}
+                      onClick={() => setTempHistoryPill('Last 7 Days')}
+                    >
+                      Last
+                    </button>
+                    <button 
+                      type="button" 
+                      className={`filter-pill-btn ${tempHistoryPill === 'Range' ? 'active' : ''}`}
+                      onClick={() => setTempHistoryPill('Range')}
+                    >
+                      Range
+                    </button>
+                    <button 
+                      type="button" 
+                      className={`filter-pill-btn ${tempHistoryPill === 'Relative' ? 'active' : ''}`}
+                      onClick={() => setTempHistoryPill('Relative')}
+                    >
+                      Relative
+                    </button>
+                  </div>
+                </div>
+
+                {tempHistoryPill.startsWith('Last') && (
+                  <Form.Select 
+                    className="filter-select-custom mt-2"
+                    value={tempHistoryPill}
+                    onChange={(e) => setTempHistoryPill(e.target.value)}
+                  >
+                    <option value="Last 7 Days">Last 7 Days</option>
+                    <option value="Last 30 Days">Last 30 Days</option>
+                    <option value="Last Year">Last Year</option>
+                  </Form.Select>
+                )}
+
+                {tempHistoryPill === 'Range' && (
+                  <Row className="g-2 mt-2">
+                    <Col xs={6}>
+                      <span className="text-secondary fw-semibold mb-1 d-block" style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>From Date</span>
+                      <Form.Control
+                        type="date"
+                        className="filter-input-custom"
+                        value={tempFromDate}
+                        onChange={(e) => setTempFromDate(e.target.value)}
+                        style={{ colorScheme: 'dark' }}
+                      />
+                    </Col>
+                    <Col xs={6}>
+                      <span className="text-secondary fw-semibold mb-1 d-block" style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>To Date</span>
+                      <Form.Control
+                        type="date"
+                        className="filter-input-custom"
+                        value={tempToDate}
+                        onChange={(e) => setTempToDate(e.target.value)}
+                        style={{ colorScheme: 'dark' }}
+                      />
+                    </Col>
+                  </Row>
+                )}
+
+                {tempHistoryPill === 'Relative' && (
+                  <div className="text-secondary fs-8 italic mt-2">Relative window matches active site timezone offset.</div>
+                )}
+                
+                <div className="text-end mt-2">
+                  <span className="text-secondary fw-bold" style={{ fontSize: '0.75rem' }}>UTC+05:30</span>
+                </div>
+              </div>
+
+              {/* Aggregation & Grouping Row */}
+              <Row className="g-2 mb-2">
+                <Col xs={6}>
+                  <div className="filter-card-box mb-0 h-100">
+                    <div className="mb-2">
+                      <span className="filter-card-title">Aggregation</span>
+                    </div>
+                    <Form.Select 
+                      className="filter-select-custom"
+                      value={tempAggregation}
+                      onChange={(e) => setTempAggregation(e.target.value)}
+                    >
+                      <option value="Min">Min</option>
+                      <option value="Max">Max</option>
+                      <option value="Average">Average</option>
+                      <option value="Sum">Sum</option>
+                      <option value="Count">Count</option>
+                      <option value="None">None</option>
+                    </Form.Select>
+                  </div>
+                </Col>
+                <Col xs={6}>
+                  <div className="filter-card-box mb-0 h-100">
+                    <div className="mb-2">
+                      <span className="filter-card-title">Grouping interval</span>
+                    </div>
+                    <Form.Select 
+                      className="filter-select-custom"
+                      value={tempGroupingInterval}
+                      onChange={(e) => setTempGroupingInterval(e.target.value)}
+                    >
+                      <option value="15 Min">15 Minutes</option>
+                      <option value="Daily">Daily</option>
+                      <option value="Yearly">Yearly</option>
+                    </Form.Select>
+                  </div>
+                </Col>
+              </Row>
+            </div>
+          )}
+
+        </Modal.Body>
+        <Modal.Footer className="filter-modal-footer border-0">
+          <button 
+            type="button" 
+            onClick={() => setShowFilterModal(false)} 
+            className="btn-cancel-custom"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            onClick={handleApplyFilter} 
+            className="btn-update-custom"
+          >
+            Update
+          </button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };
