@@ -45,7 +45,7 @@ const Header = ({ collapsed, toggleSidebar }) => {
         >
           <Menu size={24} />
         </Button>
-        <h5 className="mb-0 fw-bold tracking-tight d-none d-md-block">
+        <h5 className="mb-0 fw-bold tracking-tight d-none d-md-block header-title">
            TRUEiSENSE Smart Monitoring System
         </h5>
         <span className="text-white fw-bold tracking-tight ms-1 d-md-none fs-6">
@@ -67,7 +67,7 @@ const Header = ({ collapsed, toggleSidebar }) => {
 
       <div className="header-right d-flex align-items-center">
         {/* Current Time Clock */}
-        <div className="d-flex align-items-center gap-2 px-3 py-1.5 rounded-4 me-3 d-none d-md-flex" style={{ background: isDark ? 'rgba(30, 41, 59, 0.45)' : 'rgba(0,0,0,0.03)', border: '1px solid var(--scada-border)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
+        <div className="d-flex align-items-center gap-2 px-3 py-1.5 rounded-4 me-3 d-none d-xl-flex" style={{ background: isDark ? 'rgba(30, 41, 59, 0.45)' : 'rgba(0,0,0,0.03)', border: '1px solid var(--scada-border)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
           <div className="d-flex flex-column text-start">
             <span className="text-secondary uppercase tracking-widest fw-bold" style={{ fontSize: '0.55rem', letterSpacing: '0.5px', opacity: 0.8 }}>CURRENT CLOCK</span>
             <span className={isDark ? "text-white fw-bold font-monospace fs-7" : "text-dark fw-bold font-monospace fs-7"}>
@@ -85,7 +85,7 @@ const Header = ({ collapsed, toggleSidebar }) => {
           style={{ borderRadius: '20px', padding: '6px 16px', background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', backdropFilter: 'blur(10px)', border: '1px solid var(--scada-border)' }}
         >
           {isDark ? <Sun size={14}/> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>}
-          <span className="d-none d-sm-inline">{isDark ? 'LIGHT MODE' : 'DARK MODE'}</span>
+          <span className="d-none d-lg-inline">{isDark ? 'LIGHT MODE' : 'DARK MODE'}</span>
         </Button>
         
         <Button variant="link" className="text-muted p-2 me-2 position-relative">
@@ -101,7 +101,7 @@ const Header = ({ collapsed, toggleSidebar }) => {
             <div className="user-avatar bg-info rounded-circle d-flex align-items-center justify-content-center me-2" style={{ width: '24px', height: '24px' }}>
               <User size={14} className="text-dark" />
             </div>
-            <div className="user-info d-none d-sm-block text-start">
+            <div className="user-info d-none d-lg-block text-start">
               <p className="mb-0 text-white fw-bold text-capitalize" style={{ fontSize: '11px', lineHeight: '1.1' }}>
                 {userData.name || 'User'}
               </p>
@@ -143,8 +143,20 @@ const Header = ({ collapsed, toggleSidebar }) => {
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
+        .header-title {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 300px;
+        }
+        @media (max-width: 1200px) {
+          .header-title {
+            max-width: 180px;
+          }
+        }
         .header-search {
-          width: 400px;
+          width: 100%;
+          max-width: 300px;
         }
         .header-search .form-control:focus {
           background-color: rgba(255, 255, 255, 0.05) !important;

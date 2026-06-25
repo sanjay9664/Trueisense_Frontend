@@ -269,9 +269,9 @@ const Login = ({ onLoginSuccess }) => {
             ))}
           </div>
           <div className="d-flex align-items-center justify-content-start gap-2 text-white text-opacity-30 fs-12 fw-bold tracking-widest uppercase" style={{ letterSpacing: '0.15em' }}>
-             <span style={{ color: '#fb923c', fontWeight: 950 }}>SOCHIOT INNOVATIONS PVT LTD</span>
-             <span style={{ color: 'rgba(255, 255, 255, 0.15)' }}>|</span>
-             <span>© 2026</span>
+             
+             <span style={{ color: 'rgba(255, 255, 255, 0.15)' }}></span>
+             
           </div>
         </div>
       </div>
