@@ -2380,7 +2380,7 @@ const ConfigTemplates = () => {
         setVrvConfig(updatedVrv);
       }
     }
-  }, [globalLocation, vrvConfig, selectedCategory, selectedModule]);
+  }, [globalLocation, vrvConfig.device, vrvConfig.building, selectedCategory, selectedModule]);
 
   const handleSave = async () => {
     let mapping = {};

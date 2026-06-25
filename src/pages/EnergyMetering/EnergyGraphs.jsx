@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Card, Row, Col, Button, Modal, Form } from 'react-bootstrap';
 import { ResponsiveContainer, AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { Maximize2, X, Zap, Activity, Settings2 } from 'lucide-react';
+import { Maximize2, X, Zap, Settings2 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
 
@@ -476,7 +476,7 @@ const ChartRow = ({
               </div>
               
               <div className="text-secondary fs-7 fw-medium mb-3 d-flex align-items-center gap-1">
-                <Activity size={14} style={{ color: glow.color }} /> {unit || 'Units'}
+                {unit || 'Units'}
               </div>
 
               {/* Digital KPI Block */}
@@ -655,306 +655,7 @@ const ChartRow = ({
 
       {renderModals()}
 
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        .modal-95w { max-width: 95% !important; }
-        .expanded-chart-container {
-          height: 65vh;
-          min-height: 400px;
-        }
-        @media (max-width: 767.98px) {
-          .expanded-chart-container {
-            height: 45vh;
-            min-height: 250px;
-          }
-        }
-        @media (max-width: 767.98px) {
-          .scada-card-left-panel {
-            border-bottom: 1px solid rgba(108, 117, 125, 0.25) !important;
-            border-right: none !important;
-          }
-          .scada-card-right-panel {
-            border-top: 1px solid rgba(108, 117, 125, 0.25) !important;
-            border-left: none !important;
-          }
-        }
-        @media (min-width: 768px) {
-          .scada-card-left-panel {
-            border-right: 1px solid rgba(108, 117, 125, 0.25) !important;
-            border-bottom: none !important;
-          }
-          .scada-card-right-panel {
-            border-left: 1px solid rgba(108, 117, 125, 0.25) !important;
-            border-top: none !important;
-          }
-        }
-        .scada-expanded-modal .modal-content {
-          background: #0b1120;
-          border: 1px solid rgba(255, 107, 0, 0.2);
-          border-radius: 16px;
-          overflow: hidden;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-        }
-        .scada-color-picker::-webkit-color-swatch-wrapper { padding: 0; }
-        .scada-color-picker::-webkit-color-swatch {
-          border: 2px solid rgba(255,255,255,0.3);
-          border-radius: 50%;
-        }
-        .hover-glow:hover {
-          box-shadow: 0 0 15px rgba(255, 107, 0, 0.4);
-          background: rgba(255, 107, 0, 0.1);
-        }
-        @keyframes premiumSlideUp {
-          0% { opacity: 0; transform: translateY(40px) scale(0.98); }
-          100% { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .graph-slide-up {
-          opacity: 0;
-          animation: premiumSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        .scada-dropdown-orange {
-          background-color: #0f172a !important;
-          color: #fff !important;
-          border: 1px solid rgba(249, 115, 22, 0.25) !important;
-          font-weight: 600;
-          border-radius: 8px;
-          padding: 8px 12px;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .scada-dropdown-orange:focus, .scada-dropdown-orange:hover {
-          border-color: #f97316 !important;
-          box-shadow: 0 0 10px rgba(249, 115, 22, 0.25) !important;
-          background-color: #1e293b !important;
-        }
-        .filter-toggle-btn {
-          background: #0f172a !important;
-          border: 1px solid rgba(249, 115, 22, 0.25) !important;
-          color: #fff !important;
-          font-weight: 600;
-          border-radius: 8px;
-          padding: 8px 12px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          transition: all 0.3s;
-        }
-        .filter-toggle-btn:hover {
-          border-color: #f97316 !important;
-          box-shadow: 0 0 10px rgba(249, 115, 22, 0.25) !important;
-          background-color: #1e293b !important;
-        }
-        
-        /* Scada Filter Modal (Orange & Black Theme) */
-        .filter-modal .modal-content {
-          background: #09090b !important;
-          border: 1px solid rgba(249, 115, 22, 0.4) !important;
-          border-radius: 16px !important;
-          overflow: hidden;
-          box-shadow: 0 10px 40px rgba(249, 115, 22, 0.15) !important;
-        }
-        .filter-modal-header {
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
-          background: #09090b !important;
-          padding: 12px 16px !important;
-        }
-        .filter-tab-container {
-          background: #18181b;
-          border: 1px solid #27272a;
-          border-radius: 30px;
-          padding: 3px;
-          display: flex;
-          margin-bottom: 12px;
-        }
-        .filter-tab-btn {
-          flex: 1;
-          text-align: center;
-          padding: 6px 12px;
-          border-radius: 30px;
-          font-weight: 700;
-          font-size: 0.85rem;
-          color: #a1a1aa;
-          background: transparent;
-          border: 0;
-          cursor: pointer;
-          transition: all 0.3s ease;
-        }
-        .filter-tab-btn.active {
-          background: #f97316 !important;
-          color: #000000 !important;
-        }
-        .filter-tab-btn:hover:not(.active) {
-          color: #ffffff;
-        }
-        .filter-card-box {
-          background: #111115;
-          border: 1px solid #27272a;
-          border-radius: 12px;
-          padding: 10px 14px;
-          margin-bottom: 10px;
-        }
-        .filter-card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 6px;
-        }
-        .filter-card-title {
-          font-size: 0.85rem;
-          font-weight: 700;
-          color: #ffffff;
-        }
-        .filter-pill-container {
-          display: inline-flex;
-          background: #09090b;
-          border: 1px solid #27272a;
-          border-radius: 30px;
-          padding: 2px;
-        }
-        .filter-pill-btn {
-          padding: 3px 12px;
-          border-radius: 30px;
-          font-size: 0.7rem;
-          font-weight: 600;
-          color: #a1a1aa;
-          background: transparent;
-          border: 0;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-        .filter-pill-btn.active {
-          background: rgba(249, 115, 22, 0.1) !important;
-          color: #f97316 !important;
-          border: 1px solid rgba(249, 115, 22, 0.3) !important;
-        }
-        .filter-timezone-badge {
-          background: transparent;
-          color: #f97316;
-          border: 1px solid rgba(249, 115, 22, 0.2);
-          border-radius: 6px;
-          padding: 3px 6px;
-          font-size: 0.7rem;
-          font-weight: bold;
-        }
-        .filter-select-custom {
-          background-color: #09090b !important;
-          color: #ffffff !important;
-          border: 1px solid #27272a !important;
-          border-radius: 8px !important;
-          padding: 6px 10px !important;
-          font-size: 0.8rem !important;
-          font-weight: 600 !important;
-          width: 100%;
-          outline: none;
-          transition: border-color 0.2s ease;
-        }
-        .filter-select-custom:focus {
-          border-color: #f97316 !important;
-          box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.2) !important;
-        }
-        .filter-input-custom {
-          background-color: #09090b !important;
-          color: #ffffff !important;
-          border: 1px solid #27272a !important;
-          border-radius: 8px !important;
-          padding: 6px 10px !important;
-          font-size: 0.8rem !important;
-          width: 100%;
-          outline: none;
-        }
-        .filter-input-custom:focus {
-          border-color: #f97316 !important;
-        }
-        .filter-modal-footer {
-          border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
-          background: #09090b !important;
-          padding: 10px 16px !important;
-        }
-        .btn-cancel-custom {
-          background: transparent;
-          border: 1px solid #27272a;
-          color: #a1a1aa;
-          padding: 6px 16px;
-          border-radius: 30px;
-          font-weight: 600;
-          font-size: 0.8rem;
-          transition: all 0.2s ease;
-        }
-        .btn-cancel-custom:hover {
-          color: #ffffff;
-          border-color: #3f3f46;
-          background: rgba(255, 255, 255, 0.03);
-        }
-        .btn-update-custom {
-          background: #f97316;
-          border: none;
-          color: #000000;
-          padding: 6px 20px;
-          border-radius: 30px;
-          font-weight: 700;
-          font-size: 0.8rem;
-          transition: all 0.2s ease;
-          box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
-        }
-        .btn-update-custom:hover {
-          background: #ea580c;
-          box-shadow: 0 4px 16px rgba(249, 115, 22, 0.4);
-        }
-        
-        /* Custom SCADA checkbox styling */
-        .scada-checkbox {
-          margin-bottom: 0px !important;
-        }
-        .scada-checkbox .form-check-input {
-          background-color: #09090b !important;
-          border: 1px solid #27272a !important;
-          border-radius: 4px !important;
-          cursor: pointer;
-          width: 14px;
-          height: 14px;
-          margin-top: 0.25em;
-        }
-        .scada-checkbox .form-check-input:checked {
-          background-color: #f97316 !important;
-          border-color: #f97316 !important;
-        }
-        .scada-checkbox .form-check-input:focus {
-          box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.2) !important;
-        }
-        .scada-checkbox .form-check-label {
-          color: #a1a1aa !important;
-          font-size: 0.75rem !important;
-          font-weight: 500;
-          cursor: pointer;
-          padding-left: 4px;
-        }
-        .scada-checkbox .form-check-input:checked + .form-check-label {
-          color: #ffffff !important;
-        }
-        
-        /* Two column layout for checkboxes grid */
-        .checkbox-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 6px 12px;
-        }
-        
-        /* Custom scrollbar for parameters box */
-        .filter-card-box div::-webkit-scrollbar {
-          width: 6px;
-        }
-        .filter-card-box div::-webkit-scrollbar-track {
-          background: #09090b;
-        }
-        .filter-card-box div::-webkit-scrollbar-thumb {
-          background: #27272a;
-          border-radius: 3px;
-        }
-        .filter-card-box div::-webkit-scrollbar-thumb:hover {
-          background: #ff6b00;
-        }
-        `
-      }} />
+
     </>
   );
 };
@@ -1420,7 +1121,7 @@ const EnergyGraphs = () => {
                   size="sm"
                   style={{ height: '38px', borderRadius: '8px' }}
                 >
-                  <Activity size={16} /> {globalInterval === 'live' ? 'Realtime (Polling)' : `History (${globalInterval === 'MIN_15' ? '15m' : globalInterval === 'DAILY' ? 'Daily' : 'Yearly'})`}
+                  <Settings2 size={16} /> {globalInterval === 'live' ? 'Realtime (Polling)' : `History (${globalInterval === 'MIN_15' ? '15m' : globalInterval === 'DAILY' ? 'Daily' : 'Yearly'})`}
                 </Button>
               </Form.Group>
             </Col>
@@ -1441,19 +1142,19 @@ const EnergyGraphs = () => {
           </div>
         ) : selectedDeviceId && selectedSettings.length === 0 ? (
           <div className="d-flex flex-column justify-content-center align-items-center h-100 border border-secondary border-opacity-25 rounded-4 p-5" style={{ minHeight: '400px', background: 'rgba(15, 23, 42, 0.4)' }}>
-            <Activity className="text-warning mb-3 opacity-50" size={48} />
+            <Zap className="text-warning mb-3 opacity-50" size={48} />
             <h5 className="text-white fw-bold mb-2">No Parameters Found</h5>
             <p className="text-secondary text-center max-w-md mb-0">No graphable parameters have been mapped for this device.</p>
           </div>
         ) : !selectedDeviceId ? (
           <div className="d-flex flex-column justify-content-center align-items-center h-100 border border-secondary border-opacity-25 rounded-4 p-5" style={{ minHeight: '400px', background: 'rgba(15, 23, 42, 0.4)' }}>
-            <Activity className="text-warning mb-3 opacity-50" size={48} />
+            <Zap className="text-warning mb-3 opacity-50" size={48} />
             <h5 className="text-white fw-bold mb-2">No Mapped Devices Found</h5>
             <p className="text-secondary text-center max-w-md mb-0">Please verify that you have registered and mapped devices in the template manager.</p>
           </div>
         ) : activeData.length === 0 ? (
           <div className="d-flex flex-column justify-content-center align-items-center h-100 border border-secondary border-opacity-25 rounded-4 p-5 text-center" style={{ minHeight: '400px', background: 'rgba(15, 23, 42, 0.4)' }}>
-            <Activity className="text-warning mb-3 opacity-50 animate-pulse" size={48} style={{ filter: 'drop-shadow(0 0 10px rgba(249, 115, 22, 0.4))' }} />
+            <Zap className="text-warning mb-3 opacity-50 animate-pulse" size={48} style={{ filter: 'drop-shadow(0 0 10px rgba(249, 115, 22, 0.4))' }} />
             <h5 className="text-white fw-bold mb-2">No Modbus Telemetry Data Found</h5>
             <p className="text-secondary max-w-md mb-0 mx-auto" style={{ maxWidth: '480px' }}>
               We are currently displaying only live/historical Modbus register data. No dummy or simulated values are shown on this dashboard. Please verify device connectivity or adjust your timeframe filtration settings.
@@ -1496,7 +1197,7 @@ const EnergyGraphs = () => {
         <Modal.Header className="filter-modal-header border-0 px-4 py-3">
           <Modal.Title className="text-white fw-bold d-flex align-items-center justify-content-between w-100">
             <span className="d-flex align-items-center gap-2" style={{ fontSize: '1.2rem' }}>
-              <Activity size={20} className="text-warning animate-pulse" />
+              <Settings2 size={20} className="text-warning animate-pulse" />
               Advanced Filters
             </span>
             <Button variant="link" className="text-white p-0 opacity-75 hover-opacity-100" onClick={() => setShowFilterModal(false)}>
