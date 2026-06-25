@@ -1072,7 +1072,14 @@ const SubMeters = () => {
             { config: mapping.emConsumptionConfig, fields: ['cumulativekWh'] },
             {
               config: mapping.emChangeConfig,
-              fields: ['ebKvah', 'ebKwh', 'balance', 'totalKw', 'vR', 'vY', 'vB', 'iR', 'iY', 'iB', 'pf', 'totalKva', 'dgKwh', 'freq']
+              fields: [
+                'ebKvah', 'ebKwh', 'balance', 'totalKw', 'pf', 'totalKva', 'dgKwh',
+                'activePower', 'reactivePower', 'apparentPower', 'cumulativekWh', 'freq',
+                'vR', 'vY', 'vB', 'iR', 'iY', 'iB',
+                'vLLAvg', 'vLNAvg', 'iAvg', 'kvaAvg', 'kvarAvg', 'pfAvg',
+                'vRY', 'vYB', 'vBR', 'pfR', 'pfY', 'pfB',
+                'loadHrs', 'loadMin', 'noLoadHrs', 'noLoadMin', 'loadPct'
+              ]
             },
             {
               config: mapping.emWarningConfig,
@@ -1245,7 +1252,14 @@ const SubMeters = () => {
               { config: mapping.emConsumptionConfig, fields: ['cumulativekWh'] },
               {
                 config: mapping.emChangeConfig,
-                fields: ['ebKvah', 'ebKwh', 'balance', 'totalKw', 'vR', 'vY', 'vB', 'iR', 'iY', 'iB', 'pf', 'totalKva', 'dgKwh', 'freq']
+                fields: [
+                  'ebKvah', 'ebKwh', 'balance', 'totalKw', 'pf', 'totalKva', 'dgKwh',
+                  'activePower', 'reactivePower', 'apparentPower', 'cumulativekWh', 'freq',
+                  'vR', 'vY', 'vB', 'iR', 'iY', 'iB',
+                  'vLLAvg', 'vLNAvg', 'iAvg', 'kvaAvg', 'kvarAvg', 'pfAvg',
+                  'vRY', 'vYB', 'vBR', 'pfR', 'pfY', 'pfB',
+                  'loadHrs', 'loadMin', 'noLoadHrs', 'noLoadMin', 'loadPct'
+                ]
               },
               {
                 config: mapping.emWarningConfig,
