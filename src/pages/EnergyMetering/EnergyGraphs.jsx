@@ -974,7 +974,24 @@ const EnergyGraphs = () => {
     }
 
     const loadHistoricalData = async () => {
-      setLoadingHistory(true);
+      const cacheKey = `scada_history_cache_${selectedSiteId}_${selectedDeviceId}_${globalInterval}_${fromDate}_${toDate}_${aggregation}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setHistoricalData(parsed);
+            setLoadingHistory(false);
+          } else {
+            setLoadingHistory(true);
+          }
+        } catch (e) {
+          setLoadingHistory(true);
+        }
+      } else {
+        setLoadingHistory(true);
+      }
+
       try {
         const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
         const headers = { 
@@ -1042,6 +1059,7 @@ const EnergyGraphs = () => {
 
         const sorted = Object.values(mergedData).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
         setHistoricalData(sorted);
+        localStorage.setItem(cacheKey, JSON.stringify(sorted));
       } catch (err) {
         console.error('Failed to load historical snapshots:', err);
       } finally {
@@ -1072,6 +1090,18 @@ const EnergyGraphs = () => {
 
       // Fetch historical snapshots for the selected timeframe to seed the realtime graph
       const seedRealtimeLog = async () => {
+        const cacheKey = `scada_realtime_seed_cache_${selectedSiteId}_${selectedDeviceId}_${fromDate}_${toDate}_${aggregation}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setHistoryLog(parsed);
+              setIsSwitching(false);
+            }
+          } catch (e) {}
+        }
+
         try {
           const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
           const headers = { 
@@ -1128,6 +1158,7 @@ const EnergyGraphs = () => {
           
           const sorted = Object.values(mergedData).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
           setHistoryLog(sorted);
+          localStorage.setItem(cacheKey, JSON.stringify(sorted));
         } catch (e) {
           console.error('Error seeding realtime history log:', e);
         } finally {
