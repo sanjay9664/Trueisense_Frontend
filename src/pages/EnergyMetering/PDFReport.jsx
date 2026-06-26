@@ -21,6 +21,16 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3
 
 const EnergyPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();
+  
+  const siteId = useMemo(() => {
+    try {
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
+    } catch (e) {
+      return localStorage.getItem('selectedSiteId') || '1';
+    }
+  }, []);
+
   const [templates, setTemplates] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('scada_templates') || '[]');
@@ -51,15 +61,6 @@ const EnergyPDFReport = () => {
   });
   const [interval, setIntervalVal] = useState('HOURLY');
   const [errorMsg, setErrorMsg] = useState(null);
-
-  const siteId = useMemo(() => {
-    try {
-      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-      return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
-    } catch (e) {
-      return localStorage.getItem('selectedSiteId') || '1';
-    }
-  }, []);
 
   // Fetch dynamic devices in background
   useEffect(() => {
@@ -164,10 +165,13 @@ const EnergyPDFReport = () => {
 
   const subMeterOptions = allMeterOptions;
 
-  // Auto-select first meter
+  // Auto-select first meter or handle mismatch
   useEffect(() => {
-    if (allMeterOptions.length > 0 && !selectedMeter) {
-      setSelectedMeter(String(allMeterOptions[0].id));
+    if (allMeterOptions.length > 0) {
+      const exists = allMeterOptions.some(m => String(m.id) === String(selectedMeter));
+      if (!selectedMeter || !exists) {
+        setSelectedMeter(String(allMeterOptions[0].id));
+      }
     }
   }, [allMeterOptions, selectedMeter]);
 

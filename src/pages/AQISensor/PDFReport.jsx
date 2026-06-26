@@ -17,6 +17,16 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3
 
 const AQIPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();
+  
+  const siteId = useMemo(() => {
+    try {
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
+    } catch (e) {
+      return localStorage.getItem('selectedSiteId') || '1';
+    }
+  }, []);
+
   const [templates, setTemplates] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('scada_templates') || '[]');
@@ -47,15 +57,6 @@ const AQIPDFReport = () => {
   });
   const [interval, setIntervalVal] = useState('HOURLY');
   const [errorMsg, setErrorMsg] = useState(null);
-
-  const siteId = useMemo(() => {
-    try {
-      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-      return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
-    } catch (e) {
-      return localStorage.getItem('selectedSiteId') || '1';
-    }
-  }, []);
 
   // Fetch dynamic devices in background
   useEffect(() => {
@@ -155,10 +156,13 @@ const AQIPDFReport = () => {
       .sort((a, b) => naturalSort(a.label, b.label));
   }, [devices, templates]);
 
-  // Auto-select first sensor
+  // Auto-select first sensor or handle mismatch
   useEffect(() => {
-    if (aqiSensorOptions.length > 0 && !selectedSensor) {
-      setSelectedSensor(String(aqiSensorOptions[0].id));
+    if (aqiSensorOptions.length > 0) {
+      const exists = aqiSensorOptions.some(s => String(s.id) === String(selectedSensor));
+      if (!selectedSensor || !exists) {
+        setSelectedSensor(String(aqiSensorOptions[0].id));
+      }
     }
   }, [aqiSensorOptions, selectedSensor]);
 
