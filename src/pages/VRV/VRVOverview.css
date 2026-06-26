@@ -202,3 +202,55 @@
 .quick-control:active {
   transform: scale(0.95);
 }
+
+/* ===== MOBILE RESPONSIVE VRV ===== */
+@media (max-width: 991.98px) {
+  .vrv-dashboard-grid {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .VRV-full-panel {
+    padding: 0.75rem !important;
+  }
+
+  .VRV-full-panel .page-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .VRV-full-panel .page-header h2 {
+    font-size: 1.1rem !important;
+  }
+
+  .VRV-full-panel .page-header select {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .VRV-room-card {
+    min-height: auto !important;
+  }
+
+  .VRV-room-card .scada-card {
+    border-radius: 12px !important;
+  }
+
+  .vrv-dashboard-grid {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
+@media (max-width: 400px) {
+  .VRV-full-panel {
+    padding: 0.5rem !important;
+  }
+
+  .VRV-full-panel .page-header h2 {
+    font-size: 1rem !important;
+  }
+}

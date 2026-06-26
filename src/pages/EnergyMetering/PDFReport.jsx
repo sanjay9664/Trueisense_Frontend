@@ -407,7 +407,7 @@ const EnergyPDFReport = () => {
         <Card.Body className="p-4 p-md-5">
           <Row className="g-4 mb-4">
             {/* Meter Selection */}
-            <Col md={6}>
+            <Col md={6} xs={12}>
               <Form.Group>
                 <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
                   <Zap size={14} style={{ color: 'var(--scada-accent)' }} />
@@ -421,20 +421,17 @@ const EnergyPDFReport = () => {
                   {allMeterOptions.length === 0 && (
                     <option value="">No meters configured</option>
                   )}
-                  {subMeterOptions.map(meter => {
-                    const isOnline = getMeterOnlineStatus(meter.id);
-                    return (
-                      <option key={meter.id} value={String(meter.id)}>
-                        {meter.label} ({isOnline ? 'Online' : 'Offline'})
-                      </option>
-                    );
-                  })}
+                  {subMeterOptions.map(meter => (
+                    <option key={meter.id} value={String(meter.id)}>
+                      {meter.label}
+                    </option>
+                  ))}
                 </Form.Select>
               </Form.Group>
             </Col>
 
             {/* Interval Selection */}
-            <Col md={6}>
+            <Col md={6} xs={12}>
               <Form.Group>
                 <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
                   <Clock size={14} style={{ color: 'var(--scada-accent)' }} />
@@ -455,7 +452,7 @@ const EnergyPDFReport = () => {
 
           <Row className="g-4 align-items-end">
             {/* From Date */}
-            <Col md={6} lg={4}>
+            <Col md={6} lg={4} xs={12}>
               <Form.Group>
                 <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
                   <Calendar size={14} style={{ color: 'var(--scada-accent)' }} />
@@ -472,7 +469,7 @@ const EnergyPDFReport = () => {
             </Col>
 
             {/* To Date */}
-            <Col md={6} lg={4}>
+            <Col md={6} lg={4} xs={12}>
               <Form.Group>
                 <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
                   <Calendar size={14} style={{ color: 'var(--scada-accent)' }} />
@@ -489,8 +486,8 @@ const EnergyPDFReport = () => {
             </Col>
 
             {/* Download Buttons */}
-            <Col lg={4}>
-              <div className="d-flex gap-3 flex-wrap">
+            <Col lg={4} xs={12}>
+              <div className="d-flex gap-3 flex-wrap emr-download-actions">
                 <Button
                   onClick={() => handleDownload('pdf')}
                   disabled={generating || !selectedMeter}
@@ -540,52 +537,7 @@ const EnergyPDFReport = () => {
         </Card.Body>
       </Card>
 
-      {/* Selected Meter Info */}
-      {selectedMeterInfo && (
-        <Card className="emr-info-card border-0">
-          <Card.Body className="p-4">
-            <Row className="align-items-center">
-              <Col md={6}>
-                <div className="d-flex align-items-center gap-3">
-                  <div className="emr-meter-icon">
-                    <BarChart3 size={24} />
-                  </div>
-                  <div>
-                    <div className="d-flex align-items-center gap-2">
-                      <h5 className="mb-0 fw-bold" style={{ color: 'var(--scada-text)' }}>{selectedMeterInfo.label}</h5>
-                      {getMeterOnlineStatus(selectedMeter) ? (
-                        <span className="badge bg-success bg-opacity-15 border border-success border-opacity-25 text-success px-2 py-1 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.65rem', fontWeight: 800, borderRadius: '12px' }}>
-                          <span className="pulse-dot-green"></span> ONLINE
-                        </span>
-                      ) : (
-                        <span className="badge bg-danger bg-opacity-15 border border-danger border-opacity-25 text-danger px-2 py-1 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.65rem', fontWeight: 800, borderRadius: '12px' }}>
-                          <span className="pulse-dot-red"></span> OFFLINE
-                        </span>
-                      )}
-                    </div>
-                    <small style={{ color: 'var(--scada-text-muted)' }}>
-                      Sub Meter • Energy Report Target
-                    </small>
-                  </div>
-                </div>
-              </Col>
-              <Col md={6}>
-                <div className="d-flex gap-2 flex-wrap justify-content-md-end mt-3 mt-md-0">
-                  <Badge className="emr-badge emr-badge-pdf">
-                    <FileText size={12} /> PDF Report
-                  </Badge>
-                  <Badge className="emr-badge emr-badge-excel">
-                    <FileSpreadsheet size={12} /> Excel Report
-                  </Badge>
-                  <Badge className="emr-badge emr-badge-type">
-                    <Zap size={12} /> Sub Meter
-                  </Badge>
-                </div>
-              </Col>
-            </Row>
-          </Card.Body>
-        </Card>
-      )}
+
 
       {/* No Meters Warning */}
       {allMeterOptions.length === 0 && (
@@ -827,6 +779,57 @@ const EnergyPDFReport = () => {
         body.light-mode .emr-select optgroup {
           background: #ffffff !important;
           color: #1e293b !important;
+        }
+
+        /* ===== MOBILE RESPONSIVE ENERGY REPORT ===== */
+        @media (max-width: 767.98px) {
+          .emr-main-card .p-md-5 {
+            padding: 1rem !important;
+          }
+          .emr-select {
+            padding: 10px 14px !important;
+            font-size: 0.82rem !important;
+            border-radius: 10px !important;
+          }
+          .emr-dl-btn {
+            padding: 12px 16px !important;
+            font-size: 0.78rem !important;
+            border-radius: 10px !important;
+            width: 100% !important;
+            flex: 1 1 100% !important;
+          }
+          .emr-download-actions {
+            flex-direction: column !important;
+            gap: 0.75rem !important;
+          }
+          .emr-label {
+            font-size: 0.68rem;
+          }
+          .emr-main-card,
+          .emr-info-card,
+          .emr-warn-card {
+            border-radius: 14px !important;
+          }
+          .emr-info-card .p-4 {
+            padding: 1rem !important;
+          }
+          .emr-info-card h5 {
+            font-size: 1rem !important;
+          }
+          .emr-badge {
+            padding: 4px 10px !important;
+            font-size: 0.65rem !important;
+          }
+        }
+
+        @media (max-width: 400px) {
+          .emr-dl-btn {
+            padding: 10px 12px !important;
+            font-size: 0.72rem !important;
+          }
+          .emr-main-card .p-md-5 {
+            padding: 0.75rem !important;
+          }
         }
       `}} />
     </div>

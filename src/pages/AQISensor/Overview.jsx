@@ -346,7 +346,7 @@ const AQIOverview = () => {
             <PdfButton />
             <select
               className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
-              style={{ width: '220px', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
+              style={{ width: '220px', maxWidth: '100%', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
               value={selectedChId || ''}
               onChange={(e) => setSelectedChId(Number(e.target.value))}
             >
@@ -373,7 +373,7 @@ const AQIOverview = () => {
       ) : (
         <Row className="g-3 flex-grow-1">
           {/* LEFT PANEL: CHANNEL LIST */}
-          <Col xl={3} lg={4} className="d-flex flex-column gap-2">
+          <Col xl={3} lg={4} xs={12} className="d-flex flex-column gap-2">
             <div className="px-2 mb-1">
                <span className="text-secondary fw-bold" style={{ fontSize: '12px', letterSpacing: '1px' }}>AVAILABLE CHANNELS</span>
             </div>
@@ -419,7 +419,7 @@ const AQIOverview = () => {
           </Col>
 
           {/* RIGHT PANEL: 6 PARAMETER GRID */}
-          <Col xl={9} lg={8} className="d-flex flex-column">
+          <Col xl={9} lg={8} xs={12} className="d-flex flex-column">
             {/* Header Info for Selected Channel */}
             <div className="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style={{ background: 'rgba(30, 41, 59, 0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
                <div>
@@ -448,7 +448,7 @@ const AQIOverview = () => {
                 const isFieldMapped = configField && typeof configField === 'string' && configField.includes('::');
 
                 return (
-                  <Col md={6} key={idx}>
+                  <Col md={6} xs={12} key={idx}>
                     <Card 
                       className="border-0 shadow-sm h-100" 
                       style={{ 

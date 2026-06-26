@@ -508,6 +508,49 @@ const AQIPDFReport = () => {
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
         }
+
+        /* ===== MOBILE RESPONSIVE PDF REPORT ===== */
+        @media (max-width: 767.98px) {
+          .emr-card-header {
+            padding: 14px 16px !important;
+          }
+          .emr-select {
+            padding: 10px 14px !important;
+            font-size: 0.78rem !important;
+            border-radius: 10px !important;
+          }
+          .emr-dl-btn {
+            padding: 12px 16px !important;
+            font-size: 0.78rem !important;
+            border-radius: 10px !important;
+            letter-spacing: 0.8px;
+            width: 100% !important;
+            flex: 1 1 100% !important;
+          }
+          .emr-download-actions {
+            flex-direction: column !important;
+            gap: 0.75rem !important;
+          }
+          .emr-label {
+            font-size: 0.68rem;
+          }
+          .emr-info-card {
+            border-radius: 14px !important;
+          }
+          .page-header h2 {
+            font-size: 1.15rem !important;
+          }
+          .page-header p {
+            font-size: 0.75rem !important;
+          }
+        }
+
+        @media (max-width: 400px) {
+          .emr-dl-btn {
+            padding: 10px 12px !important;
+            font-size: 0.72rem !important;
+          }
+        }
       `}} />
 
       {/* HEADER SECTION */}
@@ -533,7 +576,7 @@ const AQIPDFReport = () => {
               <Form>
                 <Row className="g-4 mb-4">
                   {/* Meter Selection */}
-                  <Col md={6}>
+                  <Col md={6} xs={12}>
                     <Form.Group>
                       <Form.Label className="emr-label">Select target AQI Sensor / Zone</Form.Label>
                       {aqiSensorOptions.length === 0 ? (
@@ -558,7 +601,7 @@ const AQIPDFReport = () => {
                   </Col>
 
                   {/* Interval Selection */}
-                  <Col md={6}>
+                  <Col md={6} xs={12}>
                     <Form.Group>
                       <Form.Label className="emr-label d-flex align-items-center gap-2">
                         <Clock size={13} style={{ color: 'var(--scada-accent)' }} /> Ledger Interval Scale
@@ -579,7 +622,7 @@ const AQIPDFReport = () => {
 
                 <Row className="g-4 mb-4 align-items-end">
                   {/* From Date */}
-                  <Col md={4}>
+                  <Col md={4} xs={12}>
                     <Form.Group>
                       <Form.Label className="emr-label d-flex align-items-center gap-2">
                         <Calendar size={13} style={{ color: 'var(--scada-accent)' }} /> From Date
@@ -595,7 +638,7 @@ const AQIPDFReport = () => {
                   </Col>
                   
                   {/* To Date */}
-                  <Col md={4}>
+                  <Col md={4} xs={12}>
                     <Form.Group>
                       <Form.Label className="emr-label d-flex align-items-center gap-2">
                         <Calendar size={13} style={{ color: 'var(--scada-accent)' }} /> To Date
@@ -611,8 +654,8 @@ const AQIPDFReport = () => {
                   </Col>
 
                   {/* Download Actions */}
-                  <Col md={4}>
-                    <div className="d-flex gap-3">
+                  <Col md={4} xs={12}>
+                    <div className="d-flex gap-3 flex-wrap emr-download-actions">
                       <Button 
                         className="emr-dl-btn emr-dl-pdf flex-fill d-flex align-items-center justify-content-center gap-2"
                         disabled={generating || !selectedSensor}

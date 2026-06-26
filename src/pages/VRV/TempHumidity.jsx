@@ -376,7 +376,7 @@ const EnvDashboard = () => {
             <PdfButton />
             <select
               className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
-              style={{ width: '220px', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
+              style={{ width: '220px', maxWidth: '100%', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
               value={selectedUnit}
               onChange={(e) => setSelectedUnit(e.target.value)}
             >
@@ -393,7 +393,7 @@ const EnvDashboard = () => {
       {/* Removed old blocking isLoading screen entirely as requested */}
       <Row className="g-4 flex-grow-1">
           {/* Zone Sidebar */}
-          <Col xl={3} lg={4}>
+          <Col xl={3} lg={4} xs={12}>
             <Card className="scada-card border-0 h-100 shadow-lg" style={{ background: 'rgba(30, 41, 59, 0.4)', borderRadius: '16px' }}>
               <Card.Header className="bg-transparent border-bottom border-secondary border-opacity-25 p-4">
                 <h6 className="text-white fw-bold m-0 text-uppercase fs-8 text-secondary tracking-wide">Select Zone</h6>
@@ -439,7 +439,7 @@ const EnvDashboard = () => {
           </Col>
 
           {/* Dashboard Grid */}
-          <Col xl={9} lg={8} className="overflow-auto scada-scrollbar" style={{ maxHeight: 'calc(100vh - 120px)', paddingBottom: '20px' }}>
+          <Col xl={9} lg={8} xs={12} className="overflow-auto scada-scrollbar vrv-dashboard-grid" style={{ maxHeight: 'calc(100vh - 120px)', paddingBottom: '20px' }}>
             {isFetching && !unitData ? (
               // Silent Skeleton Loader instead of error message
               <div className="pe-2 placeholder-glow">
@@ -505,7 +505,7 @@ const EnvDashboard = () => {
                     const isFieldMapped = configField && typeof configField === 'string' && configField.includes('::');
 
                     return (
-                      <Col xl={4} lg={6} md={12} key={key}>
+                      <Col xl={4} lg={6} md={12} xs={12} key={key}>
                         <Card 
                           className="scada-card border-0 h-100 position-relative overflow-hidden" 
                           style={{ 

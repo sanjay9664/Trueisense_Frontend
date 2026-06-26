@@ -472,6 +472,75 @@ const Login = ({ onLoginSuccess }) => {
         .uppercase { text-transform: uppercase !important; }
         .fade-in { animation: fadeIn 0.8s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ===== MOBILE RESPONSIVE LOGIN ===== */
+        @media (max-width: 991.98px) {
+          .login-split-wrapper {
+            flex-direction: column !important;
+          }
+          .login-hero-side {
+            display: none !important;
+          }
+          .login-form-side {
+            min-height: 100vh !important;
+            padding: 1.5rem !important;
+          }
+        }
+
+        @media (max-width: 767.98px) {
+          .login-form-side {
+            padding: 1rem !important;
+            align-items: center !important;
+            justify-content: center !important;
+          }
+          .login-form-side::before {
+            display: none !important;
+          }
+          .login-form-container {
+            padding: 1.75rem 1.25rem !important;
+            border-radius: 18px !important;
+            max-width: 100% !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+            transition: none !important;
+            background: rgba(18, 10, 5, 0.85) !important;
+          }
+          .login-form-container:hover {
+            transform: none !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+          }
+          .login-form-container img {
+            height: 44px !important;
+          }
+          .scada-input-v3 {
+            padding: 14px 14px 14px 46px !important;
+            font-size: 0.9rem !important;
+            border-radius: 10px !important;
+          }
+          .login-btn-admin-v3, .login-btn-user-v3 {
+            padding: 14px !important;
+            font-size: 0.85rem !important;
+            border-radius: 10px !important;
+            letter-spacing: 2px !important;
+          }
+        }
+
+        @media (max-width: 400px) {
+          .login-form-container {
+            padding: 1.5rem 1rem !important;
+            border-radius: 14px !important;
+          }
+          .login-form-container img {
+            height: 38px !important;
+          }
+          .login-form-container .mb-5 {
+            margin-bottom: 1.5rem !important;
+          }
+          .login-form-container .mb-4 {
+            margin-bottom: 1rem !important;
+          }
+        }
       `}} />
     </div>
   );
