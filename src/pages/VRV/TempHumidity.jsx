@@ -653,13 +653,13 @@ const EnvDashboard = () => {
                                       return (
                                         <>
                                           <div className="spinner-grow spinner-grow-sm me-2 opacity-50" style={{ color: '#10b981', width: '0.75rem', height: '0.75rem' }} role="status"></div>
-                                          <span className="text-secondary opacity-75 fs-9 fw-bold uppercase tracking-widest">LIVE DATA</span>
+                                          <span className="text-secondary opacity-75 fs-9 fw-bold uppercase tracking-widest">online</span>
                                         </>
                                       );
                                     } else {
                                       return (
                                         <span className="text-muted opacity-50 fs-9 fw-bold uppercase tracking-widest d-flex align-items-center gap-1">
-                                          <span className="rounded-circle" style={{ width: '6px', height: '6px', display: 'inline-block', background: '#64748b' }}></span> NO LIVE DATA
+                                          <span className="rounded-circle" style={{ width: '6px', height: '6px', display: 'inline-block', background: '#ef4444', boxShadow: '0 0 6px #ef4444' }}></span> offline
                                         </span>
                                       );
                                     }

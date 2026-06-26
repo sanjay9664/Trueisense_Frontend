@@ -3,6 +3,50 @@ import { getSochiotGatewayStatus, getSochiotDeviceStatus, getSochiotDeviceDetail
 
 const DeviceStatusContext = createContext();
 
+const resolveDeviceOnlineStatus = (deviceData) => {
+  if (!deviceData) return false;
+
+  const checkStatusValue = (val) => {
+    if (val === undefined || val === null) return false;
+    const s = String(val).toUpperCase();
+    return s === 'ONLINE' || s === 'ACTIVE' || val === true;
+  };
+
+  // 1. Direct status flags
+  if (checkStatusValue(deviceData.status)) return true;
+  if (checkStatusValue(deviceData.online)) return true;
+  if (checkStatusValue(deviceData.active)) return true;
+
+  // 2. Direct mode name check
+  if (deviceData.mode && checkStatusValue(deviceData.mode.name)) return true;
+
+  // 3. Nested we mode check
+  if (deviceData.we?.mode && checkStatusValue(deviceData.we.mode.name)) return true;
+
+  // 4. Nested locationVOS check (used in select telemetry templates)
+  if (Array.isArray(deviceData.locationVOS)) {
+    for (const loc of deviceData.locationVOS) {
+      if (loc) {
+        if (checkStatusValue(loc.status)) return true;
+        if (loc.mode && checkStatusValue(loc.mode.name)) return true;
+      }
+    }
+  }
+
+  // 5. Fallback location arrays
+  const fallbackLocations = deviceData.locationVos || deviceData.locations;
+  if (Array.isArray(fallbackLocations)) {
+    for (const loc of fallbackLocations) {
+      if (loc) {
+        if (checkStatusValue(loc.status)) return true;
+        if (loc.mode && checkStatusValue(loc.mode.name)) return true;
+      }
+    }
+  }
+
+  return false;
+};
+
 export const DeviceStatusProvider = ({ children }) => {
   const [deviceStatuses, setDeviceStatuses] = useState({});
   const [gatewayStatuses, setGatewayStatuses] = useState({});
@@ -20,17 +64,7 @@ export const DeviceStatusProvider = ({ children }) => {
         try {
           res = await getSochiotDeviceStatus(deviceId);
           const deviceData = res?.data || res;
-          const isOnline = deviceData && (
-            deviceData.status === 'ONLINE' || 
-            deviceData.status === 'online' ||
-            deviceData.status === 'Online' ||
-            deviceData.mode?.name === 'ONLINE' ||
-            deviceData.mode?.name === 'online' ||
-            deviceData.mode?.name === 'Online' ||
-            deviceData.we?.mode?.name === 'ONLINE' ||
-            deviceData.online === true ||
-            deviceData.active === true
-          );
+          const isOnline = resolveDeviceOnlineStatus(deviceData);
           if (isOnline) {
             lastSeenOnlineRef.current[deviceId] = Date.now();
             setDeviceStatuses(prev => ({
@@ -51,17 +85,7 @@ export const DeviceStatusProvider = ({ children }) => {
         }
       }
       const deviceData = res?.data || res;
-      const isOnline = deviceData && (
-        deviceData.status === 'ONLINE' || 
-        deviceData.status === 'online' ||
-        deviceData.status === 'Online' ||
-        deviceData.mode?.name === 'ONLINE' ||
-        deviceData.mode?.name === 'online' ||
-        deviceData.mode?.name === 'Online' ||
-        deviceData.we?.mode?.name === 'ONLINE' ||
-        deviceData.online === true ||
-        deviceData.active === true
-      );
+      const isOnline = resolveDeviceOnlineStatus(deviceData);
       if (isOnline) {
         lastSeenOnlineRef.current[deviceId] = Date.now();
       }
@@ -101,17 +125,7 @@ export const DeviceStatusProvider = ({ children }) => {
     try {
       const res = await getSochiotGatewayStatus(clusterId);
       const gatewayData = res?.data || res;
-      const isOnline = gatewayData && (
-        gatewayData.status === 'ONLINE' || 
-        gatewayData.status === 'online' ||
-        gatewayData.status === 'Online' ||
-        gatewayData.mode?.name === 'ONLINE' ||
-        gatewayData.mode?.name === 'online' ||
-        gatewayData.mode?.name === 'Online' ||
-        gatewayData.we?.mode?.name === 'ONLINE' ||
-        gatewayData.online === true ||
-        gatewayData.active === true
-      );
+      const isOnline = resolveDeviceOnlineStatus(gatewayData);
       if (isOnline) {
         lastSeenGatewayOnlineRef.current[clusterId] = Date.now();
       }

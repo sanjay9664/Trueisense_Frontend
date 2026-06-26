@@ -484,10 +484,11 @@ const SubMeters = () => {
     let hasTelemetryDataFallback = false;
     if (meter) {
       const lastTelemetryTs = Number(meter.lastTelemetryTimestamp);
+      // We check for telemetry in the last 10 minutes (consistent with telemetry polling rate)
       isFreshTelemetry =
         Number.isFinite(lastTelemetryTs) &&
         lastTelemetryTs > 0 &&
-        Date.now() - lastTelemetryTs < TELEMETRY_FRESHNESS_MS;
+        Date.now() - lastTelemetryTs < 10 * 60 * 1000;
 
       if (isFreshTelemetry && meter.telemetryValues) {
         const tv = meter.telemetryValues;
@@ -510,18 +511,20 @@ const SubMeters = () => {
       const gatewayUuid = template.mapping.gatewayUuid;
       if (devId) {
         const devStatusOnline = !!getOverallStatus(devId, gatewayUuid);
-        if (devStatusOnline || hasTelemetryDataFallback) {
+        if (devStatusOnline || isFreshTelemetry) {
           return true;
         }
+        return false;
       }
     }
 
     // Fallback to legacy commStatus
     if (meter?.telemetryValues?.commStatus !== undefined && meter.telemetryValues.commStatus !== null && meter.telemetryValues.commStatus !== '') {
-      return !(meter.telemetryValues.commStatus === 0 || meter.telemetryValues.commStatus === '0' || String(meter.telemetryValues.commStatus).toLowerCase() === 'offline');
+      const commOnline = !(meter.telemetryValues.commStatus === 0 || meter.telemetryValues.commStatus === '0' || String(meter.telemetryValues.commStatus).toLowerCase() === 'offline');
+      return commOnline || isFreshTelemetry;
     }
 
-    return hasTelemetryDataFallback || isFreshTelemetry;
+    return isFreshTelemetry;
   };
 
   // Helper to check if a specific meter has an active device mapping (i.e. is mapped)
@@ -568,7 +571,8 @@ const SubMeters = () => {
             reactivePower: existing?.reactivePower ?? null,
             apparentPower: existing?.apparentPower ?? null,
             moduleEvents: existing?.moduleEvents ?? null,
-            telemetryValues: existing?.telemetryValues ?? null
+            telemetryValues: existing?.telemetryValues ?? null,
+            lastTelemetryTimestamp: existing?.lastTelemetryTimestamp ?? null
           };
         });
         
