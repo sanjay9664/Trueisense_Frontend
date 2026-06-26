@@ -21,8 +21,20 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3
 
 const EnergyPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();
-  const [templates, setTemplates] = useState([]);
-  const [devices, setDevices] = useState([]);
+  const [templates, setTemplates] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('scada_templates') || '[]');
+    } catch (e) {
+      return [];
+    }
+  });
+  const [devices, setDevices] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`scada_devices_${siteId}`) || '[]');
+    } catch (e) {
+      return [];
+    }
+  });
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [selectedMeter, setSelectedMeter] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -49,7 +61,7 @@ const EnergyPDFReport = () => {
     }
   }, []);
 
-  // Fetch dynamic devices on mount
+  // Fetch dynamic devices in background
   useEffect(() => {
     const fetchDevices = async () => {
       setLoadingDevices(true);
@@ -67,6 +79,7 @@ const EnergyPDFReport = () => {
         const result = await res.json();
         if (result.success && Array.isArray(result.data)) {
           setDevices(result.data);
+          localStorage.setItem(`scada_devices_${siteId}`, JSON.stringify(result.data));
         } else {
           setDevices([]);
         }
@@ -89,27 +102,14 @@ const EnergyPDFReport = () => {
     fetchDevices();
   }, [siteId]);
 
-  // Load templates on mount as fallback
+  // Load templates on mount as fallback from local storage
   useEffect(() => {
-    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
-      .then(res => res.ok ? res.json() : [])
-      .then(data => {
-        const mapped = data.map(t => {
-          const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
-          const defValues = hasDef ? t.defaultValues : null;
-          const mappingSource = defValues || t.settings?.[0]?.meta || {};
-          return {
-            id: t.id,
-            name: t.name,
-            category: (defValues && defValues.category) || t.category || 'Water Management',
-            module: (defValues && defValues.module) || t.settings?.[0]?.eventKey || 'AG Tank',
-            mapping: mappingSource
-          };
-        });
-        setTemplates(mapped);
-        localStorage.setItem('scada_templates', JSON.stringify(mapped));
-      })
-      .catch(err => console.error('Error fetching templates:', err));
+    const saved = localStorage.getItem('scada_templates');
+    if (saved) {
+      try {
+        setTemplates(JSON.parse(saved));
+      } catch (e) {}
+    }
   }, []);
 
   // Natural sort helper
@@ -223,7 +223,10 @@ const EnergyPDFReport = () => {
           const text = await res.text();
           let json;
           try { json = JSON.parse(text); } catch (e) {}
-          throw new Error(json?.message || json?.error || `Download failed: ${res.statusText}`);
+          const errorMsg = (typeof json?.error === 'object' && json?.error?.message) 
+            ? json.error.message 
+            : (json?.message || (typeof json?.error === 'string' ? json.error : null) || `Download failed: ${res.statusText}`);
+          throw new Error(errorMsg);
         }
 
         const blob = await res.blob();
@@ -250,7 +253,10 @@ const EnergyPDFReport = () => {
           const text = await res.text();
           let json;
           try { json = JSON.parse(text); } catch (e) {}
-          throw new Error(json?.message || json?.error || `Fetch failed: ${res.statusText}`);
+          const errorMsg = (typeof json?.error === 'object' && json?.error?.message) 
+            ? json.error.message 
+            : (json?.message || (typeof json?.error === 'string' ? json.error : null) || `Fetch failed: ${res.statusText}`);
+          throw new Error(errorMsg);
         }
 
         const result = await res.json();

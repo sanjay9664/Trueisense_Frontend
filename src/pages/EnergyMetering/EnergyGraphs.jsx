@@ -664,19 +664,47 @@ const EnergyGraphs = () => {
   const location = useLocation();
   const categoryContext = location.pathname.includes('/aqi-sensor') ? 'AQI_SENSOR' : 'ENERGY_METER';
 
-  const [devices, setDevices] = useState([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState('');
-  const [settings, setSettings] = useState([]);
-  const [selectedSettings, setSelectedSettings] = useState([]);
-  
-  const [isSwitching, setIsSwitching] = useState(false);
-  const [historyLog, setHistoryLog] = useState([]);
-  
-  const [sites, setSites] = useState([]);
   const [selectedSiteId, setSelectedSiteId] = useState(() => {
     const userData = JSON.parse(localStorage.getItem('userData') || '{}');
     return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
   });
+  const [sites, setSites] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('scada_sites') || '[]');
+    } catch (e) {
+      return [];
+    }
+  });
+  const [devices, setDevices] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(`scada_devices_${selectedSiteId}_${categoryContext}`) || '[]');
+    } catch (e) {
+      return [];
+    }
+  });
+  const [selectedDeviceId, setSelectedDeviceId] = useState(() => {
+    return localStorage.getItem(`selected_device_${categoryContext}`) || '';
+  });
+  const [settings, setSettings] = useState(() => {
+    const cachedId = localStorage.getItem(`selected_device_${categoryContext}`) || '';
+    try {
+      return JSON.parse(localStorage.getItem(`scada_settings_${selectedSiteId}_${cachedId}`) || '[]');
+    } catch (e) {
+      return [];
+    }
+  });
+  const [selectedSettings, setSelectedSettings] = useState(() => {
+    const cachedId = localStorage.getItem(`selected_device_${categoryContext}`) || '';
+    try {
+      const parsed = JSON.parse(localStorage.getItem(`scada_settings_${selectedSiteId}_${cachedId}`) || '[]');
+      return parsed.map(s => s.sochiotFieldName);
+    } catch (e) {
+      return [];
+    }
+  });
+  
+  const [isSwitching, setIsSwitching] = useState(false);
+  const [historyLog, setHistoryLog] = useState([]);
 
   const [globalInterval, setGlobalInterval] = useState('MIN_15');
   const [fromDate, setFromDate] = useState(() => {
@@ -692,6 +720,8 @@ const EnergyGraphs = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loadingDevices, setLoadingDevices] = useState(false);
   const [loadingSettings, setLoadingSettings] = useState(false);
+
+  const lastFetchedSettingsDeviceIdRef = useRef(localStorage.getItem(`selected_device_${categoryContext}`) || '');
 
   // Filter settings state
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -775,74 +805,123 @@ const EnergyGraphs = () => {
     setShowFilterModal(false);
   };
 
+  // Unified parallel data pre-loading with SWR
   useEffect(() => {
-    const fetchSites = async () => {
-      try {
-        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
-        if (!token) return;
-        const res = await fetch(`${API_BASE_URL}/sites/`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const json = await res.json();
-          setSites(json.data || []);
-        }
-      } catch (err) {
-        console.error('Error fetching sites in EnergyGraphs:', err);
-      }
-    };
-    fetchSites();
-  }, []);
+    const initializeData = async () => {
+      const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
+      if (!token) return;
 
-  useEffect(() => {
-    const fetchDevices = async () => {
+      // 1. Fetch sites in background
+      fetch(`${API_BASE_URL}/sites/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(res => res.ok ? res.json() : null)
+        .then(json => {
+          if (json?.data) {
+            setSites(json.data);
+            localStorage.setItem('scada_sites', JSON.stringify(json.data));
+          }
+        })
+        .catch(err => console.error('Error background fetching sites:', err));
+
+      // 2. Fetch devices and settings in parallel
+      const cachedId = localStorage.getItem(`selected_device_${categoryContext}`) || '';
+      
       setLoadingDevices(true);
-      try {
-        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
-        const res = await fetch(`${API_BASE_URL}/sites/${selectedSiteId}/devices`, {
+      if (!settings.length) {
+        setLoadingSettings(true);
+      }
+
+      const devicesPromise = fetch(`${API_BASE_URL}/sites/${selectedSiteId}/devices`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(res => res.ok ? res.json() : null);
+
+      let settingsPromise = Promise.resolve(null);
+      if (cachedId) {
+        settingsPromise = fetch(`${API_BASE_URL}/sites/${selectedSiteId}/devices/${cachedId}/settings`, {
           headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) {
-          throw new Error('Failed to fetch devices');
-        }
-        const result = await res.json();
-        if (result.success && Array.isArray(result.data)) {
-          const filtered = result.data.filter(
+        }).then(res => res.ok ? res.json() : null);
+      }
+
+      try {
+        const [devicesRes, settingsRes] = await Promise.all([devicesPromise, settingsPromise]);
+
+        let filteredDevices = [];
+        if (devicesRes?.success && Array.isArray(devicesRes.data)) {
+          filteredDevices = devicesRes.data.filter(
             d => String(d.category).toUpperCase() === categoryContext
           );
-          setDevices(filtered);
-          if (filtered.length > 0) {
-            const cachedId = localStorage.getItem(`selected_device_${categoryContext}`);
-            if (cachedId && filtered.some(d => String(d.id) === String(cachedId))) {
-              setSelectedDeviceId(String(cachedId));
-            } else {
-              setSelectedDeviceId(String(filtered[0].id));
-            }
+          setDevices(filteredDevices);
+          localStorage.setItem(`scada_devices_${selectedSiteId}_${categoryContext}`, JSON.stringify(filteredDevices));
+        }
+
+        let targetDeviceId = '';
+        let finalSettings = [];
+
+        if (filteredDevices.length > 0) {
+          if (cachedId && filteredDevices.some(d => String(d.id) === String(cachedId))) {
+            targetDeviceId = String(cachedId);
           } else {
-            setSelectedDeviceId('');
+            targetDeviceId = String(filteredDevices[0].id);
           }
         }
+
+        // If settingsRes is fetched successfully and matches the targeted cachedId, apply it
+        if (settingsRes?.success && Array.isArray(settingsRes.data) && targetDeviceId === String(cachedId)) {
+          finalSettings = settingsRes.data.filter(s => s.graphable === true && isCore7Setting(s, categoryContext));
+          setSettings(finalSettings);
+          setSelectedSettings(finalSettings.map(s => s.sochiotFieldName));
+          localStorage.setItem(`scada_settings_${selectedSiteId}_${targetDeviceId}`, JSON.stringify(finalSettings));
+          lastFetchedSettingsDeviceIdRef.current = targetDeviceId;
+          setLoadingSettings(false);
+        } else if (targetDeviceId && targetDeviceId !== String(cachedId)) {
+          // If we had no cached settings, or the device fallback changed, fetch settings now
+          const res = await fetch(`${API_BASE_URL}/sites/${selectedSiteId}/devices/${targetDeviceId}/settings`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const result = await res.json();
+            if (result.success && Array.isArray(result.data)) {
+              finalSettings = result.data.filter(s => s.graphable === true && isCore7Setting(s, categoryContext));
+              setSettings(finalSettings);
+              setSelectedSettings(finalSettings.map(s => s.sochiotFieldName));
+              localStorage.setItem(`scada_settings_${selectedSiteId}_${targetDeviceId}`, JSON.stringify(finalSettings));
+              lastFetchedSettingsDeviceIdRef.current = targetDeviceId;
+            }
+          }
+          setLoadingSettings(false);
+        } else {
+          setLoadingSettings(false);
+        }
+
+        setSelectedDeviceId(targetDeviceId);
       } catch (err) {
-        console.error('Error fetching devices:', err);
+        console.error('Initialization error:', err);
+        setLoadingSettings(false);
       } finally {
         setLoadingDevices(false);
       }
     };
-    fetchDevices();
+
+    initializeData();
   }, [selectedSiteId, categoryContext]);
 
-  useEffect(() => {
-    if (selectedDeviceId) {
-      localStorage.setItem(`selected_device_${categoryContext}`, selectedDeviceId);
-    }
-  }, [selectedDeviceId, categoryContext]);
-
+  // Handle selected device ID change (e.g., from dropdown selection)
   useEffect(() => {
     if (!selectedDeviceId) {
       setSettings([]);
       setSelectedSettings([]);
       return;
     }
+    
+    // Cache it instantly
+    localStorage.setItem(`selected_device_${categoryContext}`, selectedDeviceId);
+
+    // Skip if we just initialized this device ID's settings in parallel
+    if (selectedDeviceId === lastFetchedSettingsDeviceIdRef.current && settings.length > 0) {
+      return;
+    }
+
     const fetchSettings = async () => {
       setLoadingSettings(true);
       try {
@@ -858,6 +937,8 @@ const EnergyGraphs = () => {
           const graphableSettings = result.data.filter(s => s.graphable === true && isCore7Setting(s, categoryContext));
           setSettings(graphableSettings);
           setSelectedSettings(graphableSettings.map(s => s.sochiotFieldName));
+          localStorage.setItem(`scada_settings_${selectedSiteId}_${selectedDeviceId}`, JSON.stringify(graphableSettings));
+          lastFetchedSettingsDeviceIdRef.current = selectedDeviceId;
         } else {
           setSettings([]);
           setSelectedSettings([]);
@@ -871,7 +952,7 @@ const EnergyGraphs = () => {
       }
     };
     fetchSettings();
-  }, [selectedSiteId, selectedDeviceId]);
+  }, [selectedSiteId, selectedDeviceId, categoryContext]);
 
   useEffect(() => {
     if (globalInterval === 'live' || !selectedDeviceId || selectedSettings.length === 0) {
@@ -1155,7 +1236,7 @@ const EnergyGraphs = () => {
         ) : activeData.length === 0 ? (
           <div className="d-flex flex-column justify-content-center align-items-center h-100 border border-secondary border-opacity-25 rounded-4 p-5 text-center" style={{ minHeight: '400px', background: 'rgba(15, 23, 42, 0.4)' }}>
             <Zap className="text-warning mb-3 opacity-50 animate-pulse" size={48} style={{ filter: 'drop-shadow(0 0 10px rgba(249, 115, 22, 0.4))' }} />
-            <h5 className="text-white fw-bold mb-2">No Modbus Telemetry Data Found</h5>
+            <h5 className="text-white fw-bold mb-2"> Telemetry Data Found</h5>
             <p className="text-secondary max-w-md mb-0 mx-auto" style={{ maxWidth: '480px' }}>
               We are currently displaying only live/historical Modbus register data. No dummy or simulated values are shown on this dashboard. Please verify device connectivity or adjust your timeframe filtration settings.
             </p>

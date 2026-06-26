@@ -93,7 +93,12 @@ const Gauge = ({ value, min, max, unit, color, isMapped = true }) => {
 import { io } from 'socket.io-client';
 
 let globalCachedZones = null;
-let globalCachedSelectedUnit = 'Common';
+try {
+  const saved = localStorage.getItem('scada_vrv_zones');
+  if (saved) globalCachedZones = JSON.parse(saved);
+} catch (e) {}
+
+let globalCachedSelectedUnit = localStorage.getItem('scada_vrv_selected_unit') || 'Common';
 
 const getLatestLastSeen = (lastSeenObj) => {
   if (!lastSeenObj || typeof lastSeenObj !== 'object') return null;
@@ -129,12 +134,14 @@ const EnvDashboard = () => {
   React.useEffect(() => {
     if (savedZones.length > 0) {
       globalCachedZones = savedZones;
+      localStorage.setItem('scada_vrv_zones', JSON.stringify(savedZones));
     }
   }, [savedZones]);
 
   React.useEffect(() => {
     if (selectedUnit) {
       globalCachedSelectedUnit = selectedUnit;
+      localStorage.setItem('scada_vrv_selected_unit', selectedUnit);
     }
   }, [selectedUnit]);
 

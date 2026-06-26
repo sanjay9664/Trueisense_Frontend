@@ -91,8 +91,20 @@ const CustomArcGauge = ({ value, max, label, color, format = (v) => v, isMapped 
 
 const AQIOverview = () => {
   const navigate = useNavigate();
-  const [channels, setChannels] = useState([]);
-  const [selectedChId, setSelectedChId] = useState(null);
+  const [channels, setChannels] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('scada_aqi_channels') || '[]');
+    } catch (e) {
+      return [];
+    }
+  });
+  const [selectedChId, setSelectedChId] = useState(() => {
+    try {
+      return Number(localStorage.getItem('scada_aqi_selected_ch_id')) || null;
+    } catch (e) {
+      return null;
+    }
+  });
   const selectedCh = channels.find(ch => ch.id === selectedChId) || channels[0] || null;
 
 
@@ -235,10 +247,12 @@ const AQIOverview = () => {
 
             if (nextChannels.length > 0) {
               setSelectedChId(prevId => {
-                if (nextChannels.some(ch => ch.id === prevId)) return prevId;
-                return nextChannels[0].id;
+                const nextId = nextChannels.some(ch => ch.id === prevId) ? prevId : nextChannels[0].id;
+                localStorage.setItem('scada_aqi_selected_ch_id', nextId);
+                return nextId;
               });
             }
+            localStorage.setItem('scada_aqi_channels', JSON.stringify(nextChannels));
             return nextChannels;
           });
 
@@ -348,7 +362,11 @@ const AQIOverview = () => {
               className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
               style={{ width: '220px', maxWidth: '100%', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
               value={selectedChId || ''}
-              onChange={(e) => setSelectedChId(Number(e.target.value))}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setSelectedChId(val);
+                localStorage.setItem('scada_aqi_selected_ch_id', val);
+              }}
             >
               {channels.map(ch => (
                 <option key={ch.id} value={ch.id}>
@@ -385,7 +403,10 @@ const AQIOverview = () => {
                 return (
                   <div 
                     key={ch.id} 
-                    onClick={() => setSelectedChId(ch.id)}
+                    onClick={() => {
+                      setSelectedChId(ch.id);
+                      localStorage.setItem('scada_aqi_selected_ch_id', ch.id);
+                    }}
                     onDoubleClick={() => navigate('/aqi-sensor/temp-humidity')}
                     className="p-3 rounded position-relative overflow-hidden"
                     style={{ 

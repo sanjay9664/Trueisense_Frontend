@@ -22,10 +22,8 @@ function App() {
     img2.src = loginLogo;
   }, []);
 
-  // Track if splash should show (runs on fresh load/reload and login)
-  const [showSplash, setShowSplash] = useState(
-    localStorage.getItem('isAuthenticated') !== 'true'
-  );
+  // Track if splash should show (runs on fresh load/reload and login) - disabled for performance
+  const [showSplash, setShowSplash] = useState(false);
   const prevAuthRef = useRef(isAuthenticated);
 
   // Auto-login from URL parameters (useful for iframe embedding)
@@ -69,10 +67,7 @@ function App() {
   useEffect(() => {
     const checkAuth = () => {
       const newAuth = localStorage.getItem('isAuthenticated') === 'true';
-      // Trigger splash only when transitioning from not-authenticated → authenticated
-      if (!prevAuthRef.current && newAuth) {
-        setShowSplash(true);
-      }
+      // Trigger splash only when transitioning from not-authenticated → authenticated - disabled
       prevAuthRef.current = newAuth;
       setIsAuthenticated(newAuth);
     };
@@ -128,7 +123,6 @@ function App() {
 
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
-    setShowSplash(true);
   };
 
   return (
