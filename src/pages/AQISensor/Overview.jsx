@@ -89,15 +89,75 @@ const CustomArcGauge = ({ value, max, label, color, format = (v) => v, isMapped 
   );
 };
 
+const getNormalizedTemplates = (data) => {
+  if (!Array.isArray(data)) return [];
+  return data.map(t => {
+    if (t.mapping && !t.settings) {
+      return {
+        id: t.id,
+        name: t.name,
+        category: t.mapping.category || t.category || 'Water Management',
+        module: t.mapping.module || t.module || 'AG Tank',
+        mapping: t.mapping,
+        template_name: t.name
+      };
+    }
+    const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
+    const defValues = hasDef ? t.defaultValues : null;
+    const mappingSource = defValues || (t.settings && t.settings[0]?.meta) || {};
+    return {
+      id: t.id,
+      name: t.name,
+      category: (defValues && defValues.category) || t.category || 'Water Management',
+      module: (defValues && defValues.module) || (t.settings && t.settings[0]?.eventKey) || 'AG Tank',
+      mapping: mappingSource,
+      template_name: t.name
+    };
+  });
+};
+
+const getInitialChannels = () => {
+  try {
+    const saved = localStorage.getItem('scada_aqi_channels');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+
+  try {
+    const savedTemplates = localStorage.getItem('scada_templates');
+    if (savedTemplates) {
+      const data = JSON.parse(savedTemplates);
+      const normalized = getNormalizedTemplates(data);
+      const aqi = normalized.filter(t => (t.category === 'VRV' || t.category === 'AQI Sensor') && t.module === 'Temp & Humidity');
+      return aqi
+        .map((t, index) => {
+          return {
+            id: index + 1,
+            name: t?.mapping?.vrvConfig?.vrvZone || t?.name || `TEMP & HUMIDITY (#${index + 1})`,
+            location: t?.mapping?.vrvConfig?.building || t?.mapping?.vrvConfig?.subZone || 'Facility Zone',
+            temp: "0.00",
+            hum: "0.0",
+            aqi: "0.00",
+            co2: 0,
+            tvoc: 0,
+            history: createHistoryData(0, 0, 0, 0, 0),
+            isPlaceholder: true,
+            mapping: t.mapping || null,
+            lastUpdated: null
+          };
+        })
+        .filter(ch => ch.mapping?.vrvConfig?.device);
+    }
+  } catch (e) {}
+
+  return [];
+};
+
 const AQIOverview = () => {
   const navigate = useNavigate();
-  const [channels, setChannels] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('scada_aqi_channels') || '[]');
-    } catch (e) {
-      return [];
-    }
-  });
+  const [channels, setChannels] = useState(getInitialChannels);
   const [selectedChId, setSelectedChId] = useState(() => {
     try {
       return Number(localStorage.getItem('scada_aqi_selected_ch_id')) || null;
@@ -117,6 +177,11 @@ const AQIOverview = () => {
     });
 
     let currentTemplates = [];
+    
+    // Fetch telemetry stats immediately on mount in parallel
+    const statsPromise = fetch(`${backendUrl}/api/templates/stats`)
+      .then(res => res.ok ? res.json() : [])
+      .catch(() => []);
 
     const processTelemetry = (stats) => {
       if (!Array.isArray(stats)) return;
@@ -161,26 +226,43 @@ const AQIOverview = () => {
           if (aqi !== null && newZone.aqi !== aqi.toFixed(2)) { newZone.aqi = aqi.toFixed(2); updated = true; }
 
           if (updated) {
-            const lastVal = newZone.history[newZone.history.length - 1];
             const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            if (lastVal && lastVal.time === timeStr) {
-              newZone.history[newZone.history.length - 1] = {
-                time: timeStr,
-                temp: newZone.temp,
-                hum: newZone.hum,
-                aqi: newZone.aqi,
-                co2: newZone.co2,
-                tvoc: newZone.tvoc
-              };
+            const allZero = newZone.history.every(h => parseFloat(h.temp) === 0);
+            if (allZero || newZone.isPlaceholder) {
+              newZone.isPlaceholder = false;
+              newZone.history = Array.from({ length: 24 }).map((_, j) => {
+                const time = new Date();
+                time.setHours(time.getHours() - (23 - j));
+                return {
+                  time: `${time.getHours().toString().padStart(2, '0')}:00`,
+                  temp: newZone.temp,
+                  hum: newZone.hum,
+                  aqi: newZone.aqi,
+                  co2: newZone.co2,
+                  tvoc: newZone.tvoc
+                };
+              });
             } else {
-              newZone.history = [...newZone.history.slice(1), {
-                time: timeStr,
-                temp: newZone.temp,
-                hum: newZone.hum,
-                aqi: newZone.aqi,
-                co2: newZone.co2,
-                tvoc: newZone.tvoc
-              }];
+              const lastVal = newZone.history[newZone.history.length - 1];
+              if (lastVal && lastVal.time === timeStr) {
+                newZone.history[newZone.history.length - 1] = {
+                  time: timeStr,
+                  temp: newZone.temp,
+                  hum: newZone.hum,
+                  aqi: newZone.aqi,
+                  co2: newZone.co2,
+                  tvoc: newZone.tvoc
+                };
+              } else {
+                newZone.history = [...newZone.history.slice(1), {
+                  time: timeStr,
+                  temp: newZone.temp,
+                  hum: newZone.hum,
+                  aqi: newZone.aqi,
+                  co2: newZone.co2,
+                  tvoc: newZone.tvoc
+                }];
+              }
             }
           }
 
@@ -195,89 +277,66 @@ const AQIOverview = () => {
 
     const fetchTemplatesAndStats = async () => {
       try {
-        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const tenantId = userData?.tenantId;
-        const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
-        const response = await fetch(url);
-        if (response.ok) {
-          const data = await response.json();
-          const mappedData = data.map(t => {
-            const hasDefaultValues = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
-            const defValues = hasDefaultValues ? t.defaultValues : null;
-            const mappingSource = defValues || (t.settings && t.settings[0]?.meta) || {};
-            return {
-              id: t.id,
-              name: t.name,
-              category: (defValues && defValues.category) || t.category || 'Water Management',
-              module: (defValues && defValues.module) || (t.settings && t.settings[0]?.eventKey) || 'AG Tank',
-              mapping: mappingSource,
-              template_name: t.name
-            };
-          });
-          const aqiTemplates = mappedData.filter(t => (t.category === 'VRV' || t.category === 'AQI Sensor') && t.module === 'Temp & Humidity');
-          currentTemplates = aqiTemplates;
-          
-          setChannels(prev => {
-            const nextChannels = aqiTemplates
-              .map((t, index) => {
-                const baseTemp = 20 + Math.random() * 5;
-                const baseHum = 40 + Math.random() * 20;
-                const baseAqi = 15 + Math.random() * 15;
-                const baseCo2 = 400 + Math.random() * 200;
-                const baseTvoc = 50 + Math.random() * 50;
-
-                const name = t.mapping?.vrvConfig?.vrvZone || t.template_name || `TEMP & HUMIDITY (#${index + 1})`;
-                const existing = prev.find(p => p.name === name);
-
-                return {
-                  id: index + 1,
-                  name: name,
-                  location: t.mapping?.vrvConfig?.building || t.mapping?.vrvConfig?.subZone || 'Facility Zone',
-                  temp: existing?.temp ?? baseTemp.toFixed(2),
-                  hum: existing?.hum ?? baseHum.toFixed(1),
-                  aqi: existing?.aqi ?? baseAqi.toFixed(2),
-                  co2: existing?.co2 ?? Math.round(baseCo2),
-                  tvoc: existing?.tvoc ?? Math.round(baseTvoc),
-                  history: existing?.history ?? createHistoryData(baseTemp, baseHum, baseAqi, baseCo2, baseTvoc),
-                  mapping: t.mapping || null,
-                  lastUpdated: existing?.lastUpdated || null
-                };
-              })
-              .filter(ch => ch.mapping?.vrvConfig?.device);
-
-            if (nextChannels.length > 0) {
-              setSelectedChId(prevId => {
-                const nextId = nextChannels.some(ch => ch.id === prevId) ? prevId : nextChannels[0].id;
-                localStorage.setItem('scada_aqi_selected_ch_id', nextId);
-                return nextId;
-              });
-            }
-            localStorage.setItem('scada_aqi_channels', JSON.stringify(nextChannels));
-            return nextChannels;
-          });
-
-          if (aqiTemplates.length > 0) {
-            const modulesToPoll = new Set();
-            aqiTemplates.forEach(t => {
-              if (t.mapping?.vrvConfig) {
-                Object.values(t.mapping.vrvConfig).forEach(val => {
-                  if (typeof val === 'string' && val.includes('::')) {
-                    modulesToPoll.add(val.split('::')[0]);
-                  }
-                });
-              }
-            });
-            
-            const pollList = Array.from(modulesToPoll);
-            const apiBase = backendUrl;
-            const statsUrl = pollList.length > 0 ? `${apiBase}/api/templates/stats?modules=${pollList.join(',')}` : `${apiBase}/api/templates/stats`;
-            
-            const statsRes = await fetch(statsUrl);
-            if (statsRes.ok) {
-              const stats = await statsRes.json();
-              processTelemetry(stats);
-            }
+        let templatesData = [];
+        const saved = localStorage.getItem('scada_templates');
+        if (saved) {
+          try {
+            templatesData = JSON.parse(saved);
+          } catch (e) {}
+        }
+        
+        // Fallback to fetch if cache is empty
+        if (!templatesData || templatesData.length === 0) {
+          const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+          const tenantId = userData?.tenantId;
+          const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
+          const response = await fetch(`${backendUrl}${url}`);
+          if (response.ok) {
+            templatesData = await response.json();
           }
+        }
+
+        const mappedData = getNormalizedTemplates(templatesData);
+        const aqiTemplates = mappedData.filter(t => (t.category === 'VRV' || t.category === 'AQI Sensor') && t.module === 'Temp & Humidity');
+        currentTemplates = aqiTemplates;
+        
+        setChannels(prev => {
+          const nextChannels = aqiTemplates
+            .map((t, index) => {
+              const name = t.mapping?.vrvConfig?.vrvZone || t.template_name || `TEMP & HUMIDITY (#${index + 1})`;
+              const existing = prev.find(p => p.name === name);
+
+              return {
+                id: index + 1,
+                name: name,
+                location: t.mapping?.vrvConfig?.building || t.mapping?.vrvConfig?.subZone || 'Facility Zone',
+                temp: existing?.temp ?? "0.00",
+                hum: existing?.hum ?? "0.0",
+                aqi: existing?.aqi ?? "0.00",
+                co2: existing?.co2 ?? 0,
+                tvoc: existing?.tvoc ?? 0,
+                history: existing?.history ?? createHistoryData(0, 0, 0, 0, 0),
+                isPlaceholder: existing?.isPlaceholder ?? true,
+                mapping: t.mapping || null,
+                lastUpdated: existing?.lastUpdated || null
+              };
+            })
+            .filter(ch => ch.mapping?.vrvConfig?.device);
+
+          if (nextChannels.length > 0) {
+            setSelectedChId(prevId => {
+              const nextId = nextChannels.some(ch => ch.id === prevId) ? prevId : nextChannels[0].id;
+              localStorage.setItem('scada_aqi_selected_ch_id', nextId);
+              return nextId;
+            });
+          }
+          localStorage.setItem('scada_aqi_channels', JSON.stringify(nextChannels));
+          return nextChannels;
+        });
+
+        const stats = await statsPromise;
+        if (stats && stats.length > 0) {
+          processTelemetry(stats);
         }
       } catch (error) {
         console.error('Error fetching AQI templates:', error);

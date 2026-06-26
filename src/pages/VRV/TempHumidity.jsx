@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Row, Col, Card, Badge } from 'react-bootstrap';
 import { Thermometer, Droplets, Activity, Wind, Leaf, Sparkles } from 'lucide-react';
+import { io } from 'socket.io-client';
 import PdfButton from '../../components/PdfButton';
 import './VRVOverview.css';
 
@@ -90,13 +91,70 @@ const Gauge = ({ value, min, max, unit, color, isMapped = true }) => {
   );
 };
 
-import { io } from 'socket.io-client';
-
 let globalCachedZones = null;
 try {
   const saved = localStorage.getItem('scada_vrv_zones');
-  if (saved) globalCachedZones = JSON.parse(saved);
+  if (saved) {
+    const parsed = JSON.parse(saved);
+    if (Array.isArray(parsed)) {
+      globalCachedZones = parsed;
+    }
+  }
 } catch (e) {}
+
+// Fallback dynamic construction from templates on startup/hard refresh
+if (!Array.isArray(globalCachedZones) || globalCachedZones.length === 0) {
+  try {
+    const savedTemplates = localStorage.getItem('scada_templates');
+    if (savedTemplates) {
+      const data = JSON.parse(savedTemplates);
+      if (Array.isArray(data)) {
+        const normalized = data.map(t => {
+          if (t.mapping && !t.settings) {
+            return {
+              id: t.id,
+              name: t.name,
+              category: t.mapping.category || t.category || 'Water Management',
+              module: t.mapping.module || t.module || 'AG Tank',
+              mapping: t.mapping
+            };
+          }
+          const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
+          const defValues = hasDef ? t.defaultValues : null;
+          const mappingSource = defValues || (t.settings && t.settings[0]?.meta) || {};
+          return {
+            id: t.id,
+            name: t.name,
+            category: (defValues && defValues.category) || t.category || 'Water Management',
+            module: (defValues && defValues.module) || (t.settings && t.settings[0]?.eventKey) || 'AG Tank',
+            mapping: mappingSource
+          };
+        });
+        const vrv = normalized.filter(t => (t.category === 'VRV' || t.category === 'AQI Sensor') && t.module === 'Temp & Humidity');
+        globalCachedZones = vrv
+          .map((t, index) => ({
+            id: index + 1,
+            name: t?.mapping?.vrvConfig?.vrvZone || t?.name || `Zone ${index + 1}`,
+            TEMP: 0,
+            HUMIDITY: 0,
+            CO2: 0,
+            TVOC: 0,
+            AQI: 0,
+            highs: {},
+            lows: {},
+            status: 'Optimal',
+            mapping: t?.mapping || null,
+            lastSeen: {}
+          }))
+          .filter(z => z.mapping?.vrvConfig?.device);
+      }
+    }
+  } catch (e) {}
+}
+
+if (!Array.isArray(globalCachedZones)) {
+  globalCachedZones = [];
+}
 
 let globalCachedSelectedUnit = localStorage.getItem('scada_vrv_selected_unit') || 'Common';
 
@@ -123,6 +181,33 @@ const formatLastUpdated = (timestamp) => {
     return `${hours}:${minutes}:${seconds}`;
   }
   return `${day}/${month} ${hours}:${minutes}:${seconds}`;
+};
+
+const getNormalizedTemplates = (data) => {
+  if (!Array.isArray(data)) return [];
+  return data.map(t => {
+    if (t.mapping && !t.settings) {
+      return {
+        id: t.id,
+        name: t.name,
+        category: t.mapping.category || t.category || 'Water Management',
+        module: t.mapping.module || t.module || 'AG Tank',
+        mapping: t.mapping,
+        template_name: t.name
+      };
+    }
+    const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
+    const defValues = hasDef ? t.defaultValues : null;
+    const mappingSource = defValues || (t.settings && t.settings[0]?.meta) || {};
+    return {
+      id: t.id,
+      name: t.name,
+      category: (defValues && defValues.category) || t.category || 'Water Management',
+      module: (defValues && defValues.module) || (t.settings && t.settings[0]?.eventKey) || 'AG Tank',
+      mapping: mappingSource,
+      template_name: t.name
+    };
+  });
 };
 
 const EnvDashboard = () => {
@@ -155,6 +240,11 @@ const EnvDashboard = () => {
 
     let currentTemplates = [];
 
+    // Fetch telemetry stats immediately on mount in parallel
+    const statsPromise = fetch(`${backendUrl}/api/templates/stats`)
+      .then(res => res.ok ? res.json() : [])
+      .catch(() => []);
+
     const processTelemetry = (stats) => {
       if (!Array.isArray(stats)) return;
       
@@ -165,6 +255,8 @@ const EnvDashboard = () => {
           
           let newZone = { ...zone };
           if (!newZone.lastSeen) newZone.lastSeen = {};
+          if (!newZone.highs) newZone.highs = {};
+          if (!newZone.lows) newZone.lows = {};
           const config = zone.mapping.vrvConfig;
 
           // Helper to extract value and timestamp from stats
@@ -184,34 +276,62 @@ const EnvDashboard = () => {
             return { val: null, ts: null };
           };
 
+          const updateHighLow = (key, val) => {
+            if (val === null || val === undefined || isNaN(val)) return;
+
+            if (newZone.highs === zone.highs) newZone.highs = { ...zone.highs };
+            if (newZone.lows === zone.lows) newZone.lows = { ...zone.lows };
+
+            if (newZone.highs[key] === undefined) {
+              newZone.highs[key] = val;
+              updated = true;
+            } else if (val > newZone.highs[key]) {
+              newZone.highs[key] = val;
+              updated = true;
+            }
+
+            if (newZone.lows[key] === undefined) {
+              newZone.lows[key] = val;
+              updated = true;
+            } else if (val < newZone.lows[key]) {
+              newZone.lows[key] = val;
+              updated = true;
+            }
+          };
+
           const tempInfo = getValueAndTimestamp(config.temperature);
           if (tempInfo.val !== null) {
             if (newZone.TEMP !== tempInfo.val) { newZone.TEMP = tempInfo.val; updated = true; }
             if (tempInfo.ts !== null && newZone.lastSeen.TEMP !== tempInfo.ts) { newZone.lastSeen.TEMP = tempInfo.ts; updated = true; }
+            updateHighLow('TEMP', tempInfo.val);
           }
 
           const humInfo = getValueAndTimestamp(config.humidity);
           if (humInfo.val !== null) {
             if (newZone.HUMIDITY !== humInfo.val) { newZone.HUMIDITY = humInfo.val; updated = true; }
             if (humInfo.ts !== null && newZone.lastSeen.HUMIDITY !== humInfo.ts) { newZone.lastSeen.HUMIDITY = humInfo.ts; updated = true; }
+            updateHighLow('HUMIDITY', humInfo.val);
           }
 
           const co2Info = getValueAndTimestamp(config.co2);
           if (co2Info.val !== null) {
             if (newZone.CO2 !== co2Info.val) { newZone.CO2 = co2Info.val; updated = true; }
             if (co2Info.ts !== null && newZone.lastSeen.CO2 !== co2Info.ts) { newZone.lastSeen.CO2 = co2Info.ts; updated = true; }
+            updateHighLow('CO2', co2Info.val);
           }
 
           const tvocInfo = getValueAndTimestamp(config.tvoc);
           if (tvocInfo.val !== null) {
             if (newZone.TVOC !== tvocInfo.val) { newZone.TVOC = tvocInfo.val; updated = true; }
             if (tvocInfo.ts !== null && newZone.lastSeen.TVOC !== tvocInfo.ts) { newZone.lastSeen.TVOC = tvocInfo.ts; updated = true; }
+            updateHighLow('TVOC', tvocInfo.val);
           }
 
           const aqiInfo = getValueAndTimestamp(config.aqi);
           if (aqiInfo.val !== null) {
             if (newZone.AQI !== aqiInfo.val) { newZone.AQI = aqiInfo.val; updated = true; }
             if (aqiInfo.ts !== null && newZone.lastSeen.AQI !== aqiInfo.ts) { newZone.lastSeen.AQI = aqiInfo.ts; updated = true; }
+            updateHighLow('AQI', aqiInfo.val);
           }
 
           return newZone;
@@ -225,80 +345,62 @@ const EnvDashboard = () => {
 
     const fetchTemplatesAndStats = async () => {
       try {
-        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const tenantId = userData?.tenantId;
-        const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
-        const response = await fetch(url);
-        if (response.ok) {
-          const data = await response.json();
-          const mappedData = data.map(t => {
-            const hasDefaultValues = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
-            const defValues = hasDefaultValues ? t.defaultValues : null;
-            const mappingSource = defValues || (t.settings && t.settings[0]?.meta) || {};
-            return {
-              id: t.id,
-              name: t.name,
-              category: (defValues && defValues.category) || t.category || 'Water Management',
-              module: (defValues && defValues.module) || (t.settings && t.settings[0]?.eventKey) || 'AG Tank',
-              mapping: mappingSource,
-              template_name: t.name
-            };
-          });
-          const vrvTemplates = mappedData.filter(t => (t.category === 'VRV' || t.category === 'AQI Sensor') && t.module === 'Temp & Humidity');
-          currentTemplates = vrvTemplates;
-          
-          setSavedZones(prev => {
-            const nextZones = vrvTemplates
-              .map((t, index) => {
-                const existing = prev.find(p => p.name === (t?.mapping?.vrvConfig?.vrvZone || t?.name));
-                return {
-                  id: index + 1,
-                  name: t?.mapping?.vrvConfig?.vrvZone || t?.template_name || `Zone ${index + 1}`,
-                  TEMP: existing?.TEMP ?? 0,
-                  HUMIDITY: existing?.HUMIDITY ?? 0,
-                  CO2: existing?.CO2 ?? 0,
-                  TVOC: existing?.TVOC ?? 0,
-                  AQI: existing?.AQI ?? 0,
-                  status: existing?.status ?? 'Optimal',
-                  mapping: t?.mapping || null,
-                  lastSeen: existing?.lastSeen || {}
-                };
-              })
-              .filter(z => z.mapping?.vrvConfig?.device);
-
-            if (nextZones.length > 0 && (selectedUnit === 'Common' || !nextZones.some(z => z.name === selectedUnit))) {
-              setSelectedUnit(nextZones[0].name);
-            }
-            return nextZones;
-          });
-          
-          setIsFetching(false);
-          
-          if (vrvTemplates.length > 0) {
-            // Initial stats fetch
-            const modulesToPoll = new Set();
-            vrvTemplates.forEach(t => {
-              if (t.mapping?.vrvConfig) {
-                Object.values(t.mapping.vrvConfig).forEach(val => {
-                  if (typeof val === 'string' && val.includes('::')) {
-                    modulesToPoll.add(val.split('::')[0]);
-                  }
-                });
-              }
-            });
-            
-            const pollList = Array.from(modulesToPoll);
-            const apiBase = backendUrl;
-            const url = pollList.length > 0 ? `${apiBase}/api/templates/stats?modules=${pollList.join(',')}` : `${apiBase}/api/templates/stats`;
-            
-            const statsRes = await fetch(url);
-            if (statsRes.ok) {
-              const stats = await statsRes.json();
-              processTelemetry(stats);
-            }
+        let templatesData = [];
+        const saved = localStorage.getItem('scada_templates');
+        if (saved) {
+          try {
+            templatesData = JSON.parse(saved);
+          } catch (e) {}
+        }
+        
+        // Fallback to fetch if cache is empty
+        if (!templatesData || templatesData.length === 0) {
+          const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+          const tenantId = userData?.tenantId;
+          const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
+          const response = await fetch(`${backendUrl}${url}`);
+          if (response.ok) {
+            templatesData = await response.json();
           }
-        } else {
-          setIsFetching(false);
+        }
+
+        const mappedData = getNormalizedTemplates(templatesData);
+        const vrvTemplates = mappedData.filter(t => (t.category === 'VRV' || t.category === 'AQI Sensor') && t.module === 'Temp & Humidity');
+        currentTemplates = vrvTemplates;
+        
+        setSavedZones(prev => {
+          const nextZones = vrvTemplates
+            .map((t, index) => {
+              const existing = prev.find(p => p.name === (t?.mapping?.vrvConfig?.vrvZone || t?.name));
+              return {
+                id: index + 1,
+                name: t?.mapping?.vrvConfig?.vrvZone || t?.template_name || `Zone ${index + 1}`,
+                TEMP: existing?.TEMP ?? 0,
+                HUMIDITY: existing?.HUMIDITY ?? 0,
+                CO2: existing?.CO2 ?? 0,
+                TVOC: existing?.TVOC ?? 0,
+                AQI: existing?.AQI ?? 0,
+                highs: existing?.highs || {},
+                lows: existing?.lows || {},
+                status: existing?.status ?? 'Optimal',
+                mapping: t?.mapping || null,
+                lastSeen: existing?.lastSeen || {}
+              };
+            })
+            .filter(z => z.mapping?.vrvConfig?.device);
+
+          if (nextZones.length > 0 && (selectedUnit === 'Common' || !nextZones.some(z => z.name === selectedUnit))) {
+            setSelectedUnit(nextZones[0].name);
+          }
+          localStorage.setItem('scada_vrv_zones', JSON.stringify(nextZones));
+          return nextZones;
+        });
+        
+        setIsFetching(false);
+        
+        const stats = await statsPromise;
+        if (stats && stats.length > 0) {
+          processTelemetry(stats);
         }
       } catch (error) {
         console.error('Error fetching VRV templates:', error);
@@ -585,7 +687,7 @@ const EnvDashboard = () => {
                                 <Col xs={4}>
                                   <div className="text-secondary opacity-50 fw-bold text-uppercase tracking-widest mb-1" style={{ fontSize: '0.55rem' }}>24H HIGH</div>
                                   <div className="text-white opacity-75 fs-6 fw-bold font-monospace">
-                                    {(value > 0 ? value + (config.max - config.min) * 0.08 : config.max * 0.8).toFixed(1)}
+                                    {(unitData.highs?.[key] ?? (value > 0 ? value : config.max * 0.8)).toFixed(1)}
                                   </div>
                                 </Col>
                                 <Col xs={4} className="border-start border-end border-secondary border-opacity-10 d-flex flex-column justify-content-center align-items-center">
@@ -598,7 +700,7 @@ const EnvDashboard = () => {
                                 <Col xs={4}>
                                   <div className="text-secondary opacity-50 fw-bold text-uppercase tracking-widest mb-1" style={{ fontSize: '0.6rem' }}>24H LOW</div>
                                   <div className="text-white opacity-75 fs-6 fw-bold font-monospace">
-                                    {Math.max(config.min, value - (config.max - config.min) * 0.12).toFixed(1)}
+                                    {(unitData.lows?.[key] ?? (value > 0 ? value : config.min)).toFixed(1)}
                                   </div>
                                 </Col>
                               </Row>

@@ -722,6 +722,9 @@ const EnergyGraphs = () => {
   const [loadingSettings, setLoadingSettings] = useState(false);
 
   const lastFetchedSettingsDeviceIdRef = useRef(localStorage.getItem(`selected_device_${categoryContext}`) || '');
+  const prevDeviceRef = useRef(selectedDeviceId);
+  const prevSiteRef = useRef(selectedSiteId);
+  const prevGlobalIntervalRef = useRef(globalInterval);
 
   // Filter settings state
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -1040,13 +1043,90 @@ const EnergyGraphs = () => {
   }, [selectedSiteId, selectedDeviceId, selectedSettings, globalInterval, fromDate, toDate, aggregation]);
 
   useEffect(() => {
+    const deviceChanged = prevDeviceRef.current !== selectedDeviceId;
+    const siteChanged = prevSiteRef.current !== selectedSiteId;
+    const modeChanged = prevGlobalIntervalRef.current !== globalInterval;
+
+    prevDeviceRef.current = selectedDeviceId;
+    prevSiteRef.current = selectedSiteId;
+    prevGlobalIntervalRef.current = globalInterval;
+
     if (globalInterval !== 'live' || !selectedDeviceId) {
       setHistoryLog([]);
       return;
     }
 
-    setIsSwitching(true);
-    setHistoryLog([]);
+    if (deviceChanged || siteChanged || modeChanged) {
+      setIsSwitching(true);
+      setHistoryLog([]);
+
+      // Fetch historical snapshots for the selected timeframe to seed the realtime graph
+      const seedRealtimeLog = async () => {
+        try {
+          const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
+          const headers = { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          };
+          
+          const promises = selectedSettings.map(async (fieldKey) => {
+            const url = `${API_BASE_URL}/sites/${selectedSiteId}/devices/${selectedDeviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=MIN_15&from=${fromDate}T00:00:00Z&to=${toDate}T23:59:59Z`;
+            try {
+              const res = await fetch(url, { headers });
+              if (!res.ok) return { key: fieldKey, snapshots: [] };
+              const json = await res.json();
+              return {
+                key: fieldKey,
+                snapshots: json.data?.snapshots || []
+              };
+            } catch (e) {
+              return { key: fieldKey, snapshots: [] };
+            }
+          });
+          
+          const results = await Promise.all(promises);
+          const mergedData = {};
+          
+          results.forEach(result => {
+            result.snapshots.forEach(snap => {
+              const timeKey = snap.windowStart;
+              if (!mergedData[timeKey]) {
+                const dateObj = new Date(snap.windowStart);
+                const formattedTime = dateObj.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                const fullDateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                const fullTimeStr = dateObj.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                
+                mergedData[timeKey] = {
+                  time: formattedTime,
+                  fullDate: fullDateStr,
+                  fullTime: fullTimeStr,
+                  windowStart: snap.windowStart,
+                  windowEnd: snap.windowEnd
+                };
+              }
+              const valKey = aggregation === 'Min' || aggregation === 'Minimum' ? 'minValue' :
+                             aggregation === 'Max' || aggregation === 'Maximum' ? 'maxValue' :
+                             aggregation === 'Sum' ? 'sumValue' :
+                             aggregation === 'Count' ? 'countValue' : 'avgValue';
+              let finalValue = snap[valKey];
+              if (finalValue === undefined || finalValue === null) {
+                finalValue = snap.avgValue ?? snap.minValue ?? snap.maxValue ?? null;
+              }
+              mergedData[timeKey][result.key] = finalValue !== null && finalValue !== undefined ? Number(Number(finalValue).toFixed(2)) : null;
+            });
+          });
+          
+          const sorted = Object.values(mergedData).sort((a, b) => new Date(a.windowStart) - new Date(b.windowStart));
+          setHistoryLog(sorted);
+        } catch (e) {
+          console.error('Error seeding realtime history log:', e);
+        } finally {
+          setIsSwitching(false);
+        }
+      };
+
+      seedRealtimeLog();
+    }
 
     const fetchLiveStats = async () => {
       try {
@@ -1081,24 +1161,30 @@ const EnergyGraphs = () => {
           maxPoints = Math.ceil(windowSecs / basePollSecs);
 
           setHistoryLog(prev => {
+            if (prev.length > 0 && prev[prev.length - 1].time === newPoint.time) {
+              const updated = [...prev];
+              updated[updated.length - 1] = newPoint;
+              return updated;
+            }
             const next = [...prev, newPoint];
-            return next.length > maxPoints ? next.slice(next.length - maxPoints) : next;
+            // Slice at 2000 points to keep the rendering fast while preserving full history
+            return next.length > 2000 ? next.slice(next.length - 2000) : next;
           });
         }
-        setIsSwitching(false);
       } catch (err) {
         console.error('Error polling live stats:', err);
-        setIsSwitching(false);
       }
     };
 
-    fetchLiveStats();
+    if (!deviceChanged && !siteChanged && !modeChanged) {
+      fetchLiveStats();
+    }
     const interval = setInterval(fetchLiveStats, pollingIntervalMs);
 
     return () => {
       clearInterval(interval);
     };
-  }, [selectedSiteId, selectedDeviceId, globalInterval, pollingIntervalMs, liveWindow]);
+  }, [selectedSiteId, selectedDeviceId, globalInterval, pollingIntervalMs, liveWindow, selectedSettings, aggregation, fromDate, toDate]);
 
   const getRangesForSetting = (setting) => {
     const items = [];
@@ -1236,7 +1322,7 @@ const EnergyGraphs = () => {
         ) : activeData.length === 0 ? (
           <div className="d-flex flex-column justify-content-center align-items-center h-100 border border-secondary border-opacity-25 rounded-4 p-5 text-center" style={{ minHeight: '400px', background: 'rgba(15, 23, 42, 0.4)' }}>
             <Zap className="text-warning mb-3 opacity-50 animate-pulse" size={48} style={{ filter: 'drop-shadow(0 0 10px rgba(249, 115, 22, 0.4))' }} />
-            <h5 className="text-white fw-bold mb-2"> Telemetry Data Found</h5>
+            <h5 className="text-white fw-bold mb-2">No Telemetry Data Found</h5>
             <p className="text-secondary max-w-md mb-0 mx-auto" style={{ maxWidth: '480px' }}>
               We are currently displaying only live/historical Modbus register data. No dummy or simulated values are shown on this dashboard. Please verify device connectivity or adjust your timeframe filtration settings.
             </p>

@@ -63,13 +63,14 @@ const MainLayout = ({ children }) => {
       window.location.href = '/super-admin';
     }
   };  useEffect(() => {
+    const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
     const fetchTemplates = async () => {
       try {
         const userData = JSON.parse(localStorage.getItem('userData') || '{}');
         const tenantId = userData?.tenantId;
         const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
 
-        const response = await fetch(url);
+        const response = await fetch(`${backendUrl}${url}`);
         if (response.ok) {
           const data = await response.json();
           // Map backend data to frontend format to match what templates page saves
@@ -114,7 +115,6 @@ const MainLayout = ({ children }) => {
     fetchTemplates();
 
     // Set up WebSocket listener to fetch updated templates instantly without reload
-    const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
     const socket = io(backendUrl, { path: '/socket.io', transports: ['websocket', 'polling'] });
 
     socket.on('templates_updated', (payload) => {
