@@ -188,6 +188,18 @@ const getParameterType = (displayName, fieldName) => {
   return 'default';
 };
 
+const getSortPriority = (setting) => {
+  const pType = getParameterType(setting.displayName, setting.sochiotFieldName);
+  if (pType === 'voltage') return 1;
+  if (pType === 'current') return 2;
+  if (pType === 'frequency') return 3;
+  if (pType === 'power-factor') return 4;
+  if (pType === 'default') return 5;
+  if (pType === 'energy') return 6;
+  if (pType === 'power') return 7;
+  return 8;
+};
+
 const ChartRow = ({ 
   title, 
   unit, 
@@ -708,9 +720,7 @@ const EnergyGraphs = () => {
 
   const [globalInterval, setGlobalInterval] = useState('MIN_15');
   const [fromDate, setFromDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return getLocalDateString(d);
+    return getLocalDateString(new Date());
   });
   const [toDate, setToDate] = useState(() => {
     return getLocalDateString(new Date());
@@ -1238,60 +1248,137 @@ const EnergyGraphs = () => {
       <Card className="mb-4 border-0" style={{ background: 'linear-gradient(145deg, #111827 0%, #0f172a 100%)', borderRadius: '16px', border: '1px solid rgba(249, 115, 22, 0.15)', boxShadow: '0 8px 30px rgba(0,0,0,0.2)' }}>
         <Card.Body className="p-3">
           <Row className="g-3 align-items-center">
-            {sites.length > 0 && (
-              <Col xs={12} md={4}>
-                <Form.Group>
-                  <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>SITE NAME</Form.Label>
-                  <Form.Select
-                    size="sm"
-                    className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
-                    value={selectedSiteId}
-                    onChange={(e) => setSelectedSiteId(e.target.value)}
-                  >
-                    {sites.map(s => (
-                      <option key={s.id} value={String(s.id)}>{s.name}</option>
-                    ))}
-                  </Form.Select>
-                </Form.Group>
-              </Col>
+            {sites.length > 0 ? (
+              <>
+                <Col xs={12} md={3}>
+                  <Form.Group>
+                    <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>SITE NAME</Form.Label>
+                    <Form.Select
+                      size="sm"
+                      className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
+                      value={selectedSiteId}
+                      onChange={(e) => setSelectedSiteId(e.target.value)}
+                    >
+                      {sites.map(s => (
+                        <option key={s.id} value={String(s.id)}>{s.name}</option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+
+                <Col xs={12} md={3}>
+                  <Form.Group>
+                    <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>
+                      {categoryContext === 'ENERGY_METER' ? 'ENERGY METER / DEVICE' : 'AQI SENSOR / NODE'}
+                    </Form.Label>
+                    <Form.Select
+                      size="sm"
+                      className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
+                      value={selectedDeviceId}
+                      onChange={(e) => setSelectedDeviceId(e.target.value)}
+                    >
+                      {devices.length === 0 && (
+                        <option value="">No devices configured</option>
+                      )}
+                      {devices.map(d => (
+                        <option key={d.id} value={String(d.id)}>
+                          {d.name || d.description || 'Unnamed Device'}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+
+                <Col xs={12} md={3} className="d-flex align-items-end">
+                  <Form.Group className="w-100">
+                    <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>FILTRATION SETTINGS</Form.Label>
+                    <Button 
+                      onClick={handleOpenFilter}
+                      className="filter-toggle-btn w-100"
+                      size="sm"
+                      style={{ height: '38px', borderRadius: '8px' }}
+                      disabled={true}
+                    >
+                      <Settings2 size={16} /> {globalInterval === 'live' ? 'Realtime (Polling)' : `History (${globalInterval === 'MIN_15' ? '15m' : globalInterval === 'DAILY' ? 'Daily' : 'Yearly'})`}
+                    </Button>
+                  </Form.Group>
+                </Col>
+
+                <Col xs={12} md={3}>
+                  <Form.Group>
+                    <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>SELECT DATE</Form.Label>
+                    <Form.Control
+                      type="date"
+                      size="sm"
+                      className="bg-dark text-white shadow-none fs-8 scada-date-picker"
+                      style={{ height: '38px', borderRadius: '8px', colorScheme: 'dark', border: '1px solid rgba(249,115,22,0.15)' }}
+                      value={toDate}
+                      onChange={(e) => {
+                        setFromDate(e.target.value);
+                        setToDate(e.target.value);
+                      }}
+                    />
+                  </Form.Group>
+                </Col>
+              </>
+            ) : (
+              <>
+                <Col xs={12} md={4}>
+                  <Form.Group>
+                    <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>
+                      {categoryContext === 'ENERGY_METER' ? 'ENERGY METER / DEVICE' : 'AQI SENSOR / NODE'}
+                    </Form.Label>
+                    <Form.Select
+                      size="sm"
+                      className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
+                      value={selectedDeviceId}
+                      onChange={(e) => setSelectedDeviceId(e.target.value)}
+                    >
+                      {devices.length === 0 && (
+                        <option value="">No devices configured</option>
+                      )}
+                      {devices.map(d => (
+                        <option key={d.id} value={String(d.id)}>
+                          {d.name || d.description || 'Unnamed Device'}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+
+                <Col xs={12} md={4} className="d-flex align-items-end">
+                  <Form.Group className="w-100">
+                    <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>FILTRATION SETTINGS</Form.Label>
+                    <Button 
+                      onClick={handleOpenFilter}
+                      className="filter-toggle-btn w-100"
+                      size="sm"
+                      style={{ height: '38px', borderRadius: '8px' }}
+                      disabled={true}
+                    >
+                      <Settings2 size={16} /> {globalInterval === 'live' ? 'Realtime (Polling)' : `History (${globalInterval === 'MIN_15' ? '15m' : globalInterval === 'DAILY' ? 'Daily' : 'Yearly'})`}
+                    </Button>
+                  </Form.Group>
+                </Col>
+
+                <Col xs={12} md={4}>
+                  <Form.Group>
+                    <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>SELECT DATE</Form.Label>
+                    <Form.Control
+                      type="date"
+                      size="sm"
+                      className="bg-dark text-white shadow-none fs-8 scada-date-picker"
+                      style={{ height: '38px', borderRadius: '8px', colorScheme: 'dark', border: '1px solid rgba(249,115,22,0.15)' }}
+                      value={toDate}
+                      onChange={(e) => {
+                        setFromDate(e.target.value);
+                        setToDate(e.target.value);
+                      }}
+                    />
+                  </Form.Group>
+                </Col>
+              </>
             )}
-
-            <Col xs={12} md={sites.length > 0 ? 4 : 6}>
-              <Form.Group>
-                <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>
-                  {categoryContext === 'ENERGY_METER' ? 'ENERGY METER / DEVICE' : 'AQI SENSOR / NODE'}
-                </Form.Label>
-                <Form.Select
-                  size="sm"
-                  className="scada-dropdown-orange bg-dark text-white shadow-none fs-8"
-                  value={selectedDeviceId}
-                  onChange={(e) => setSelectedDeviceId(e.target.value)}
-                >
-                  {devices.length === 0 && (
-                    <option value="">No devices configured</option>
-                  )}
-                  {devices.map(d => (
-                    <option key={d.id} value={String(d.id)}>
-                      {d.name || d.description || 'Unnamed Device'}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
-            </Col>
-
-            <Col xs={12} md={sites.length > 0 ? 4 : 6} className="d-flex align-items-end">
-              <Form.Group className="w-100">
-                <Form.Label className="text-secondary fs-8 fw-bold mb-1" style={{ letterSpacing: '0.5px' }}>FILTRATION SETTINGS</Form.Label>
-                <Button 
-                  onClick={handleOpenFilter}
-                  className="filter-toggle-btn w-100"
-                  size="sm"
-                  style={{ height: '38px', borderRadius: '8px' }}
-                >
-                  <Settings2 size={16} /> {globalInterval === 'live' ? 'Realtime (Polling)' : `History (${globalInterval === 'MIN_15' ? '15m' : globalInterval === 'DAILY' ? 'Daily' : 'Yearly'})`}
-                </Button>
-              </Form.Group>
-            </Col>
           </Row>
         </Card.Body>
       </Card>
@@ -1331,6 +1418,7 @@ const EnergyGraphs = () => {
           <Row className="g-4">
             {settings
               .filter(setting => selectedSettings.includes(setting.sochiotFieldName))
+              .sort((a, b) => getSortPriority(a) - getSortPriority(b))
               .map((setting, idx) => {
                 const chartType = getChartType(setting.displayName);
                 const chartColor = getChartColor(idx);
