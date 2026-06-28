@@ -2331,3 +2331,50 @@ body.light-mode .VRV-room-card:hover {
     width: 100% !important;
   }
 }
+
+/* ==========================================================================
+   SCADA CUSTOM SVG GAUGES - LIGHT MODE ACCESSIBILITY FIX
+   ========================================================================== */
+
+/* Default (Dark Mode) styles */
+.scada-gauge-value {
+  fill: rgba(255, 255, 255, 0.85);
+}
+.scada-gauge-value.unmapped {
+  fill: rgba(255, 255, 255, 0.3);
+}
+.scada-gauge-label {
+  fill: rgba(255, 255, 255, 0.4);
+}
+.scada-gauge-bg-arc {
+  stroke: rgba(255, 255, 255, 0.05);
+}
+.scada-gauge-needle {
+  fill: #ffffff;
+}
+
+/* Light Mode Overrides */
+body.light-mode .scada-gauge-value {
+  fill: #0f172a !important;
+}
+body.light-mode .scada-gauge-value.unmapped {
+  fill: rgba(15, 23, 42, 0.3) !important;
+}
+body.light-mode .scada-gauge-label {
+  fill: rgba(0, 0, 0, 0.4) !important;
+}
+body.light-mode .scada-gauge-bg-arc {
+  stroke: rgba(0, 0, 0, 0.08) !important;
+}
+body.light-mode .scada-gauge-needle {
+  fill: #0f172a !important;
+}
+body.light-mode .scada-gauge-center-cap-bg {
+  fill: #ffffff !important;
+  stroke: rgba(0, 0, 0, 0.12) !important;
+}
+body.light-mode .scada-gauge-value-html {
+  text-shadow: none !important;
+  color: #0f172a !important;
+}
+

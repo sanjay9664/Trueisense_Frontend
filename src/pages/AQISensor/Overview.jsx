@@ -16,7 +16,7 @@ const formatLastUpdated = (timestamp) => {
   const hours = pad(date.getHours());
   const minutes = pad(date.getMinutes());
   const seconds = pad(date.getSeconds());
-  
+
   const today = new Date();
   if (date.toDateString() === today.toDateString()) {
     return `${hours}:${minutes}:${seconds}`;
@@ -43,7 +43,7 @@ const createHistoryData = (baseTemp, baseHum, baseAqi, baseCo2, baseTvoc) => {
 // --- CUSTOM ARC GAUGE COMPONENT ---
 const CustomArcGauge = ({ value, max, label, color, format = (v) => v, isMapped = true }) => {
   const radius = 45;
-  const circumference = 2 * Math.PI * radius; 
+  const circumference = 2 * Math.PI * radius;
   const arcLength = circumference * 0.75; // 270 degrees arc
   const strokeDashoffset = arcLength * (1 - Math.min(value / max, 1));
 
@@ -53,6 +53,7 @@ const CustomArcGauge = ({ value, max, label, color, format = (v) => v, isMapped 
       <svg width="120" height="110" viewBox="0 0 100 100">
         {/* Background Arc */}
         <circle
+          className="scada-gauge-bg-arc"
           cx="50"
           cy="50"
           r={radius}
@@ -81,7 +82,7 @@ const CustomArcGauge = ({ value, max, label, color, format = (v) => v, isMapped 
         )}
       </svg>
       <div className="position-absolute d-flex flex-column align-items-center" style={{ top: '55px' }}>
-        <div className="fw-black text-white" style={{ fontSize: '20px', lineHeight: '1', textShadow: isMapped ? `0 0 10px ${color}60` : 'none', opacity: isMapped ? 1 : 0.3 }}>
+        <div className={`fw-black text-white scada-gauge-value-html ${isMapped ? '' : 'unmapped'}`} style={{ fontSize: '20px', lineHeight: '1', textShadow: isMapped ? `0 0 10px ${color}60` : 'none', opacity: isMapped ? 1 : 0.3 }}>
           {isMapped ? format(value) : '—'}
         </div>
       </div>
@@ -123,7 +124,7 @@ const getInitialChannels = () => {
       const parsed = JSON.parse(saved);
       if (parsed.length > 0) return parsed;
     }
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     const savedTemplates = localStorage.getItem('scada_templates');
@@ -150,7 +151,7 @@ const getInitialChannels = () => {
         })
         .filter(ch => ch.mapping?.vrvConfig?.device);
     }
-  } catch (e) {}
+  } catch (e) { }
 
   return [];
 };
@@ -177,7 +178,7 @@ const AQIOverview = () => {
     });
 
     let currentTemplates = [];
-    
+
     // Fetch telemetry stats immediately on mount in parallel
     const statsPromise = fetch(`${backendUrl}/api/templates/stats`)
       .then(res => res.ok ? res.json() : [])
@@ -185,12 +186,12 @@ const AQIOverview = () => {
 
     const processTelemetry = (stats) => {
       if (!Array.isArray(stats)) return;
-      
+
       setChannels(prev => {
         let updated = false;
         const next = prev.map(zone => {
           if (!zone.mapping || !zone.mapping.vrvConfig) return zone;
-          
+
           let newZone = { ...zone };
           const config = zone.mapping.vrvConfig;
 
@@ -282,9 +283,9 @@ const AQIOverview = () => {
         if (saved) {
           try {
             templatesData = JSON.parse(saved);
-          } catch (e) {}
+          } catch (e) { }
         }
-        
+
         // Fallback to fetch if cache is empty
         if (!templatesData || templatesData.length === 0) {
           const userData = JSON.parse(localStorage.getItem('userData') || '{}');
@@ -299,7 +300,7 @@ const AQIOverview = () => {
         const mappedData = getNormalizedTemplates(templatesData);
         const aqiTemplates = mappedData.filter(t => (t.category === 'VRV' || t.category === 'AQI Sensor') && t.module === 'Temp & Humidity');
         currentTemplates = aqiTemplates;
-        
+
         setChannels(prev => {
           const nextChannels = aqiTemplates
             .map((t, index) => {
@@ -342,9 +343,9 @@ const AQIOverview = () => {
         console.error('Error fetching AQI templates:', error);
       }
     };
-    
+
     fetchTemplatesAndStats();
-    
+
     const pollInterval = setInterval(async () => {
       if (currentTemplates.length === 0) return;
       const modulesToPoll = new Set();
@@ -365,7 +366,7 @@ const AQIOverview = () => {
           const stats = await res.json();
           processTelemetry(stats);
         }
-      } catch (e) {}
+      } catch (e) { }
     }, 2000);
 
     return () => {
@@ -384,7 +385,7 @@ const AQIOverview = () => {
 
   return (
     <div className="fade-in p-3 h-100 d-flex flex-column" style={{ background: '#0b1121', minHeight: '100vh', fontFamily: "'Inter', sans-serif" }}>
-      
+
       {/* HEADER SECTION */}
       <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom flex-wrap gap-3" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
         <div className="d-flex align-items-center gap-4 flex-wrap">
@@ -416,7 +417,6 @@ const AQIOverview = () => {
 
         {channels.length > 0 && (
           <div className="d-flex align-items-center gap-2">
-            <PdfButton />
             <select
               className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
               style={{ width: '220px', maxWidth: '100%', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
@@ -452,23 +452,23 @@ const AQIOverview = () => {
           {/* LEFT PANEL: CHANNEL LIST */}
           <Col xl={3} lg={4} xs={12} className="d-flex flex-column gap-2">
             <div className="px-2 mb-1">
-               <span className="text-secondary fw-bold" style={{ fontSize: '12px', letterSpacing: '1px' }}>AVAILABLE CHANNELS</span>
+              <span className="text-secondary fw-bold" style={{ fontSize: '12px', letterSpacing: '1px' }}>AVAILABLE CHANNELS</span>
             </div>
-            
+
             <div className="d-flex flex-column gap-2">
               {channels.map(ch => {
                 const isSelected = selectedCh && selectedCh.id === ch.id;
-                
+
                 return (
-                  <div 
-                    key={ch.id} 
+                  <div
+                    key={ch.id}
                     onClick={() => {
                       setSelectedChId(ch.id);
                       localStorage.setItem('scada_aqi_selected_ch_id', ch.id);
                     }}
                     onDoubleClick={() => navigate('/aqi-sensor/temp-humidity')}
                     className="p-3 rounded position-relative overflow-hidden"
-                    style={{ 
+                    style={{
                       cursor: 'pointer',
                       background: isSelected ? 'rgba(56, 189, 248, 0.08)' : 'rgba(30, 41, 59, 0.4)',
                       border: `1px solid ${isSelected ? '#38bdf8' : 'rgba(255,255,255,0.03)'}`,
@@ -477,17 +477,17 @@ const AQIOverview = () => {
                     title="Single click to view analytics, Double click for detailed diagnostics"
                   >
                     {isSelected && <div className="position-absolute h-100" style={{ left: 0, top: 0, width: '4px', background: '#38bdf8', boxShadow: '0 0 10px #38bdf8' }}></div>}
-                    
+
                     <div className="d-flex justify-content-between align-items-center mb-2">
                       <div className="d-flex align-items-center gap-2">
-                         <div className="rounded p-1 d-flex align-items-center justify-content-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                            <MapPin size={14} className={isSelected ? 'text-info' : 'text-secondary'} />
-                         </div>
-                         <span className={`fw-bold ${isSelected ? 'text-white' : 'text-light'}`} style={{ fontSize: '15px' }}>{ch.name}</span>
+                        <div className="rounded p-1 d-flex align-items-center justify-content-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                          <MapPin size={14} className={isSelected ? 'text-info' : 'text-secondary'} />
+                        </div>
+                        <span className={`fw-bold ${isSelected ? 'text-white' : 'text-light'}`} style={{ fontSize: '15px' }}>{ch.name}</span>
                       </div>
-                      <span className="fw-bold font-monospace" style={{ color: '#facc15', fontSize: '15px' }}>{ch.temp} <span style={{fontSize: '10px'}} className="text-secondary">°C</span></span>
+                      <span className="fw-bold font-monospace" style={{ color: '#facc15', fontSize: '15px' }}>{ch.temp} <span style={{ fontSize: '10px' }} className="text-secondary">°C</span></span>
                     </div>
-                    
+
                     <div className="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style={{ borderColor: 'rgba(255,255,255,0.05) !important' }}>
                       <span className="text-secondary" style={{ fontSize: '11px' }}>{ch.location}</span>
                       <span className="text-white font-monospace fw-bold" style={{ fontSize: '12px' }}>Humidity: {ch.hum}%</span>
@@ -502,16 +502,16 @@ const AQIOverview = () => {
           <Col xl={9} lg={8} xs={12} className="d-flex flex-column">
             {/* Header Info for Selected Channel */}
             <div className="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style={{ background: 'rgba(30, 41, 59, 0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
-               <div>
-                  <Badge bg="transparent" className="border px-2 py-1 rounded-pill shadow-sm mb-1 text-info border-info">
-                    Type of Sensor: Environmental
-                  </Badge>
-                  <h4 className="text-white fw-black m-0">{selectedCh?.name} Analytics</h4>
-               </div>
-               <div className="text-end">
-                  <div className="text-secondary fw-bold" style={{ fontSize: '11px', letterSpacing: '1px' }}>LOCATION</div>
-                  <div className="text-info fw-bold">{selectedCh?.location?.toUpperCase()}</div>
-               </div>
+              <div>
+                <Badge bg="transparent" className="border px-2 py-1 rounded-pill shadow-sm mb-1 text-info border-info">
+                  Type of Sensor: Environmental
+                </Badge>
+                <h4 className="text-white fw-black m-0">{selectedCh?.name} Analytics</h4>
+              </div>
+              <div className="text-end">
+                <div className="text-secondary fw-bold" style={{ fontSize: '11px', letterSpacing: '1px' }}>LOCATION</div>
+                <div className="text-info fw-bold">{selectedCh?.location?.toUpperCase()}</div>
+              </div>
             </div>
 
             {/* Grid of 6 Parameters */}
@@ -529,13 +529,13 @@ const AQIOverview = () => {
 
                 return (
                   <Col md={6} xs={12} key={idx}>
-                    <Card 
-                      className="border-0 shadow-sm h-100" 
-                      style={{ 
-                        background: 'rgba(30, 41, 59, 0.4)', 
-                        borderRadius: '12px', 
-                        border: '1px solid rgba(255,255,255,0.05)', 
-                        cursor: isFieldMapped ? 'pointer' : 'default', 
+                    <Card
+                      className="border-0 shadow-sm h-100"
+                      style={{
+                        background: 'rgba(30, 41, 59, 0.4)',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        cursor: isFieldMapped ? 'pointer' : 'default',
                         transition: 'all 0.2s ease',
                         opacity: isFieldMapped ? 1 : 0.35,
                         filter: isFieldMapped ? 'none' : 'grayscale(1) brightness(0.65)',
@@ -546,49 +546,49 @@ const AQIOverview = () => {
                       onMouseLeave={(e) => { if (isFieldMapped) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; }}
                     >
                       <Card.Body className="p-3 d-flex gap-2 align-items-center">
-                        
+
                         {/* Gauge Area */}
                         <div style={{ width: '130px', flexShrink: 0 }} className="d-flex justify-content-center">
-                           <CustomArcGauge 
-                             value={selectedCh ? Number(selectedCh[param.key]) : 0} 
-                             max={param.max} 
-                             label={param.label} 
-                             color={param.color} 
-                             isMapped={isFieldMapped}
-                           />
+                          <CustomArcGauge
+                            value={selectedCh ? Number(selectedCh[param.key]) : 0}
+                            max={param.max}
+                            label={param.label}
+                            color={param.color}
+                            isMapped={isFieldMapped}
+                          />
                         </div>
 
                         {/* Chart Area */}
                         <div className="flex-grow-1 d-flex flex-column w-100">
-                           <div className="text-center text-secondary mb-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
-                             HISTORY ({param.unit})
-                           </div>
-                           <div style={{ height: '110px', width: '100%' }}>
-                             <ResponsiveContainer width="100%" height="100%">
-                               <LineChart data={selectedCh?.history || []} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                                 <XAxis dataKey="time" hide />
-                                 <YAxis 
-                                    hide 
-                                    domain={['dataMin', 'dataMax']} 
-                                    padding={{ top: 10, bottom: 10 }}
-                                 />
-                                 <Tooltip 
-                                   contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px' }} 
-                                   itemStyle={{ color: '#fff' }}
-                                 />
-                                 <Line 
-                                   type="linear" 
-                                   dataKey={param.key} 
-                                   name={param.label}
-                                   stroke="#475569" 
-                                   strokeWidth={1} 
-                                   dot={{ r: 3, fill: '#fff', stroke: param.color, strokeWidth: 2 }} 
-                                   activeDot={{ r: 5, fill: param.color }}
-                                 />
-                               </LineChart>
-                             </ResponsiveContainer>
-                           </div>
+                          <div className="text-center text-secondary mb-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
+                            HISTORY ({param.unit})
+                          </div>
+                          <div style={{ height: '110px', width: '100%' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={selectedCh?.history || []} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                                <XAxis dataKey="time" hide />
+                                <YAxis
+                                  hide
+                                  domain={['dataMin', 'dataMax']}
+                                  padding={{ top: 10, bottom: 10 }}
+                                />
+                                <Tooltip
+                                  contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px' }}
+                                  itemStyle={{ color: '#fff' }}
+                                />
+                                <Line
+                                  type="linear"
+                                  dataKey={param.key}
+                                  name={param.label}
+                                  stroke="#475569"
+                                  strokeWidth={1}
+                                  dot={{ r: 3, fill: '#fff', stroke: param.color, strokeWidth: 2 }}
+                                  activeDot={{ r: 5, fill: param.color }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
                         </div>
 
                       </Card.Body>

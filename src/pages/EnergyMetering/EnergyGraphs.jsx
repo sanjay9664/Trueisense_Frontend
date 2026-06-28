@@ -999,8 +999,11 @@ const EnergyGraphs = () => {
           'Content-Type': 'application/json'
         };
 
+        const fromUtcStr = new Date(new Date(`${fromDate}T00:00:00Z`).getTime() - 5.5 * 60 * 60 * 1000).toISOString();
+        const toUtcStr = new Date(new Date(`${toDate}T23:59:59Z`).getTime() - 5.5 * 60 * 60 * 1000).toISOString();
+
         const promises = selectedSettings.map(async (fieldKey) => {
-          const url = `${API_BASE_URL}/sites/${selectedSiteId}/devices/${selectedDeviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=${globalInterval}&from=${fromDate}T00:00:00Z&to=${toDate}T23:59:59Z`;
+          const url = `${API_BASE_URL}/sites/${selectedSiteId}/devices/${selectedDeviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=${globalInterval}&from=${fromUtcStr}&to=${toUtcStr}`;
           try {
             const res = await fetch(url, { headers });
             if (!res.ok) return { key: fieldKey, snapshots: [] };
@@ -1109,8 +1112,11 @@ const EnergyGraphs = () => {
             'Content-Type': 'application/json'
           };
           
+          const fromUtcStr = new Date(new Date(`${fromDate}T00:00:00Z`).getTime() - 5.5 * 60 * 60 * 1000).toISOString();
+          const toUtcStr = new Date(new Date(`${toDate}T23:59:59Z`).getTime() - 5.5 * 60 * 60 * 1000).toISOString();
+
           const promises = selectedSettings.map(async (fieldKey) => {
-            const url = `${API_BASE_URL}/sites/${selectedSiteId}/devices/${selectedDeviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=MIN_15&from=${fromDate}T00:00:00Z&to=${toDate}T23:59:59Z`;
+            const url = `${API_BASE_URL}/sites/${selectedSiteId}/devices/${selectedDeviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=MIN_15&from=${fromUtcStr}&to=${toUtcStr}`;
             try {
               const res = await fetch(url, { headers });
               if (!res.ok) return { key: fieldKey, snapshots: [] };

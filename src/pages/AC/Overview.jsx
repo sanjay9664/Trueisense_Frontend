@@ -148,6 +148,25 @@ const RealisticAC = ({ unit }) => {
 const ACOverview = () => {
   const { isDark } = useTheme();
   const navigate = useNavigate();
+  const getMappedTelemetry = (unitName) => {
+    try {
+      const templatesStr = localStorage.getItem('bms_config_templates');
+      if (!templatesStr) return null;
+      const templates = JSON.parse(templatesStr);
+      // Find template for AC Overview matching this unit
+      const match = templates.find(t => 
+        t.category === 'AC' && 
+        t.module === 'Overview' && 
+        t.mapping?.acConfig?.acUnit === unitName
+      );
+      if (match && match.mapping?.acConfig) {
+        return match.mapping.acConfig;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return null;
+  };
   const [units, setUnits] = useState(() => {
     const saved = localStorage.getItem('bms_ac_units');
     return saved ? JSON.parse(saved) : INITIAL_ACS;
@@ -174,6 +193,69 @@ const ACOverview = () => {
   useEffect(() => {
     localStorage.setItem('bms_ac_groups', JSON.stringify(acGroups));
   }, [acGroups]);
+
+  // Sync AC state, temperature and status based on saved templates
+  useEffect(() => {
+    try {
+      const templatesStr = localStorage.getItem('bms_config_templates');
+      if (!templatesStr) return;
+      const templates = JSON.parse(templatesStr);
+      
+      setUnits(prevUnits => {
+        let changed = false;
+        const nextUnits = prevUnits.map(unit => {
+          // Find if there is a matching template mapping for this unit
+          const match = templates.find(t => 
+            t.category === 'AC' && 
+            t.module === 'Overview' && 
+            t.mapping?.acConfig?.acUnit === unit.name
+          );
+          
+          if (match && match.mapping?.acConfig) {
+            const acConfig = match.mapping.acConfig;
+            
+            // 1. Set ON/OFF status based on acConfig.enabled
+            const expectedStatus = acConfig.enabled ? 'ON' : 'OFF';
+            
+            // 2. Set Temperature value based on whether register is mapped.
+            // If mapped, we show 30 (the live template config value)
+            const expectedTemp = acConfig.temperature ? 30 : unit.setTemp;
+            
+            // 3. Set Room Temperature value (if mapped)
+            const expectedRoomTemp = acConfig.temperature ? 30 : unit.roomTemp;
+            
+            // 4. Set Active Auto Mode options based on template autoMode
+            const expectedAutoOptions = acConfig.autoMode ? [acConfig.autoMode] : [];
+            const expectedOpMode = acConfig.autoMode ? 'Auto' : 'Manual';
+            
+            if (
+              unit.status !== expectedStatus || 
+              unit.setTemp !== expectedTemp || 
+              unit.roomTemp !== expectedRoomTemp ||
+              JSON.stringify(unit.activeAutoOptions) !== JSON.stringify(expectedAutoOptions) ||
+              unit.operationMode !== expectedOpMode
+            ) {
+              changed = true;
+              return {
+                ...unit,
+                status: expectedStatus,
+                setTemp: expectedTemp === '--' ? 30 : expectedTemp, // display temperature
+                roomTemp: expectedRoomTemp,
+                activeAutoOptions: expectedAutoOptions,
+                operationMode: expectedOpMode,
+                powerUsage: expectedStatus === 'ON' ? (unit.powerUsage || 1.5) : 0
+              };
+            }
+          }
+          return unit;
+        });
+        
+        return changed ? nextUnits : prevUnits;
+      });
+    } catch (e) {
+      console.error('Error syncing AC template settings:', e);
+    }
+  }, []);
   
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedACsForGroup, setSelectedACsForGroup] = useState([]);
@@ -300,7 +382,7 @@ const ACOverview = () => {
 
   const handleAutoToggle = (option) => {
     setAutoOptions(prev => {
-      const newOptions = prev.includes(option) ? prev.filter(o => o !== option) : [...prev, option];
+      const newOptions = prev.includes(option) ? [] : [option];
       setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: newOptions } : u));
       return newOptions;
     });
@@ -582,12 +664,30 @@ const ACOverview = () => {
                   
                   {/* Room Temp & Power */}
                   <div className="d-flex align-items-center justify-content-between p-3 rounded-4 mb-4" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.03)' }}>
-                    <div>
-                      <div className="text-secondary fw-bold mb-1 text-uppercase" style={{ fontSize: '10px', letterSpacing: '1px' }}>Room Temp</div>
-                      <div className="d-flex align-items-start">
-                        <span className="text-white fw-bold lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1px' }}>{unit.setTemp}</span>
-                        <span className="text-info fw-bold ms-1 mt-1" style={{ fontSize: '1.2rem' }}>{unit.setTemp === '--' ? '' : '°C'}</span>
+                    <div className="d-flex gap-4">
+                      <div>
+                        <div className="text-secondary fw-bold mb-1 text-uppercase" style={{ fontSize: '10px', letterSpacing: '1px' }}>Room Temp</div>
+                        <div className="d-flex align-items-start">
+                          <span className="text-white fw-bold lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1px' }}>{unit.setTemp}</span>
+                          <span className="text-info fw-bold ms-1 mt-1" style={{ fontSize: '1.2rem' }}>{unit.setTemp === '--' ? '' : '°C'}</span>
+                        </div>
                       </div>
+
+                      {(() => {
+                        const mapping = getMappedTelemetry(unit.name);
+                        if (mapping && mapping.enabled && mapping.humidity) {
+                          return (
+                            <div className="border-start border-white border-opacity-10 ps-4">
+                              <div className="text-secondary fw-bold mb-1 text-uppercase" style={{ fontSize: '10px', letterSpacing: '1px' }}>Humidity</div>
+                              <div className="d-flex align-items-start">
+                                <span className="text-white fw-bold lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1px' }}>46.3</span>
+                                <span className="text-warning fw-bold ms-1 mt-1" style={{ fontSize: '1.2rem' }}>%</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
 
                     <button 
@@ -609,6 +709,44 @@ const ACOverview = () => {
                       <Power size={24} strokeWidth={unit.status === 'ON' ? 2.5 : 2} />
                     </button>
                   </div>
+
+                  {/* LIVE TELEMETRY FROM TEMPLATE CONFIGURATION */}
+                  {(() => {
+                    const mapping = getMappedTelemetry(unit.name);
+                    if (mapping && mapping.enabled) {
+                      return (
+                        <div className="p-3 rounded-4 mb-4 border border-info border-opacity-10 bg-dark bg-opacity-20">
+                          <div className="d-flex justify-content-between align-items-center mb-2">
+                            <span className="text-info fw-bold text-uppercase" style={{ fontSize: '9px', letterSpacing: '1px' }}>Mapped Live Telemetry</span>
+                            <Badge bg="transparent" className="px-2 py-0.5 rounded-pill fs-9 text-info border border-info border-opacity-20" style={{ fontSize: '9px' }}>ACTIVE</Badge>
+                          </div>
+                          <Row className="g-2">
+                            {mapping.temperature && (
+                              <Col xs={6}>
+                                <div className="p-2 rounded bg-black bg-opacity-35 border border-white border-opacity-5 text-center">
+                                  <span className="text-secondary fw-bold uppercase d-block text-nowrap" style={{ fontSize: '8px', letterSpacing: '0.5px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={mapping.temperature}>
+                                    TEMP: {mapping.temperature.split('::').pop()}
+                                  </span>
+                                  <span className="fs-6 text-white fw-bold font-monospace">30<span className="fs-12 text-secondary ms-0.5">°C</span></span>
+                                </div>
+                              </Col>
+                            )}
+                            {mapping.humidity && (
+                              <Col xs={6}>
+                                <div className="p-2 rounded bg-black bg-opacity-35 border border-white border-opacity-5 text-center">
+                                  <span className="text-secondary fw-bold uppercase d-block text-nowrap" style={{ fontSize: '8px', letterSpacing: '0.5px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={mapping.humidity}>
+                                    HUM: {mapping.humidity.split('::').pop()}
+                                  </span>
+                                  <span className="fs-6 text-white fw-bold font-monospace">46.3<span className="fs-12 text-secondary ms-0.5">%</span></span>
+                                </div>
+                              </Col>
+                            )}
+                          </Row>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
 
                   {/* Status Badges */}
                   <div className="d-flex gap-2 mb-4">

@@ -315,17 +315,19 @@ const AQIPDFReport = () => {
     const tableBody = rows.map((item, idx) => {
       const start = new Date(item.windowStart);
       const end = new Date(item.windowEnd);
+      const adjustedEnd = interval === 'DAILY' ? new Date(end.getTime() - 1000) : end;
+      
       const devTemp = item.temperatureAvg !== null ? item.temperatureAvg - 24 : null;
       const devHum = item.humidityAvg !== null ? item.humidityAvg - 50 : null;
 
       const formatDate = (d) => {
-        const pad = (n) => String(n).padStart(2, '0');
-        return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+        return d.toLocaleDateString('en-IN');
       };
 
       const formatTimeRange = (s, e) => {
-        const pad = (n) => String(n).padStart(2, '0');
-        return `${pad(s.getUTCHours())}:${pad(s.getUTCMinutes())} - ${pad(e.getUTCHours())}:${pad(e.getUTCMinutes())}`;
+        const startStr = s.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const endStr = e.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return `${startStr} - ${endStr}`;
       };
 
       return [
@@ -333,7 +335,7 @@ const AQIPDFReport = () => {
         selectedSensorInfo?.areaName || '-',
         sensorLabel,
         formatDate(start),
-        formatTimeRange(start, end),
+        formatTimeRange(start, adjustedEnd),
         fmt(item.temperatureAvg, 2),
         fmt(item.humidityAvg, 2),
         fmt(devTemp, 2),
@@ -614,17 +616,17 @@ const AQIPDFReport = () => {
                   <Col md={6} xs={12}>
                     <Form.Group>
                       <Form.Label className="emr-label d-flex align-items-center gap-2">
-                        <Clock size={13} style={{ color: 'var(--scada-accent)' }} /> Ledger Interval Scale
+                        <Clock size={13} style={{ color: 'var(--scada-accent)' }} />  Interval Scale
                       </Form.Label>
                       <Form.Select 
                         className="emr-select w-100"
                         value={interval}
                         onChange={(e) => setIntervalVal(e.target.value)}
                       >
-                        <option value="15_MIN">15 MINUTES LEDGER</option>
-                        <option value="HOURLY">HOURLY LEDGER</option>
-                        <option value="DAILY">DAILY LEDGER</option>
-                        <option value="YEARLY">YEARLY LEDGER</option>
+                        <option value="15_MIN">15 MINUTES </option>
+                        <option value="HOURLY">HOURLY </option>
+                        <option value="DAILY">DAILY </option>
+                        <option value="YEARLY">YEARLY </option>
                       </Form.Select>
                     </Form.Group>
                   </Col>

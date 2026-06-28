@@ -325,6 +325,7 @@ const EnergyPDFReport = () => {
     const tableBody = rows.map(item => {
       const start = new Date(item.windowStart);
       const end = new Date(item.windowEnd);
+      const adjustedEnd = interval === 'DAILY' ? new Date(end.getTime() - 1000) : end;
       
       const totalKwh = item.closingEnergy !== null && item.openingEnergy !== null
         ? Math.max(0, item.closingEnergy - item.openingEnergy)
@@ -336,7 +337,7 @@ const EnergyPDFReport = () => {
 
       return [
         start.toLocaleString('en-IN'),
-        end.toLocaleString('en-IN'),
+        adjustedEnd.toLocaleString('en-IN'),
         fmt(totalKwh, 2),
         fmt(totalKvah, 2),
         fmt(item.demandMax, 2),

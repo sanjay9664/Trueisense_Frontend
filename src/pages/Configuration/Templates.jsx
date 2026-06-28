@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Row, Col, Card, Form, Button, Badge, Modal } from 'react-bootstrap';
+import { Row, Col, Card, Form, Button, Badge, Modal, Spinner } from 'react-bootstrap';
 import { Save, Settings, Database, Activity, Zap, Droplets, LayoutGrid, CheckCircle2, ChevronRight, Layers, History, Eye, Info, X, Home, ArrowDownCircle, ArrowUpCircle, MapPin, AlertTriangle, Wind, Thermometer } from 'lucide-react';
 import { loginToSochiot, getSochiotUserMe, getSochiotLocationData, getSochiotDeviceDetails, getSochiotZoneData } from '../../services/authService';
 
@@ -42,11 +42,44 @@ const ConfigTemplates = () => {
       value: ''
     }
   };
-  const [agRule1Config, setAgRule1Config] = useState(initialRuleState);
-  const [agRule2Config, setAgRule2Config] = useState(initialRuleState);
-  const [ugRule1Config, setUgRule1Config] = useState(initialRuleState);
-  const [ugRule2Config, setUgRule2Config] = useState(initialRuleState);
-  const [currentRuleTarget, setCurrentRuleTarget] = useState('RULE1'); // 'RULE1' or 'RULE2'
+  const [agRules, setAgRules] = useState([initialRuleState, initialRuleState]);
+  const [ugRules, setUgRules] = useState([initialRuleState, initialRuleState]);
+  
+  const agRule1Config = agRules[0] || initialRuleState;
+  const agRule2Config = agRules[1] || initialRuleState;
+  const ugRule1Config = ugRules[0] || initialRuleState;
+  const ugRule2Config = ugRules[1] || initialRuleState;
+
+  const setAgRule1Config = (val) => {
+    setAgRules(prev => {
+      const next = [...prev];
+      next[0] = typeof val === 'function' ? val(prev[0]) : val;
+      return next;
+    });
+  };
+  const setAgRule2Config = (val) => {
+    setAgRules(prev => {
+      const next = [...prev];
+      next[1] = typeof val === 'function' ? val(prev[1]) : val;
+      return next;
+    });
+  };
+  const setUgRule1Config = (val) => {
+    setUgRules(prev => {
+      const next = [...prev];
+      next[0] = typeof val === 'function' ? val(prev[0]) : val;
+      return next;
+    });
+  };
+  const setUgRule2Config = (val) => {
+    setUgRules(prev => {
+      const next = [...prev];
+      next[1] = typeof val === 'function' ? val(prev[1]) : val;
+      return next;
+    });
+  };
+
+  const [currentRuleTarget, setCurrentRuleTarget] = useState('RULE1'); // 'RULE1' or 'RULE2' or 'RULE_X'
   const [ruleEngineConfig, setRuleEngineConfig] = useState(initialRuleState);
   const [templateName, setTemplateName] = useState('');
   const [deviceIdInput, setDeviceIdInput] = useState('');
@@ -57,6 +90,7 @@ const ConfigTemplates = () => {
   const [toastMessage, setToastMessage] = useState(null);
   const [hierarchyData, setHierarchyData] = useState([]);
   const [isSendingRules, setIsSendingRules] = useState(false);
+  const [isLoadingRuleDetails, setIsLoadingRuleDetails] = useState(false);
 
   const handleSendRule = async (config) => {
     if (!config || !config.moduleId) {
@@ -72,7 +106,7 @@ const ConfigTemplates = () => {
         moduleId: config.moduleId,
         settingFields: [
           { fieldName: "condition_date_time", currentValue: config.condition.timeDate || "" },
-          { fieldName: "condition_date_time_repeat_days", currentValue: config.condition.repeatDays.join(',') },
+          { fieldName: "condition_date_time_repeat_days", currentValue: (config.condition.repeatDays || []).join(',') },
           { fieldName: "consequence_value", currentValue: config.consequence.value || "" },
           { fieldName: "condition_type", currentValue: config.condition.type || "" },
           { fieldName: "condition_modbus", currentValue: config.condition.modbus || "" },
@@ -110,18 +144,162 @@ const ConfigTemplates = () => {
   };
 
   const handleApplyRules = async () => {
-    // Save to target rule config based on current module
-    if (selectedModule === 'AG Tank') {
-      if (currentRuleTarget === 'RULE1') setAgRule1Config(ruleEngineConfig);
-      else setAgRule2Config(ruleEngineConfig);
-    } else if (selectedModule === 'UG Pump') {
-      if (currentRuleTarget === 'RULE1') setUgRule1Config(ruleEngineConfig);
-      else setUgRule2Config(ruleEngineConfig);
-    }
+    setIsSendingRules(true);
+    try {
+      // 1. Determine which rule index we're editing
+      let ruleIndex = 0;
+      if (typeof currentRuleTarget === 'number') {
+        ruleIndex = currentRuleTarget;
+      } else if (typeof currentRuleTarget === 'string') {
+        if (currentRuleTarget === 'RULE1') ruleIndex = 0;
+        else if (currentRuleTarget === 'RULE2') ruleIndex = 1;
+        else if (currentRuleTarget.startsWith('RULE_')) {
+          ruleIndex = parseInt(currentRuleTarget.replace('RULE_', ''), 10);
+        }
+      }
 
-    const success = await handleSendRule(ruleEngineConfig);
-    if (success) {
+      // 2. Find the rule host device (rule_178) under the current building
+      const activeAcDevice = acConfig.device;
+      let ruleHostDevice = activeAcDevice;
+      if (activeAcDevice) {
+        let locName = acConfig.building || globalLocation.building;
+        if (locName) {
+          const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
+          const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+          if (selectedSZ && selectedSZ.type === 'location') {
+            locName = acConfig.subZone || globalLocation.subZone;
+          }
+          const locInfo = locationDetails[locName];
+          if (locInfo && locInfo.deviceList) {
+            const rd = locInfo.deviceList.find(d => 
+              (d.label && d.label.toUpperCase().includes('RULE')) || 
+              (d.id && String(d.id).toUpperCase().includes('RULE'))
+            );
+            if (rd) ruleHostDevice = rd.id;
+          }
+        }
+      }
+
+      // 3. Get sorted rule modules from the rule host device
+      let ruleModules = [];
+      if (ruleHostDevice && deviceDetails[ruleHostDevice]?.modules) {
+        ruleModules = Object.values(deviceDetails[ruleHostDevice].modules).filter(m =>
+          m.name && (m.name.toUpperCase().startsWith('RULE_') || m.name.toUpperCase().includes('RULE'))
+        );
+        ruleModules.sort((a, b) => {
+          const numA = parseInt(a.name.replace(/\D/g, ''), 10) || 0;
+          const numB = parseInt(b.name.replace(/\D/g, ''), 10) || 0;
+          return numA - numB;
+        });
+      }
+
+      // 4. Get the correct rule module for this index
+      const targetRuleModule = ruleModules[ruleIndex];
+      if (!targetRuleModule) {
+        throw new Error(`Rule module not found for index ${ruleIndex}. Available: ${ruleModules.map(m => m.name).join(', ')}`);
+      }
+
+      const rawModule = targetRuleModule.rawModule;
+      const targetModuleId = targetRuleModule.id;
+      console.log('[Apply Rules] Rule index:', ruleIndex, '| Module:', targetRuleModule.name, '| Module ID:', targetModuleId);
+
+      if (!rawModule) {
+        throw new Error(`Raw module data not available for ${targetRuleModule.name} (ID: ${targetModuleId})`);
+      }
+
+      // 5. Build fieldCOS from the correct module's setting fields
+      const fieldValueMap = {
+        'condition_date_time': ruleEngineConfig.condition.timeDate || '',
+        'condition_date_time_repeat_days': (ruleEngineConfig.condition.repeatDays || []).join('|'),
+        'consequence_value': ruleEngineConfig.consequence.value || '',
+        'condition_type': ruleEngineConfig.condition.type || '',
+        'condition_modbus': ruleEngineConfig.condition.modbus || '',
+        'comparison_type': ruleEngineConfig.condition.comparisonType || '',
+        'comparison_value': ruleEngineConfig.condition.comparisonValue || '',
+        'consequence_type': ruleEngineConfig.consequence.type || '',
+        'consequence_modbus': ruleEngineConfig.consequence.modbus || ''
+      };
+
+      const settingFields = rawModule.settingFieldsList || rawModule.settingFieldVOList || rawModule.settingFieldList || [];
+      const fieldCOS = settingFields.map(f => ({
+        id: f.id,
+        currentValue: fieldValueMap.hasOwnProperty(f.fieldName) ? fieldValueMap[f.fieldName] : (f.currentValue || f.defaultValue || '')
+      }));
+
+      // 6. Build and send the PUT payload
+      const putPayload = {
+        name: rawModule.name || rawModule.moduleName || targetRuleModule.name,
+        id: targetModuleId,
+        fieldCOS: fieldCOS
+      };
+
+      const token = localStorage.getItem('sochiot_token');
+      console.log('[Apply Rules] PUT payload:', JSON.stringify(putPayload, null, 2));
+      const response = await fetch(`https://app.sochiot.com/api/config-engine/module/${targetModuleId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(putPayload)
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.message || `Failed to save rules to Sochiot (${response.status})`);
+      }
+
+      // 7. Update cached state
+      const updatedRule = {
+        ...ruleEngineConfig,
+        moduleId: targetModuleId,
+        ruleName: targetRuleModule.name
+      };
+      setDeviceDetails(prev => {
+        const copy = { ...prev };
+        const targetModule = copy[ruleHostDevice]?.modules?.[targetModuleId];
+        if (targetModule) {
+          targetModule.parsedRule = updatedRule;
+          if (targetModule.rawModule && targetModule.rawModule.settingFieldsList) {
+            targetModule.rawModule.settingFieldsList = targetModule.rawModule.settingFieldsList.map(f => {
+              const val = fieldValueMap.hasOwnProperty(f.fieldName) ? fieldValueMap[f.fieldName] : (f.currentValue || f.defaultValue || '');
+              return { ...f, currentValue: val };
+            });
+          }
+        }
+        return copy;
+      });
+
+      // 8. Save to local rule config
+      if (selectedModule === 'AG Tank') {
+        setAgRules(prev => {
+          const next = [...prev];
+          next[ruleIndex] = updatedRule;
+          return next;
+        });
+      } else if (selectedModule === 'UG Pump') {
+        setUgRules(prev => {
+          const next = [...prev];
+          next[ruleIndex] = updatedRule;
+          return next;
+        });
+      } else if (selectedCategory === 'AC') {
+        setAcRules(prev => {
+          const next = [...prev];
+          next[ruleIndex] = updatedRule;
+          return next;
+        });
+      }
+
+      setToastMessage({ type: 'success', text: `${targetRuleModule.name} saved to Sochiot successfully!` });
+      setTimeout(() => setToastMessage(null), 3000);
       setShowRuleEngineModal(false);
+    } catch (err) {
+      console.error('Error applying rules to Sochiot:', err);
+      setToastMessage({ type: 'error', text: err.message || "Failed to save rules to Sochiot." });
+      setTimeout(() => setToastMessage(null), 4000);
+    } finally {
+      setIsSendingRules(false);
     }
   };
 
@@ -206,6 +384,26 @@ const ConfigTemplates = () => {
   const [energyMeteringTarget, setEnergyMeteringTarget] = useState('');
   const [subMeterCategory, setSubMeterCategory] = useState('');
   const [vrvConfig, setVrvConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', vrvZone: '', temperature: '', humidity: '', co2: '', tvoc: '', aqi: '', targetTemp: '', enabled: true });
+  const [acConfig, setAcConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '', temperature: '', humidity: '', enabled: true, autoMode: 'SCHEDULE' });
+  const [acRules, setAcRules] = useState([initialRuleState, initialRuleState]);
+  const acRule1Config = acRules[0] || initialRuleState;
+  const acRule2Config = acRules[1] || initialRuleState;
+  
+  const setAcRule1Config = (val) => {
+    setAcRules(prev => {
+      const next = [...prev];
+      next[0] = typeof val === 'function' ? val(prev[0]) : val;
+      return next;
+    });
+  };
+  const setAcRule2Config = (val) => {
+    setAcRules(prev => {
+      const next = [...prev];
+      next[1] = typeof val === 'function' ? val(prev[1]) : val;
+      return next;
+    });
+  };
+  const [activeACRegisterTarget, setActiveACRegisterTarget] = useState('temperature');
 
   const [selectedUgPumpNo, setSelectedUgPumpNo] = useState(1);
   const [pressureTarget, setPressureTarget] = useState('');
@@ -277,6 +475,13 @@ const ConfigTemplates = () => {
     return list;
   }, []);
 
+  const acUnitsList = useMemo(() => [
+    { name: 'Master AC', id: 'AC-MAIN-01' },
+    { name: 'Lobby AC', id: 'AC-LOBBY-01' },
+    { name: 'Main Hall AC', id: 'AC-HALL-01' },
+    { name: 'Server Room AC', id: 'AC-SERVER-01' }
+  ], []);
+
 
   const isHierarchyUnlocked = useMemo(() => {
     return !!(globalLocation.organization || globalLocation.client || globalLocation.zone || globalLocation.subZone || globalLocation.building);
@@ -313,6 +518,9 @@ const ConfigTemplates = () => {
         emChangeConfig.module, emWarningConfig.module, emReadConfig.module
       ].filter(m => m);
     }
+    if (selectedCategory === 'AC') {
+      return [acConfig.module].filter(m => m);
+    }
     return [];
   }, [
     selectedModule,
@@ -327,7 +535,8 @@ const ConfigTemplates = () => {
     ugTankLevelConfig.module, pressureConfig.module,
     dgEngineConfig.module, dgPowerConfig.module, dgFuelConfig.module, dgFaultConfig.module,
     emVoltageConfig.module, emCurrentConfig.module, emPowerConfig.module, emSystemConfig.module, emConsumptionConfig.module,
-    emChangeConfig.module, emWarningConfig.module, emReadConfig.module
+    emChangeConfig.module, emWarningConfig.module, emReadConfig.module,
+    acConfig.module
   ]);
 
   const handleUgPumpNoChange = (no) => {
@@ -707,7 +916,7 @@ const ConfigTemplates = () => {
       elecVoltageConfig, elecCurrentConfig, elecSystemConfig, elecConsumptionConfig,
       dgEngineConfig, dgPowerConfig, dgFuelConfig, dgFaultConfig,
       emVoltageConfig, emCurrentConfig, emPowerConfig, emSystemConfig, emConsumptionConfig,
-      emChangeConfig, emWarningConfig, emReadConfig
+      emChangeConfig, emWarningConfig, emReadConfig, acConfig
     ];
 
     configsToWatch.forEach(config => {
@@ -730,7 +939,7 @@ const ConfigTemplates = () => {
     locationIdMap, locationDetails, deviceDetails,
     emVoltageConfig, emCurrentConfig, emPowerConfig, emSystemConfig, emConsumptionConfig,
     emChangeConfig, emWarningConfig, emReadConfig,
-    dgEngineConfig, dgPowerConfig, dgFuelConfig, dgFaultConfig
+    dgEngineConfig, dgPowerConfig, dgFuelConfig, dgFaultConfig, acConfig
   ]);
 
   const PARAMETER_SYNONYMS = {
@@ -787,6 +996,8 @@ const ConfigTemplates = () => {
   const lastAutofilledDevice = useRef('');
   const lastAutofilledElec = useRef('');
   const lastAutofilledDg = useRef('');
+  const lastAutofilledAc = useRef('');
+  const lastLoadedAcDeviceRules = useRef('');
 
   // Auto-populate modules and all parameters fields when deviceDetails or selected device changes
   useEffect(() => {
@@ -1221,11 +1432,160 @@ const ConfigTemplates = () => {
         }
       }
     }
+
+    // 4. AC AUTO-FILL
+    const activeAcDevice = acConfig.device;
+    if (activeAcDevice) {
+      // Find the rule host device under the active location/building
+      let ruleHostDevice = activeAcDevice;
+      let locName = acConfig.building || globalLocation.building;
+      if (locName) {
+        const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
+        const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+        if (selectedSZ && selectedSZ.type === 'location') {
+          locName = acConfig.subZone || globalLocation.subZone;
+        }
+        const locInfo = locationDetails[locName];
+        if (locInfo && locInfo.deviceList) {
+          const rd = locInfo.deviceList.find(d => 
+            (d.label && d.label.toUpperCase().includes('RULE')) || 
+            (d.id && String(d.id).toUpperCase().includes('RULE'))
+          );
+          if (rd) ruleHostDevice = rd.id;
+        }
+      }
+
+      // If ruleHostDevice details not loaded, fetch it in background
+      if (ruleHostDevice && !deviceDetails[ruleHostDevice]) {
+        fetchDeviceDetails(ruleHostDevice);
+      }
+
+      const devInfo = deviceDetails[activeAcDevice];
+      const ruleDevInfo = deviceDetails[ruleHostDevice];
+
+      if (devInfo && devInfo.modules) {
+        const isNewAc = lastAutofilledAc.current !== activeAcDevice;
+        
+        // Gather all fields across all modules of this device (for temperature/humidity registers)
+        const acAllFields = [];
+        Object.entries(devInfo.modules).forEach(([mId, m]) => {
+          (m.fields || []).forEach(f => {
+            acAllFields.push({ ...f, fullId: `${mId}::${f.id}`, rawId: f.id });
+          });
+        });
+
+        // Gather all rule modules of the rule host device
+        let ruleModules = [];
+        if (ruleDevInfo && ruleDevInfo.modules) {
+          const allRuleModules = Object.values(ruleDevInfo.modules);
+          ruleModules = allRuleModules.filter(m => 
+            m.name && (m.name.toUpperCase().startsWith('RULE_') || m.name.toUpperCase().includes('RULE'))
+          );
+          ruleModules.sort((a, b) => {
+            const numA = parseInt(a.name.replace(/\D/g, ''), 10) || 0;
+            const numB = parseInt(b.name.replace(/\D/g, ''), 10) || 0;
+            return numA - numB;
+          });
+        }
+
+        const findMatchingFieldAc = (fieldsList, searchKey) => {
+          if (!fieldsList || fieldsList.length === 0) return '';
+          
+          const searchTerms = searchKey === 'temperature' 
+            ? ['TEMPERATURE', 'TEMP', 'TMP', 'T']
+            : ['HUMIDITY', 'HUM', 'HM', 'H'];
+
+          // 1. Exact match on rawId or label
+          for (const term of searchTerms) {
+            const match = fieldsList.find(f => 
+              f.rawId.toUpperCase() === term || 
+              f.label.toUpperCase() === term
+            );
+            if (match) return match.fullId;
+          }
+
+          // 2. Partial match on rawId or label
+          for (const term of searchTerms) {
+            const match = fieldsList.find(f => 
+              f.rawId.toUpperCase().includes(term) || 
+              f.label.toUpperCase().includes(term)
+            );
+            if (match) return match.fullId;
+          }
+
+          return '';
+        };
+
+        setAcConfig(prev => {
+          const updated = { ...prev };
+          const keys = ['temperature', 'humidity'];
+          let changed = false;
+          
+          keys.forEach(k => {
+            if (isNewAc || !prev[k]) {
+              const match = findMatchingFieldAc(acAllFields, k);
+              if (match) {
+                updated[k] = match;
+                changed = true;
+              }
+            }
+          });
+          
+          return changed ? updated : prev;
+        });
+
+        const ruleHostDetailsLoaded = ruleDevInfo && ruleDevInfo.modules && Object.keys(ruleDevInfo.modules).length > 0;
+        const shouldLoadRules = isNewAc || (ruleHostDetailsLoaded && lastLoadedAcDeviceRules.current !== activeAcDevice);
+
+        if (shouldLoadRules) {
+          if (isNewAc) {
+            lastAutofilledAc.current = activeAcDevice;
+          }
+          if (ruleHostDetailsLoaded) {
+            lastLoadedAcDeviceRules.current = activeAcDevice;
+          }
+          
+          // Auto-fetch and auto-fill rules associated with this device ID
+          const existingWithRules = savedTemplates.find(t => 
+            (t.mapping?.acConfig?.device === activeAcDevice || t.mapping?.deviceId === activeAcDevice) && 
+            (t.mapping?.rules || t.mapping?.rule1Config || t.mapping?.rule2Config || t.mapping?.ruleEngineConfig)
+          );
+          
+          let rulesToLoad = [];
+          if (existingWithRules) {
+            rulesToLoad = existingWithRules.mapping.rules || [
+              existingWithRules.mapping.rule1Config || existingWithRules.mapping.ruleEngineConfig || initialRuleState,
+              existingWithRules.mapping.rule2Config || initialRuleState
+            ];
+          }
+
+          if (ruleModules.length > 0) {
+            const alignedRules = ruleModules.map((m, idx) => {
+              const hasSochiotData = m.parsedRule && (m.parsedRule.condition.type !== 'NA' || m.parsedRule.condition.modbus || m.parsedRule.consequence.modbus);
+              const existingRule = hasSochiotData ? m.parsedRule : (rulesToLoad[idx] || m.parsedRule || initialRuleState);
+              return {
+                ...existingRule,
+                moduleId: m.id,
+                ruleName: m.name
+              };
+            });
+            setAcRules(alignedRules);
+          } else {
+            if (rulesToLoad.length > 0) {
+              setAcRules(rulesToLoad);
+            } else {
+              setAcRules([initialRuleState, initialRuleState]);
+            }
+          }
+        }
+      }
+    }
   }, [
     deviceDetails,
     emChangeConfig.device, emWarningConfig.device, emReadConfig.device, emVoltageConfig.device,
     elecVoltageConfig.device, elecVoltageConfig.module,
-    dgPowerConfig.device, dgEngineConfig.device, dgFuelConfig.device, dgFaultConfig.device
+    dgPowerConfig.device, dgEngineConfig.device, dgFuelConfig.device, dgFaultConfig.device,
+    acConfig.device
   ]);
 
   const getParameterSuggestion = (fieldName, displayName) => {
@@ -1314,10 +1674,74 @@ const ConfigTemplates = () => {
             };
           });
 
+          const isRuleEngine = (m.name && (m.name.toUpperCase().startsWith('RULE_') || m.name.toUpperCase().includes('RULE'))) || 
+                             (m.moduleName && (m.moduleName.toUpperCase().startsWith('RULE_') || m.moduleName.toUpperCase().includes('RULE'))) ||
+                             (m.moduleTypeVO?.name === 'RULE_ENGINE');
+
+          let parsedRule = null;
+          let settingFields = [];
+          if (isRuleEngine) {
+            const templates = data.deviceTemplateVO?.moduleTemplates || 
+                              data.deviceTemplate?.moduleTemplates || 
+                              data.deviceTemplateVO?.moduleTemplateVOList || 
+                              data.deviceTemplate?.moduleTemplateVOList || [];
+            
+            let templateModule = templates.find(tm => 
+              tm.id === m.id || 
+              (tm.name && tm.name.toUpperCase().includes('RULE')) || 
+              (tm.moduleName && tm.moduleName.toUpperCase().includes('RULE')) ||
+              tm.moduleTypeVO?.id === m.moduleTypeVO?.id || 
+              tm.moduleTypeVO?.name === m.moduleTypeVO?.name ||
+              tm.moduleTypeVO?.name === 'RULE_ENGINE' ||
+              tm.moduleType?.name === 'RULE_ENGINE'
+            );
+
+            settingFields = m.settingFieldVOList || m.settingFieldList || m.settingFields || 
+                            templateModule?.settingFieldVOList || templateModule?.settingFieldList || templateModule?.settingFields || [];
+
+            const getSettingVal = (fName) => {
+              const sf = settingFields.find(item => item.fieldName === fName);
+              if (!sf) return '';
+              return sf.currentValue !== undefined ? sf.currentValue : (sf.defaultValue !== undefined ? sf.defaultValue : '');
+            };
+
+            const repeatDaysRaw = getSettingVal("condition_date_time_repeat_days") || "";
+            const repeatDays = typeof repeatDaysRaw === 'string'
+              ? (repeatDaysRaw ? repeatDaysRaw.split(',') : [])
+              : (Array.isArray(repeatDaysRaw) ? repeatDaysRaw : []);
+
+            const condType = getSettingVal("condition_type") || "NA";
+            const isSched = condType === 'DATE_TIME_REPEAT' || condType === 'DATE_TIME_ONCE' || !!getSettingVal("condition_date_time");
+
+            parsedRule = {
+              moduleId: m.id,
+              ruleName: m.moduleName || m.name || `RULE_${m.moduleNumber || 1}`,
+              condition: {
+                isScheduleEnabled: isSched,
+                timeDate: getSettingVal("condition_date_time") || "",
+                repeatDays: repeatDays,
+                type: condType,
+                modbus: getSettingVal("condition_modbus") || "",
+                comparisonType: getSettingVal("comparison_type") || "EQUAL",
+                comparisonValue: getSettingVal("comparison_value") || ""
+              },
+              consequence: {
+                type: getSettingVal("consequence_type") || "MODBUS",
+                modbus: getSettingVal("consequence_modbus") || "",
+                value: getSettingVal("consequence_value") || ""
+              }
+            };
+          }
+
           moduleMap[m.id] = {
             id: m.id,
-            name: m.name,
-            fields: fields
+            name: m.moduleName || m.name || `RULE_${m.moduleNumber}`,
+            fields: fields,
+            parsedRule: parsedRule,
+            rawModule: {
+              ...m,
+              settingFieldsList: settingFields
+            }
           };
         });
 
@@ -2165,7 +2589,8 @@ const ConfigTemplates = () => {
     'Energy Metering': ['Overview', 'Main Meter', 'Sub Meters'],
     'VRV': ['Overview', 'Control Panel', 'Schedule', 'Human Sensor'],
     'AQI Sensor': ['Overview', 'Temp & Humidity'],
-    'HVAC': ['Chiller', 'AHU', 'Cooling Tower']
+    'HVAC': ['Chiller', 'AHU', 'Cooling Tower'],
+    'AC': ['Overview', 'PDF Report']
   };
 
   const locations = dynamicOptions.locations;
@@ -2390,7 +2815,8 @@ const ConfigTemplates = () => {
         agAutoConfig, agManualConfig, agBypassConfig,
         agLevelConfig, agOpenConfig, agCloseConfig,
         agStatusStartConfig, agStatusStopConfig, agAmpsConfig,
-        agTankType, agMasterEnabled, rule1Config: agRule1Config, rule2Config: agRule2Config, ruleEngineConfig
+        agTankType, agMasterEnabled, rule1Config: agRule1Config, rule2Config: agRule2Config, ruleEngineConfig,
+        rules: agRules
       };
     } else if (selectedModule === 'UG Pump') {
       mapping = {
@@ -2399,7 +2825,8 @@ const ConfigTemplates = () => {
         ugLocalModeConfig, ugRemoteModeConfig,
         ugStatusStartConfig, ugStatusStopConfig, ugAmpsConfig,
         ugPumpRange: { ...ugPumpRange, pumpNo: selectedUgPumpNo },
-        ugConfig, rule1Config: ugRule1Config, rule2Config: ugRule2Config
+        ugConfig, rule1Config: ugRule1Config, rule2Config: ugRule2Config,
+        rules: ugRules
       };
     } else if (selectedModule === 'UG Tank') {
       mapping = {
@@ -2424,6 +2851,8 @@ const ConfigTemplates = () => {
       };
     } else if (selectedCategory === 'VRV' || selectedCategory === 'AQI Sensor') {
       mapping = { vrvConfig };
+    } else if (selectedCategory === 'AC') {
+      mapping = { acConfig, rule1Config: acRule1Config, rule2Config: acRule2Config, rules: acRules };
     } else {
       // Fallback
       mapping = {
@@ -2608,13 +3037,13 @@ const ConfigTemplates = () => {
     setEnergyMeteringTarget('');
     setSubMeterCategory('');
     setVrvConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', temperature: '', humidity: '', co2: '', tvoc: '', aqi: '', targetTemp: '', enabled: true });
+    setAcConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '', temperature: '', humidity: '', enabled: true, autoMode: 'SCHEDULE' });
     setUgTankLevelConfig(createDefaultConfig());
     setUgTankRange({ name: '', id: '' });
     setTemplateName('');
-    setAgRule1Config(initialRuleState);
-    setAgRule2Config(initialRuleState);
-    setUgRule1Config(initialRuleState);
-    setUgRule2Config(initialRuleState);
+    setAgRules([initialRuleState, initialRuleState]);
+    setUgRules([initialRuleState, initialRuleState]);
+    setAcRules([initialRuleState, initialRuleState]);
     setRuleEngineConfig(initialRuleState);
     setUgConfig({
       integration: { 'LEVEL MONITORING': true, 'PUMP STATUS': true, 'AUTO LOGIC': true, 'MANUAL CONTROL': true, 'STARTWater Level': true, 'STOPWater Level': true, 'PRESSURE SENSOR': true },
@@ -2718,6 +3147,7 @@ const ConfigTemplates = () => {
       setEnergyMeteringTarget(template.mapping.energyMeteringTarget || '');
       setSubMeterCategory(template.mapping.subMeterCategory || '');
       setVrvConfig(template.mapping.vrvConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', vrvZone: '', temperature: '', humidity: '', co2: '', tvoc: '', aqi: '', targetTemp: '', enabled: true });
+      setAcConfig(template.mapping.acConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '', temperature: '', humidity: '', enabled: true });
       setUgConfig(template.mapping.ugConfig || {
         integration: { 'LEVEL MONITORING': true, 'PUMP STATUS': true, 'AUTO LOGIC': true, 'MANUAL CONTROL': true, 'START COMMAND': true, 'STOP COMMAND': true, 'PRESSURE SENSOR': true },
         electrical: { 'PHASE VOLTAGE': true, 'PHASE CURRENT': true, 'POWER FACTOR': true, 'FREQUENCY': true, 'KW LOAD': true, 'KVAH UNIT': true },
@@ -2733,12 +3163,13 @@ const ConfigTemplates = () => {
       const r1 = template.mapping.rule1Config || template.mapping.ruleEngineConfig || initialRuleState;
       const r2 = template.mapping.rule2Config || template.mapping.ruleEngineConfig || initialRuleState;
 
+      const loadedRules = template.mapping.rules || [r1, r2];
       if (template.module === 'AG Tank') {
-        setAgRule1Config(r1);
-        setAgRule2Config(r2);
+        setAgRules(loadedRules);
       } else if (template.module === 'UG Pump') {
-        setUgRule1Config(r1);
-        setUgRule2Config(r2);
+        setUgRules(loadedRules);
+      } else if (template.category === 'AC') {
+        setAcRules(loadedRules);
       }
       setRuleEngineConfig(template.mapping.ruleEngineConfig || r1);
 
@@ -2809,6 +3240,9 @@ const ConfigTemplates = () => {
       }
       if (template.mapping.elecVoltageConfig?.device && template.mapping.elecVoltageConfig?.module) {
         lastAutofilledElec.current = `${template.mapping.elecVoltageConfig.device}::${template.mapping.elecVoltageConfig.module}`;
+      }
+      if (template.mapping.acConfig?.device) {
+        lastAutofilledAc.current = template.mapping.acConfig.device;
       }
     }
     setEditingTemplateId(template.id);
@@ -4621,6 +5055,441 @@ const ConfigTemplates = () => {
                     )}
                   </div>
                 </div>
+              ) : selectedCategory === 'AC' && selectedModule === 'Overview' ? (
+                <div className="config-form-container scale-in">
+                  <div className="p-0 rounded-4 bg-dark bg-opacity-20 border border-white border-opacity-5 mb-5 overflow-hidden position-relative">
+                    <div className="p-3 border-bottom border-white border-opacity-5 bg-dark bg-opacity-40 d-flex justify-content-between align-items-center">
+                      <div className="d-flex align-items-center gap-2">
+                        <Wind className="text-info shadow-glow-blue" size={18} />
+                        <h6 className="mb-0 text-white fw-black uppercase tracking-widest fs-11">AC Settings Configuration</h6>
+                      </div>
+                      <div className="d-flex align-items-center gap-3">
+                        <div className="d-flex align-items-center gap-2" style={{ minWidth: '220px' }}>
+                          <span className="text-secondary fs-12 uppercase fw-black opacity-60 text-nowrap">Target Unit:</span>
+                          <Form.Select
+                            className="premium-input px-3 py-1 fs-11 fw-bold border-info border-opacity-20 shadow-inner"
+                            style={{ height: '35px' }}
+                            value={acConfig.acUnit || ''}
+                            onChange={(e) => {
+                              const targetVal = e.target.value;
+                              setAcConfig(prev => ({ ...prev, acUnit: targetVal }));
+                              setTemplateName(targetVal);
+                              
+                              // Load existing if it exists
+                              const existing = savedTemplates.find(t =>
+                                t.category === 'AC' &&
+                                t.module === 'Overview' &&
+                                t.mapping?.acConfig?.acUnit === targetVal
+                              );
+                              if (existing) {
+                                setAcConfig(existing.mapping.acConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: targetVal, temperature: '', humidity: '', enabled: true, autoMode: 'SCHEDULE' });
+                                const loaded = existing.mapping.rules || [
+                                  existing.mapping.rule1Config || existing.mapping.ruleEngineConfig || initialRuleState,
+                                  existing.mapping.rule2Config || initialRuleState
+                                ];
+                                
+                                const activeAcDevice = existing.mapping.acConfig?.device;
+                                let ruleHostDevice = activeAcDevice;
+                                if (activeAcDevice) {
+                                  let locName = existing.mapping.acConfig?.building || globalLocation.building;
+                                  if (locName) {
+                                    const szOptions = getFieldList('subZone', { ...globalLocation, ...existing.mapping.acConfig });
+                                    const selectedSZ = szOptions.find(o => o.id === (existing.mapping.acConfig?.subZone || globalLocation.subZone));
+                                    if (selectedSZ && selectedSZ.type === 'location') {
+                                      locName = existing.mapping.acConfig?.subZone || globalLocation.subZone;
+                                    }
+                                    const locInfo = locationDetails[locName];
+                                    if (locInfo && locInfo.deviceList) {
+                                      const rd = locInfo.deviceList.find(d => 
+                                        (d.label && d.label.toUpperCase().includes('RULE')) || 
+                                        (d.id && String(d.id).toUpperCase().includes('RULE'))
+                                      );
+                                      if (rd) ruleHostDevice = rd.id;
+                                    }
+                                  }
+                                }
+
+                                // If ruleHostDevice details not loaded, fetch it in background
+                                if (ruleHostDevice && !deviceDetails[ruleHostDevice]) {
+                                  fetchDeviceDetails(ruleHostDevice);
+                                }
+
+                                let ruleModules = [];
+                                if (ruleHostDevice && deviceDetails[ruleHostDevice]?.modules) {
+                                  ruleModules = Object.values(deviceDetails[ruleHostDevice].modules).filter(m => 
+                                    m.name && (m.name.toUpperCase().startsWith('RULE_') || m.name.toUpperCase().includes('RULE'))
+                                  );
+                                  ruleModules.sort((a, b) => {
+                                    const numA = parseInt(a.name.replace(/\D/g, ''), 10) || 0;
+                                    const numB = parseInt(b.name.replace(/\D/g, ''), 10) || 0;
+                                    return numA - numB;
+                                  });
+                                }
+
+                                if (ruleModules.length > 0) {
+                                  const aligned = ruleModules.map((m, idx) => {
+                                    const hasSochiotData = m.parsedRule && (m.parsedRule.condition.type !== 'NA' || m.parsedRule.condition.modbus || m.parsedRule.consequence.modbus);
+                                    const existingRule = hasSochiotData ? m.parsedRule : (loaded[idx] || m.parsedRule || initialRuleState);
+                                    return {
+                                      ...existingRule,
+                                      moduleId: m.id,
+                                      ruleName: m.name
+                                    };
+                                  });
+                                  setAcRules(aligned);
+                                } else {
+                                  setAcRules(loaded);
+                                }
+                                if (existing.mapping.globalHierarchy) setGlobalLocation(existing.mapping.globalHierarchy);
+                              } else {
+                                setAcConfig({
+                                  organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '',
+                                  acUnit: targetVal, temperature: '', humidity: '', enabled: true, autoMode: 'SCHEDULE'
+                                });
+                                setAcRules([initialRuleState, initialRuleState]);
+                              }
+                            }}
+                          >
+                            <option value="">SELECT TARGET AC</option>
+                            {acUnitsList.map(s => (
+                              <option key={s.id} value={s.name}>{s.name}</option>
+                            ))}
+                          </Form.Select>
+                        </div>
+                      </div>
+                    </div>
+                    {acConfig.acUnit ? (
+                      <div className="p-4 bg-dark bg-opacity-20">
+                        <Row className="g-4">
+                          <Col md={12}>
+                            <div className="p-4 rounded-4 bg-dark bg-opacity-40 border border-info border-opacity-10 premium-figma-card h-100 position-relative overflow-hidden transition-all hover-glow-info">
+                              <div className="card-inner-glow bg-info opacity-5"></div>
+                              <div className="mb-4 d-flex align-items-center justify-content-between">
+                                <div className="d-flex align-items-center gap-3">
+                                  <div className="icon-box-premium info p-2 shadow-glow-info">
+                                    <Wind size={18} />
+                                  </div>
+                                  <div>
+                                    <h6 className="text-white fw-black uppercase tracking-widest mb-0 fs-10">AC Environment Metrics</h6>
+                                    <small className="text-info opacity-50 uppercase fs-12 fw-bold tracking-widest">AC Sensor Mapping</small>
+                                  </div>
+                                </div>
+                                <Form.Check type="switch" className="scada-switch info" checked={acConfig.enabled} onChange={(e) => setAcConfig({ ...acConfig, enabled: e.target.checked })} />
+                              </div>
+                              
+                              <div className="p-3 rounded-4 bg-dark bg-opacity-40 border border-info border-opacity-15 mb-3">
+                                <div className="d-flex justify-content-between align-items-center mb-2">
+                                  <span className="text-secondary fs-12 uppercase fw-black opacity-60">TELEMETRY PREVIEW</span>
+                                  <Badge bg="info" className="px-3 py-1 rounded-pill">LIVE</Badge>
+                                </div>
+                                <div className="d-flex gap-4">
+                                  <div className="flex-fill p-2 rounded bg-black bg-opacity-35 border border-white border-opacity-5">
+                                    <span className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-1 d-block">TEMPERATURE</span>
+                                    <span className="fs-6 text-white fw-black font-monospace">30 <span className="fs-12 text-secondary">°C</span></span>
+                                  </div>
+                                  <div className="flex-fill p-2 rounded bg-black bg-opacity-35 border border-white border-opacity-5">
+                                    <span className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-1 d-block">HUMIDITY</span>
+                                    <span className="fs-6 text-white fw-black font-monospace">46.3 <span className="fs-12 text-secondary">%</span></span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className={`transition-all ${!acConfig.enabled ? 'opacity-25 grayscale' : ''}`}>
+                                <Row className="g-3 position-relative z-1">
+                                  {!isHierarchyUnlocked ? (
+                                    <Col md={12}>
+                                      <div className="p-3 rounded bg-dark bg-opacity-40 border border-info border-opacity-20 text-center shadow-glow-info-box">
+                                        <small className="text-info fw-black uppercase tracking-widest fs-12">
+                                          <Info size={14} className="me-2" /> Select hierarchy level to unlock
+                                        </small>
+                                      </div>
+                                    </Col>
+                                  ) : (
+                                    <>
+                                      <Col md={6}>
+                                        <Form.Label className="fs-11 text-secondary fw-black uppercase tracking-widest opacity-50 mb-2 d-block truncate">BUILDING / GATEWAY</Form.Label>
+                                        <Form.Select className="premium-input p-3 fs-11 fw-bold border-info border-opacity-10 shadow-inner" style={{ height: '45px' }} value={acConfig.building || globalLocation.building} onChange={(e) => handleConfigChange(acConfig, setAcConfig, 'building', e.target.value)}>
+                                          <option value="">SELECT OPTION</option>
+                                          {getFieldList('building', { ...globalLocation, ...acConfig }).map(opt => (
+                                            <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                          ))}
+                                        </Form.Select>
+                                      </Col>
+                                      <Col md={6}>
+                                        <Form.Label className="fs-11 text-secondary fw-black uppercase tracking-widest opacity-50 mb-2 d-block">DEVICE_ID</Form.Label>
+                                        <Form.Select className="premium-input p-3 fs-11 fw-bold border-info border-opacity-10 shadow-inner" style={{ height: '45px' }} value={acConfig.device} onChange={(e) => handleConfigChange(acConfig, setAcConfig, 'device', e.target.value)}>
+                                          <option value="">SELECT DEVICE</option>
+                                          {getFieldList('device', { ...globalLocation, ...acConfig, building: acConfig.building || globalLocation.building }).map(opt => (
+                                            <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                          ))}
+                                        </Form.Select>
+                                      </Col>
+                                      <Col md={12}>
+                                        <hr className="border-info opacity-20 my-3" />
+                                        <Row className="g-3">
+                                          {[
+                                            { label: 'TEMPERATURE (C)', key: 'temperature', placeholder: 'e.g. temperature' },
+                                            { label: 'HUMIDITY (%)', key: 'humidity', placeholder: 'e.g. humidity' }
+                                          ].map((f, fIdx) => {
+                                            const isActive = activeACRegisterTarget === f.key;
+                                            return (
+                                              <Col md={6} key={fIdx}>
+                                                <div
+                                                  className={`premium-field-wrapper p-3 rounded bg-dark bg-opacity-20 border transition-all cursor-pointer ${
+                                                    isActive 
+                                                      ? 'border-info border-opacity-50 shadow-glow-info-box' 
+                                                      : 'border-white border-opacity-5 hover-border-opacity-30'
+                                                  }`}
+                                                  onClick={() => setActiveACRegisterTarget(f.key)}
+                                                >
+                                                  <div className="d-flex justify-content-between align-items-center mb-2">
+                                                    <Form.Label className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-0">{f.label}</Form.Label>
+                                                    {isActive && <Badge bg="info" className="fs-9 uppercase px-2 py-0.5 rounded-pill">ACTIVE TARGET</Badge>}
+                                                  </div>
+                                                  <Form.Control
+                                                    type="text"
+                                                    placeholder={f.placeholder}
+                                                    className="premium-input p-3 fs-11 fw-bold border-info border-opacity-20 shadow-inner text-white bg-black bg-opacity-30"
+                                                    style={{ height: '42px' }}
+                                                    value={acConfig[f.key] || ''}
+                                                    onChange={(e) => setAcConfig(prev => ({ ...prev, [f.key]: e.target.value }))}
+                                                  />
+                                                </div>
+                                              </Col>
+                                            );
+                                          })}
+                                        </Row>
+                                        
+                                        <div className="mt-4 p-3 rounded-4 bg-dark bg-opacity-40 border border-info border-opacity-15">
+                                          <div className="d-flex justify-content-between align-items-center mb-2">
+                                            <Form.Label className="fs-10 text-info fw-black uppercase tracking-widest opacity-70 mb-0">Available Device Registers</Form.Label>
+                                            <span className="text-secondary fs-9 fw-bold uppercase opacity-60">Click register to assign to active target</span>
+                                          </div>
+                                          <div className="d-flex flex-wrap gap-2" style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                                            {(() => {
+                                              const rawFields = getFieldList('field', { ...globalLocation, ...acConfig, building: acConfig.building || globalLocation.building });
+                                              if (rawFields.length === 0) {
+                                                return <span className="text-secondary fs-11 uppercase fw-bold opacity-50">No registers detected on this device.</span>;
+                                              }
+                                              return rawFields.map(f => (
+                                                <Badge
+                                                  key={f.id}
+                                                  bg="dark"
+                                                  className="text-secondary border border-white border-opacity-10 px-3 py-2 cursor-pointer hover-glow-info hover-text-white transition-all text-start d-inline-flex align-items-center gap-2"
+                                                  onClick={() => {
+                                                    setAcConfig(prev => ({ ...prev, [activeACRegisterTarget]: f.id }));
+                                                  }}
+                                                  style={{ fontSize: '0.7rem' }}
+                                                >
+                                                  <span className="text-info font-monospace fw-bold">{f.id}</span>
+                                                  {f.label && <span className="text-light opacity-50">({f.label})</span>}
+                                                </Badge>
+                                              ));
+                                            })()}
+                                          </div>
+                                        </div>
+                                      </Col>
+                                    </>
+                                  )}
+                                </Row>
+
+                                <div className="mt-4 pt-3 border-top border-white border-opacity-5">
+                                  <Form.Label className="fs-10 text-info fw-black uppercase tracking-widest opacity-70 mb-2 d-block">Default Auto Mode Selection</Form.Label>
+                                  <div className="d-flex gap-3">
+                                    {[
+                                      { label: 'SCHEDULE CONTROL', value: 'SCHEDULE' },
+                                      { label: 'SENSOR CONTROL', value: 'SENSOR' },
+                                      { label: 'TEMPERATURE CONTROL', value: 'TEMP' },
+                                      { label: 'LOCAL CONTROL', value: 'LOCAL' }
+                                    ].map(mode => (
+                                      <Form.Check
+                                        key={mode.value}
+                                        type="radio"
+                                        id={`ac-automode-${mode.value}`}
+                                        label={mode.label}
+                                        name="acAutoModeRadio"
+                                        checked={acConfig.autoMode === mode.value}
+                                        onChange={() => setAcConfig(prev => ({ ...prev, autoMode: mode.value }))}
+                                        className="premium-radio fs-11 text-white fw-bold me-3"
+                                        style={{ accentColor: '#0ea5e9' }}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                                
+                                <div className="mt-4 pt-3 border-top border-white border-opacity-5 d-flex justify-content-between align-items-center">
+                                  <div className="d-flex gap-2 flex-wrap align-items-center">
+                                    {acRules.map((rule, idx) => (
+                                      <Button
+                                        key={`send-rule-${idx}`}
+                                        variant="outline-info"
+                                        size="sm"
+                                        className="fw-black fs-11 px-3 py-1 rounded-pill d-flex align-items-center gap-1 shadow-glow mb-1"
+                                        disabled={!acConfig.enabled || !acConfig.device}
+                                        onClick={() => {
+                                          handleSendRule({ ...rule, moduleId: rule.moduleId || acConfig.device });
+                                        }}
+                                      >
+                                        <Zap size={12} /> Send {rule.ruleName || `Rule ${idx + 1}`}
+                                      </Button>
+                                    ))}
+                                    {acConfig.enabled && acConfig.device && (
+                                      <Button
+                                        variant="outline-success"
+                                        size="sm"
+                                        className="fw-black fs-11 px-3 py-1 rounded-pill d-flex align-items-center gap-1 shadow-glow mb-1"
+                                        onClick={() => {
+                                          setAcRules(prev => [...prev, initialRuleState]);
+                                        }}
+                                      >
+                                        + Add Rule
+                                      </Button>
+                                    )}
+                                  </div>
+                                  {(!acConfig.enabled || !acConfig.device) ? (
+                                    <div className="text-info fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-2 opacity-50">
+                                      <Zap size={14} />
+                                      RULE ENGINE NOT MAPPED
+                                    </div>
+                                  ) : (
+                                    <div className="d-flex gap-3 flex-wrap align-items-center">
+                                      {acRules.map((rule, idx) => (
+                                        <div key={`config-rule-${idx}`} className="d-flex align-items-center gap-1">
+                                          <Button
+                                            variant="link"
+                                            className="p-0 text-info text-decoration-none fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-1 transition-all hover-opacity-100 opacity-70"
+                                            onClick={async () => {
+                                              setCurrentRuleTarget(`RULE_${idx}`);
+                                              setShowRuleEngineModal(true);
+                                              setIsLoadingRuleDetails(true);
+                                              
+                                              const targetModuleId = rule.moduleId || acConfig.device;
+                                              const token = localStorage.getItem('sochiot_token');
+                                              
+                                              // Find the rule host device to update its cache
+                                              let ruleHostDevice = acConfig.device;
+                                              let locName = acConfig.building || globalLocation.building;
+                                              if (locName) {
+                                                const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
+                                                const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+                                                if (selectedSZ && selectedSZ.type === 'location') {
+                                                  locName = acConfig.subZone || globalLocation.subZone;
+                                                }
+                                                const locInfo = locationDetails[locName];
+                                                if (locInfo && locInfo.deviceList) {
+                                                  const rd = locInfo.deviceList.find(d => 
+                                                    (d.label && d.label.toUpperCase().includes('RULE')) || 
+                                                    (d.id && String(d.id).toUpperCase().includes('RULE'))
+                                                  );
+                                                  if (rd) ruleHostDevice = rd.id;
+                                                }
+                                              }
+
+                                              try {
+                                                const res = await fetch(`https://app.sochiot.com/api/config-engine/module/${targetModuleId}`, {
+                                                  headers: {
+                                                    'Authorization': `Bearer ${token}`
+                                                  }
+                                                });
+                                                if (res.ok) {
+                                                  const fetched = await res.json();
+                                                  let settingFields = fetched.settingFieldVOList || fetched.settingFieldList || fetched.settingFields || [];
+                                                  if (settingFields.length === 0 && deviceDetails[ruleHostDevice]) {
+                                                    const cachedModule = deviceDetails[ruleHostDevice].modules?.[targetModuleId];
+                                                    if (cachedModule && cachedModule.rawModule?.settingFieldsList) {
+                                                      settingFields = cachedModule.rawModule.settingFieldsList;
+                                                    }
+                                                  }
+                                                  
+                                                  const getSettingVal = (fName) => {
+                                                    const sf = settingFields.find(item => item.fieldName === fName);
+                                                    if (!sf) return '';
+                                                    return sf.currentValue !== undefined ? sf.currentValue : (sf.defaultValue !== undefined ? sf.defaultValue : '');
+                                                  };
+                                                  const repeatDaysRaw = getSettingVal("condition_date_time_repeat_days") || "";
+                                                  const repeatDays = typeof repeatDaysRaw === 'string'
+                                                    ? (repeatDaysRaw ? repeatDaysRaw.split(',') : [])
+                                                    : (Array.isArray(repeatDaysRaw) ? repeatDaysRaw : []);
+                                                  const condType = getSettingVal("condition_type") || "NA";
+                                                  const isSched = condType === 'DATE_TIME_REPEAT' || condType === 'DATE_TIME_ONCE' || !!getSettingVal("condition_date_time");
+                                                  
+                                                  const latestParsedRule = {
+                                                    moduleId: targetModuleId,
+                                                    ruleName: fetched.moduleName || fetched.name || rule.ruleName || `RULE_${idx + 1}`,
+                                                    condition: {
+                                                      isScheduleEnabled: isSched,
+                                                      timeDate: getSettingVal("condition_date_time") || "",
+                                                      repeatDays: repeatDays,
+                                                      type: condType,
+                                                      modbus: getSettingVal("condition_modbus") || "",
+                                                      comparisonType: getSettingVal("comparison_type") || "EQUAL",
+                                                      comparisonValue: getSettingVal("comparison_value") || ""
+                                                    },
+                                                    consequence: {
+                                                      type: getSettingVal("consequence_type") || "MODBUS",
+                                                      modbus: getSettingVal("consequence_modbus") || "",
+                                                      value: getSettingVal("consequence_value") || ""
+                                                    }
+                                                  };
+                                                  setRuleEngineConfig(latestParsedRule);
+                                                  
+                                                  setDeviceDetails(prev => {
+                                                    const copy = { ...prev };
+                                                    if (copy[ruleHostDevice]?.modules?.[targetModuleId]) {
+                                                      copy[ruleHostDevice].modules[targetModuleId].parsedRule = latestParsedRule;
+                                                      copy[ruleHostDevice].modules[targetModuleId].rawModule = {
+                                                        ...fetched,
+                                                        settingFieldsList: settingFields
+                                                      };
+                                                    }
+                                                    return copy;
+                                                  });
+                                                } else {
+                                                  setRuleEngineConfig({ ...rule, moduleId: targetModuleId });
+                                                }
+                                              } catch (e) {
+                                                console.error(e);
+                                                setRuleEngineConfig({ ...rule, moduleId: targetModuleId });
+                                              } finally {
+                                                setIsLoadingRuleDetails(false);
+                                              }
+                                            }}
+                                          >
+                                            <Zap size={14} className="shadow-glow-blue" />
+                                            {rule.ruleName || `Rule ${idx + 1}`} Config
+                                            <ChevronRight size={14} />
+                                          </Button>
+                                          {acRules.length > 2 && (
+                                            <Button
+                                              variant="link"
+                                              className="p-0 text-danger text-decoration-none fs-11 fw-black transition-all hover-opacity-100 opacity-50 ms-1"
+                                              onClick={() => {
+                                                setAcRules(prev => prev.filter((_, i) => i !== idx));
+                                              }}
+                                            >
+                                              ✕
+                                            </Button>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                
+                              </div>
+                            </div>
+                          </Col>
+                        </Row>
+                      </div>
+                    ) : (
+                      <Card className="bg-dark bg-opacity-20 border border-white border-opacity-5 rounded-4 p-5 text-center">
+                        <LayoutGrid size={48} className="text-secondary mb-3 mx-auto opacity-50" />
+                        <h5 className="text-white fw-bold mb-2">Target AC Unselected</h5>
+                        <p className="text-secondary fs-9">Please select an AC unit from the Target Unit dropdown to begin mapping configuration registers.</p>
+                      </Card>
+                    )}
+                  </div>
+                </div>
               ) : selectedCategory === 'AQI Sensor' && selectedModule === 'Temp & Humidity' ? (
                 <div className="config-form-container scale-in">
                   <div className="p-0 rounded-4 bg-dark bg-opacity-20 border border-white border-opacity-5 mb-5 overflow-hidden position-relative">
@@ -4898,7 +5767,7 @@ const ConfigTemplates = () => {
             <div className="d-flex align-items-center gap-3">
               <span className="fs-11 text-secondary fw-black uppercase letter-spacing-1 ms-2">Filter By:</span>
               <div className="d-flex gap-2 flex-wrap">
-                {['ALL', ...Array.from(new Set(savedTemplates.map(t => t.module))).sort()].map(mod => (
+                {['ALL', ...Array.from(new Set(savedTemplates.map(t => t.category === 'AC' ? 'AC' : t.module))).sort()].map(mod => (
                   <Button
                     key={mod}
                     variant={filterModule === mod ? "info" : "outline-secondary"}
@@ -4925,7 +5794,11 @@ const ConfigTemplates = () => {
           </div>
 
           <Row className="g-4">
-            {savedTemplates.filter(t => filterModule === 'ALL' || t.module === filterModule).length === 0 ? (
+            {savedTemplates.filter(t => {
+              if (filterModule === 'ALL') return true;
+              const itemKey = t.category === 'AC' ? 'AC' : t.module;
+              return itemKey === filterModule;
+            }).length === 0 ? (
               <Col md={12}>
                 <Card className="bg-dark bg-opacity-20 border border-white border-opacity-5 rounded-4 p-5 text-center">
                   <LayoutGrid size={48} className="text-secondary mb-3 mx-auto opacity-50" />
@@ -4938,7 +5811,11 @@ const ConfigTemplates = () => {
               </Col>
             ) : (
               savedTemplates
-                .filter(t => filterModule === 'ALL' || t.module === filterModule)
+                .filter(t => {
+                  if (filterModule === 'ALL') return true;
+                  const itemKey = t.category === 'AC' ? 'AC' : t.module;
+                  return itemKey === filterModule;
+                })
                 .map((template) => (
                   <Col xl={3} lg={4} md={6} key={template.id}>
                     <Card className={`premium-figma-card border-0 rounded-4 overflow-hidden h-100 d-flex flex-column transition-all ${selectedTemplates.includes(template.id) ? 'selected-premium-card' : ''}`}>
@@ -5462,8 +6339,13 @@ const ConfigTemplates = () => {
                   <Zap size={24} />
                 </div>
                 <div>
-                  <h4 className="text-white fw-black uppercase tracking-tighter mb-0">RULE ENGINE <span className="text-warning">CONFIGURATION</span></h4>
-                  <div className="d-flex align-items-center gap-2">
+                  <h4 className="text-white fw-black uppercase tracking-tighter mb-0">
+                    RULE ENGINE <span className="text-warning">CONFIGURATION</span>
+                    {ruleEngineConfig.ruleName && (
+                      <span className="text-info fs-14 ms-2 font-monospace">({ruleEngineConfig.ruleName})</span>
+                    )}
+                  </h4>
+                  <div className="d-flex align-items-center gap-2 mt-1">
                     <p className="text-secondary fs-12 fw-bold uppercase tracking-widest opacity-50 mb-0">Target Module:</p>
                     <Badge bg="warning" className="bg-opacity-10 text-warning border border-warning border-opacity-25 fs-10 px-2 py-1">
                       {ruleEngineConfig.moduleId || 'NOT DETECTED'}
@@ -5473,7 +6355,13 @@ const ConfigTemplates = () => {
               </div>
             </div>
 
-            <Row className="g-5">
+            {isLoadingRuleDetails ? (
+              <div className="d-flex flex-column align-items-center justify-content-center py-5 my-5 gap-3">
+                <Spinner animation="border" variant="warning" style={{ width: '3rem', height: '3rem' }} />
+                <span className="text-secondary fs-11 fw-black uppercase tracking-widest">Fetching latest rule configuration...</span>
+              </div>
+            ) : (
+              <Row className="g-5">
               {/* CONDITION SECTION */}
               <Col lg={7}>
                 <div className="p-4 rounded-4 bg-dark bg-opacity-30 border border-info border-opacity-10 h-100 position-relative">
@@ -5678,19 +6566,21 @@ const ConfigTemplates = () => {
                 </div>
               </Col>
             </Row>
+            )}
 
             <div className="mt-4 pt-4 border-top border-white border-opacity-5 d-flex justify-content-end gap-3">
               <Button
                 variant="outline-secondary"
                 className="fw-black px-4 py-2 fs-11 uppercase tracking-widest border-opacity-20"
                 onClick={() => setShowRuleEngineModal(false)}
+                disabled={isLoadingRuleDetails}
               >
                 Discard
               </Button>
               <Button
                 className="btn-info fw-black px-4 py-2 fs-11 uppercase tracking-widest shadow-glow border-0 d-flex align-items-center gap-2"
                 onClick={handleApplyRules}
-                disabled={isSendingRules}
+                disabled={isSendingRules || isLoadingRuleDetails}
               >
                 {isSendingRules ? (
                   <>

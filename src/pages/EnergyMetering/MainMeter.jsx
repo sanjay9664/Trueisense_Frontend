@@ -332,7 +332,7 @@ const CircularGauge = ({ value, min = 0, max = 100, label, unit, limits, default
           </defs>
 
           {/* Background track */}
-          <path d={describeArc(50, 48, 38, 180, 360)} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="7" strokeLinecap="round" />
+          <path className="scada-gauge-bg-arc" d={describeArc(50, 48, 38, 180, 360)} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="7" strokeLinecap="round" />
 
           {/* Zone segments — softer, thicker */}
           {renderSegment(180, angleLow, '#ef4444')}
@@ -353,16 +353,16 @@ const CircularGauge = ({ value, min = 0, max = 100, label, unit, limits, default
 
           {/* Center cap */}
           <g transform="translate(50, 48)">
-            <circle cx="0" cy="0" r="5.5" fill="#1e293b" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
+            <circle className="scada-gauge-center-cap-bg" cx="0" cy="0" r="5.5" fill="#1e293b" stroke="rgba(255,255,255,0.12)" strokeWidth="1" />
             <circle cx="0" cy="0" r="2.5" fill={defaultColor} />
           </g>
 
           {/* Value — big, white, readable */}
-          <text x="50" y="62" textAnchor="middle" fill="#f8fafc"
+          <text className="scada-gauge-value" x="50" y="62" textAnchor="middle" fill="#f8fafc"
             fontFamily="monospace" fontSize="11" fontWeight="900">
             {numericValue.toFixed(1)}
           </text>
-          <text x="50" y="70" textAnchor="middle" fill="rgba(255,255,255,0.4)"
+          <text className="scada-gauge-label" x="50" y="70" textAnchor="middle" fill="rgba(255,255,255,0.4)"
             fontFamily="monospace" fontSize="5.5">
             {unit}
           </text>

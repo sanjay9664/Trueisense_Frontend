@@ -39,6 +39,7 @@ const Gauge = ({ value, min, max, unit, color, isMapped = true }) => {
 
         {/* Background Arc */}
         <path
+          className="scada-gauge-bg-arc"
           d={`M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`}
           fill="none"
           stroke="rgba(255,255,255,0.05)"
@@ -66,21 +67,21 @@ const Gauge = ({ value, min, max, unit, color, isMapped = true }) => {
             transform={`rotate(${rotation}, ${cx}, ${cy})`}
           >
             {/* Needle pointer */}
-            <polygon points={`${cx - 3},${cy} ${cx + 3},${cy} ${cx},${cy - radius - 2}`} fill="#ffffff" filter="url(#shadow)" />
+            <polygon className="scada-gauge-needle" points={`${cx - 3},${cy} ${cx + 3},${cy} ${cx},${cy - radius - 2}`} fill="#ffffff" filter="url(#shadow)" />
             {/* Inner circle pivot */}
-            <circle cx={cx} cy={cy} r="6" fill="#ffffff" filter="url(#shadow)" />
+            <circle className="scada-gauge-needle" cx={cx} cy={cy} r="6" fill="#ffffff" filter="url(#shadow)" />
             <circle cx={cx} cy={cy} r="2" fill={color} />
           </g>
         ) : (
-          <circle cx={cx} cy={cy} r="6" fill="rgba(255,255,255,0.15)" />
+          <circle cx={cx} cy={cy} r="6" fill="rgba(255,255,255,0.15)" className="scada-gauge-needle-unmapped" />
         )}
         
         {/* Min / Max Text Labels */}
-        <text x={cx - radius - 15} y={cy + 5} fill="rgba(255,255,255,0.4)" fontSize="10" textAnchor="end" alignmentBaseline="middle">{min}</text>
-        <text x={cx + radius + 15} y={cy + 5} fill="rgba(255,255,255,0.4)" fontSize="10" textAnchor="start" alignmentBaseline="middle">{max}</text>
+        <text className="scada-gauge-label" x={cx - radius - 15} y={cy + 5} fill="rgba(255,255,255,0.4)" fontSize="10" textAnchor="end" alignmentBaseline="middle">{min}</text>
+        <text className="scada-gauge-label" x={cx + radius + 15} y={cy + 5} fill="rgba(255,255,255,0.4)" fontSize="10" textAnchor="start" alignmentBaseline="middle">{max}</text>
 
         {/* Big Value Text (Positioned safely below the needle pivot) */}
-        <text x={cx} y={cy + 38} fill={isMapped ? "rgba(255, 255, 255, 0.85)" : "rgba(255, 255, 255, 0.3)"} fontSize="42" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
+        <text className={`scada-gauge-value ${isMapped ? '' : 'unmapped'}`} x={cx} y={cy + 38} fill={isMapped ? "rgba(255, 255, 255, 0.85)" : "rgba(255, 255, 255, 0.3)"} fontSize="42" fontWeight="bold" textAnchor="middle" fontFamily="monospace">
           {isMapped ? (Number.isInteger(value) ? value : value.toFixed(2)) : '—'}
         </text>
         <text x={cx} y={cy + 58} fill={color} fontSize="16" fontWeight="bold" textAnchor="middle" letterSpacing="2">
@@ -269,7 +270,7 @@ const EnvDashboard = () => {
               let ts = Date.now();
               if (stat.meta?.created_at_timestamp) {
                 const raw = stat.meta.created_at_timestamp;
-                ts = raw > 1e12 ? raw : raw * 1000;
+                ts = isNaN(Number(raw)) ? new Date(raw).getTime() : (Number(raw) > 1e12 ? Number(raw) : Number(raw) * 1000);
               }
               return { val, ts };
             }
@@ -482,7 +483,6 @@ const EnvDashboard = () => {
         </div>
         {savedZones.length > 0 && (
           <div className="d-flex align-items-center gap-2">
-            <PdfButton />
             <select
               className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
               style={{ width: '220px', maxWidth: '100%', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
@@ -648,18 +648,17 @@ const EnvDashboard = () => {
                                 {isFieldMapped ? (
                                   (() => {
                                     const ts = unitData?.lastSeen?.[key];
-                                    const isLive = ts && (Date.now() - ts < 60000);
+                                    const isLive = ts && (Date.now() - ts < 180000);
                                     if (isLive) {
                                       return (
-                                        <>
-                                          <div className="spinner-grow spinner-grow-sm me-2 opacity-50" style={{ color: '#10b981', width: '0.75rem', height: '0.75rem' }} role="status"></div>
-                                          <span className="text-secondary opacity-75 fs-9 fw-bold uppercase tracking-widest">online</span>
-                                        </>
+                                        <span className="badge bg-success bg-opacity-10 border border-success border-opacity-25 text-success px-2 py-1 rounded d-flex align-items-center gap-1.5 fs-11 fw-bold uppercase tracking-wider" style={{ letterSpacing: '0.5px' }}>
+                                          <span className="rounded-circle pulse-dot-green"></span> online
+                                        </span>
                                       );
                                     } else {
                                       return (
-                                        <span className="text-muted opacity-50 fs-9 fw-bold uppercase tracking-widest d-flex align-items-center gap-1">
-                                          <span className="rounded-circle" style={{ width: '6px', height: '6px', display: 'inline-block', background: '#ef4444', boxShadow: '0 0 6px #ef4444' }}></span> offline
+                                        <span className="badge bg-danger bg-opacity-10 border border-danger border-opacity-25 text-danger px-2 py-1 rounded d-flex align-items-center gap-1.5 fs-11 fw-bold uppercase tracking-wider" style={{ letterSpacing: '0.5px' }}>
+                                          <span className="rounded-circle pulse-dot-red"></span> offline
                                         </span>
                                       );
                                     }
@@ -770,6 +769,33 @@ const EnvDashboard = () => {
           )}
         </Col>
       </Row>
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .pulse-dot-red {
+          width: 6px;
+          height: 6px;
+          background-color: #ef4444;
+          border-radius: 50%;
+          display: inline-block;
+          box-shadow: 0 0 6px #ef4444;
+          animation: pulse-dot 1.5s infinite;
+        }
+        .pulse-dot-green {
+          width: 6px;
+          height: 6px;
+          background-color: #22c55e;
+          border-radius: 50%;
+          display: inline-block;
+          box-shadow: 0 0 6px #22c55e;
+          animation: pulse-dot 1.5s infinite;
+        }
+        @keyframes pulse-dot {
+          0% { transform: scale(0.8); opacity: 0.5; }
+          50% { transform: scale(1.2); opacity: 1; }
+          100% { transform: scale(0.8); opacity: 0.5; }
+        }
+        `
+      }} />
     </div>
   );
 };

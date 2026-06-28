@@ -1322,21 +1322,11 @@ const SubMeters = () => {
               <Dropdown.Toggle 
                 variant="dark" 
                 className="scada-dropdown-toggle py-2 px-3 fs-13 rounded-pill d-flex align-items-center justify-content-between" 
-                style={{ width: '250px', cursor: 'pointer', background: 'rgba(15,23,42,0.85)' }}
+                style={{ width: '200px', cursor: 'pointer' }}
               >
-                {selectedMeter ? (() => {
-                  const isOnline = getMeterOnlineStatus(selectedMeter.label);
-                  return (
-                    <div className="d-flex align-items-center justify-content-between w-100 pe-2">
-                      <span>{selectedMeter.label}</span>
-                      <span className={`badge ${isOnline ? 'bg-success' : 'bg-danger'} bg-opacity-10 border ${isOnline ? 'border-success' : 'border-danger'} border-opacity-25 ${isOnline ? 'text-success' : 'text-danger'} px-2 py-0.5 d-inline-flex align-items-center gap-1`} style={{ fontSize: '0.6rem', borderRadius: '12px' }}>
-                        <span className={isOnline ? "pulse-dot-green" : "pulse-dot-red"} style={{ width: '4px', height: '4px' }}></span> {isOnline ? 'ONLINE' : 'OFFLINE'}
-                      </span>
-                    </div>
-                  );
-                })() : 'Select Sub-Meter...'}
+                {selectedMeter ? selectedMeter.label : 'Select Sub-Meter...'}
               </Dropdown.Toggle>
-              <Dropdown.Menu variant="dark" className="scada-dropdown-menu" style={{ width: '250px' }}>
+              <Dropdown.Menu variant="dark" className="scada-dropdown-menu" style={{ width: '200px' }}>
                 <Dropdown.Item 
                   onClick={() => setSelectedMeter(null)} 
                   className="scada-dropdown-item fs-13"
@@ -1344,7 +1334,6 @@ const SubMeters = () => {
                   Select Sub-Meter...
                 </Dropdown.Item>
                 {mappedMeters.map(m => {
-                  const isOnline = getMeterOnlineStatus(m.label);
                   return (
                     <Dropdown.Item 
                       key={m.id} 
@@ -1352,12 +1341,9 @@ const SubMeters = () => {
                         setSelectedMeter(m);
                         if (refreshStatuses) refreshStatuses();
                       }} 
-                      className="scada-dropdown-item fs-13 d-flex align-items-center justify-content-between"
+                      className="scada-dropdown-item fs-13"
                     >
-                      <span>{m.label}</span>
-                      <span className={`badge ${isOnline ? 'bg-success' : 'bg-danger'} bg-opacity-10 border ${isOnline ? 'border-success' : 'border-danger'} border-opacity-25 ${isOnline ? 'text-success' : 'text-danger'} px-2 py-0.5 d-inline-flex align-items-center gap-1`} style={{ fontSize: '0.6rem', borderRadius: '12px' }}>
-                        <span className={isOnline ? "pulse-dot-green" : "pulse-dot-red"} style={{ width: '4px', height: '4px' }}></span> {isOnline ? 'ONLINE' : 'OFFLINE'}
-                      </span>
+                      {m.label}
                     </Dropdown.Item>
                   );
                 })}
@@ -2055,9 +2041,9 @@ const SubMeters = () => {
         }
 
         .scada-dropdown-toggle {
-          background: rgba(15, 23, 42, 0.65) !important;
-          border: 1px solid rgba(14, 165, 233, 0.25) !important;
-          color: #cbd5e1 !important;
+          background: rgba(9, 13, 22, 0.9) !important;
+          border: 1.5px solid rgba(249, 115, 22, 0.45) !important;
+          color: #ffffff !important;
           padding: 8px 16px;
           border-radius: 9999px;
           font-size: 0.8rem;
@@ -2066,27 +2052,28 @@ const SubMeters = () => {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-          transition: all 0.2s ease;
+          box-shadow: 0 4px 15px rgba(0,0,0,0.5), inset 0 0 10px rgba(249, 115, 22, 0.05);
+          transition: all 0.25s ease;
         }
         .scada-dropdown-toggle:hover:not(:disabled), .scada-dropdown-toggle:focus:not(:disabled) {
-          background: rgba(30, 41, 59, 0.8) !important;
-          border-color: rgba(14, 165, 233, 0.6) !important;
-          box-shadow: 0 0 15px rgba(14, 165, 233, 0.2);
+          background: #000000 !important;
+          border-color: rgba(249, 115, 22, 0.85) !important;
+          box-shadow: 0 0 15px rgba(249, 115, 22, 0.3), inset 0 0 8px rgba(249, 115, 22, 0.15);
+          color: #ffffff !important;
         }
         .scada-dropdown-toggle::after {
           margin-left: 10px;
           vertical-align: middle;
-          color: #0ea5e9;
+          color: #f97316 !important;
         }
         .scada-dropdown-menu {
-          background: rgba(15, 23, 42, 0.95) !important;
+          background: rgba(9, 13, 22, 0.98) !important;
           backdrop-filter: blur(10px);
-          border: 1px solid rgba(14, 165, 233, 0.3) !important;
+          border: 1.5px solid rgba(249, 115, 22, 0.5) !important;
           border-radius: 16px;
           padding: 8px 0;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-          min-width: 220px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.85);
+          min-width: 200px;
           margin-top: 8px !important;
         }
         .scada-dropdown-item {
@@ -2098,8 +2085,8 @@ const SubMeters = () => {
           transition: all 0.2s;
         }
         .scada-dropdown-item:hover {
-          background: rgba(14, 165, 233, 0.1) !important;
-          color: #0ea5e9 !important;
+          background: rgba(249, 115, 22, 0.15) !important;
+          color: #f97316 !important;
           padding-left: 24px;
         }
       `}} />
