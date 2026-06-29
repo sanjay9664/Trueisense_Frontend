@@ -161,8 +161,8 @@ const ConfigTemplates = () => {
         }
       }
 
-      // 2. Find the rule host device (rule_178) under the current building
-      let ruleHostDevice = currentRuleHostDevice;
+      // 2. Find the rule host device (rule_178)
+      let ruleHostDevice = currentRuleHostDevice || findRuleHostDevice();
       if (!ruleHostDevice) {
         const activeAcDevice = acConfig.device;
         ruleHostDevice = activeAcDevice;
@@ -186,31 +186,47 @@ const ConfigTemplates = () => {
         }
       }
 
-      // 3. Get sorted rule modules from the rule host device
-      let ruleModules = [];
-      if (ruleHostDevice && deviceDetails[ruleHostDevice]?.modules) {
-        ruleModules = Object.values(deviceDetails[ruleHostDevice].modules).filter(m =>
-          m.name && (m.name.toUpperCase().startsWith('RULE_') || m.name.toUpperCase().includes('RULE'))
-        );
-        ruleModules.sort((a, b) => {
-          const numA = parseInt(a.name.replace(/\D/g, ''), 10) || 0;
-          const numB = parseInt(b.name.replace(/\D/g, ''), 10) || 0;
-          return numA - numB;
-        });
+      // 3. Get the target module ID and look it up directly from the rule host device cache
+      const targetModuleId = ruleEngineConfig.moduleId;
+      if (!targetModuleId) {
+        throw new Error("Module ID not detected for Rule Engine.");
       }
 
-      // 4. Get the correct rule module for this index
-      const targetRuleModule = ruleModules[ruleIndex];
-      if (!targetRuleModule) {
-        throw new Error(`Rule module not found for index ${ruleIndex}. Available: ${ruleModules.map(m => m.name).join(', ')}`);
+      let rawModule = null;
+      let targetRuleModuleName = '';
+
+      const hostKey = ruleHostDevice || 'rule_engine';
+      if (deviceDetails[hostKey]?.modules?.[targetModuleId]) {
+        const cachedModule = deviceDetails[hostKey].modules[targetModuleId];
+        rawModule = cachedModule.rawModule;
+        targetRuleModuleName = cachedModule.name || cachedModule.moduleName;
       }
 
-      const rawModule = targetRuleModule.rawModule;
-      const targetModuleId = targetRuleModule.id;
-      console.log('[Apply Rules] Rule index:', ruleIndex, '| Module:', targetRuleModule.name, '| Module ID:', targetModuleId);
+      // Fallback to index-based lookup if direct ID lookup failed
+      if (!rawModule) {
+        let ruleModules = [];
+        const fallbackHostKey = ruleHostDevice || 'rule_engine';
+        if (deviceDetails[fallbackHostKey]?.modules) {
+          ruleModules = Object.values(deviceDetails[fallbackHostKey].modules).filter(m =>
+            m.name && (m.name.toUpperCase().startsWith('RULE_') || m.name.toUpperCase().includes('RULE'))
+          );
+          ruleModules.sort((a, b) => {
+            const numA = parseInt(a.name.replace(/\D/g, ''), 10) || 0;
+            const numB = parseInt(b.name.replace(/\D/g, ''), 10) || 0;
+            return numA - numB;
+          });
+        }
+        const targetRuleModule = ruleModules[ruleIndex] || ruleModules.find(m => m.id === targetModuleId);
+        if (targetRuleModule) {
+          rawModule = targetRuleModule.rawModule;
+          targetRuleModuleName = targetRuleModule.name || targetRuleModule.moduleName;
+        }
+      }
+
+      console.log('[Apply Rules] Rule index:', ruleIndex, '| Module:', targetRuleModuleName, '| Module ID:', targetModuleId);
 
       if (!rawModule) {
-        throw new Error(`Raw module data not available for ${targetRuleModule.name} (ID: ${targetModuleId})`);
+        throw new Error(`Raw module data not available for Module ID: ${targetModuleId}`);
       }
 
       // 5. Build fieldCOS from the correct module's setting fields
@@ -229,20 +245,28 @@ const ConfigTemplates = () => {
       const settingFields = rawModule.settingFieldsList || rawModule.settingFieldVOList || rawModule.settingFieldList || [];
       console.log('[Apply Rules] rawModule settingFields:', settingFields);
       const fieldCOS = settingFields.map(f => ({
-
         id: f.moduleFieldMappingId || f.id,
-
         currentValue: fieldValueMap.hasOwnProperty(f.fieldName)
           ? fieldValueMap[f.fieldName]
           : (f.currentValue !== undefined && f.currentValue !== null && f.currentValue !== ''
               ? f.currentValue
-              : (f.value !== undefined && f.value !== null && f.value !== '' ? f.value : (f.defaultValue || '')))
-      }));
+              : (f.value !== undefined && f.value !== null && f.value !== '' ? f.value : (f.defaultValue || '')));
+
+        // Fallback to "MON" or defaultValue if repeat days is empty
+        if (f.fieldName === 'condition_date_time_repeat_days' && (!val || val === '')) {
+          val = f.defaultValue || 'MON';
+        }
+
+        return {
+          id: f.moduleFieldMappingId || f.id,
+          currentValue: val
+        };
+      });
       console.log('[Apply Rules] mapped fieldCOS:', fieldCOS);
 
       // 6. Build and send the PUT payload
       const putPayload = {
-        name: rawModule.name || rawModule.moduleName || targetRuleModule.name,
+        name: rawModule.name || rawModule.moduleName || targetRuleModuleName,
         id: targetModuleId,
         fieldCOS: fieldCOS
       };
@@ -267,11 +291,12 @@ const ConfigTemplates = () => {
       const updatedRule = {
         ...ruleEngineConfig,
         moduleId: targetModuleId,
-        ruleName: targetRuleModule.name
+        ruleName: targetRuleModuleName
       };
       setDeviceDetails(prev => {
         const copy = { ...prev };
-        const targetModule = copy[ruleHostDevice]?.modules?.[targetModuleId];
+        const hostId = ruleHostDevice || 'rule_engine';
+        const targetModule = copy[hostId]?.modules?.[targetModuleId];
         if (targetModule) {
           targetModule.parsedRule = updatedRule;
           if (targetModule.rawModule && targetModule.rawModule.settingFieldsList) {
@@ -305,7 +330,7 @@ const ConfigTemplates = () => {
         });
       }
 
-      setToastMessage({ type: 'success', text: `${targetRuleModule.name} saved to Sochiot successfully!` });
+      setToastMessage({ type: 'success', text: `${targetRuleModuleName} saved to Sochiot successfully!` });
       setTimeout(() => setToastMessage(null), 3000);
       setShowRuleEngineModal(false);
     } catch (err) {
@@ -318,8 +343,9 @@ const ConfigTemplates = () => {
   };
 
   const fetchAndOpenRuleEngineModal = async (target, defaultConfig, targetModuleId, ruleHostDevice, ruleIndex) => {
+    const resolvedHostDevice = ruleHostDevice || findRuleHostDevice();
     setCurrentRuleTarget(target);
-    setCurrentRuleHostDevice(ruleHostDevice);
+    setCurrentRuleHostDevice(resolvedHostDevice);
     setShowRuleEngineModal(true);
     setIsLoadingRuleDetails(true);
 
@@ -350,7 +376,6 @@ const ConfigTemplates = () => {
         }
         
         if (settingFields.length === 0 && ruleHostDevice && deviceDetails[ruleHostDevice]) {
-
           const cachedModule = deviceDetails[ruleHostDevice].modules?.[targetModuleId];
           if (cachedModule && cachedModule.rawModule?.settingFieldsList) {
             settingFields = cachedModule.rawModule.settingFieldsList;
@@ -398,23 +423,6 @@ const ConfigTemplates = () => {
 
         setDeviceDetails(prev => {
           const copy = { ...prev };
-
-          if (!copy[ruleHostDevice]) {
-            copy[ruleHostDevice] = { modules: {} };
-          }
-          if (!copy[ruleHostDevice].modules) {
-            copy[ruleHostDevice].modules = {};
-          }
-          copy[ruleHostDevice].modules[targetModuleId] = {
-            id: targetModuleId,
-            name: moduleData.moduleName || moduleData.name || defaultConfig.ruleName || `RULE_${ruleIndex + 1}`,
-            parsedRule: latestParsedRule,
-            rawModule: {
-              ...moduleData,
-              settingFieldsList: settingFields
-            }
-          };
-
           if (ruleHostDevice) {
             if (!copy[ruleHostDevice]) {
               copy[ruleHostDevice] = { modules: {} };
@@ -432,7 +440,6 @@ const ConfigTemplates = () => {
               }
             };
           }
-
           return copy;
         });
       } else {
@@ -1792,6 +1799,20 @@ const ConfigTemplates = () => {
     if (nameLower.includes('fixed charge') || keyLower.includes('fixed')) return 'FIXED CHARGE (Rs)';
 
     return null;
+  };
+
+  const findRuleHostDevice = () => {
+    let foundId = null;
+    Object.values(locationDetails).forEach(loc => {
+      if (loc.deviceList) {
+        const dev = loc.deviceList.find(d => 
+          (d.label && d.label.toUpperCase().includes('RULE')) || 
+          (d.id && String(d.id).toUpperCase().includes('RULE'))
+        );
+        if (dev) foundId = dev.id;
+      }
+    });
+    return foundId;
   };
 
   const fetchDeviceDetails = async (deviceId) => {
@@ -4209,7 +4230,7 @@ const ConfigTemplates = () => {
                                       const ruleIndex = target === 'RULE1' ? 0 : 1;
                                       
                                       let ruleHostDevice = acConfig.device || globalLocation.device;
-                                      let locName = agLowerConfig.building || globalLocation.building;
+                                      const locName = agLowerConfig.building || globalLocation.building;
                                       if (locName) {
                                         const szOptions = getFieldList('subZone', { ...globalLocation, ...agLowerConfig });
                                         const selectedSZ = szOptions.find(o => o.id === (agLowerConfig.subZone || globalLocation.subZone));
@@ -4473,32 +4494,30 @@ const ConfigTemplates = () => {
                                       variant="link"
                                       className={`p-0 text-${section.color} text-decoration-none fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-2 transition-all hover-opacity-100 opacity-70`}
                                       onClick={() => {
-
-                                       const target = section.title === 'Lower Limits' ? 'RULE1' : 'RULE2';
-                                       const config = target === 'RULE1' ? ugRule1Config : ugRule2Config;
-                                       const ruleIndex = target === 'RULE1' ? 0 : 1;
-                                       const targetModuleId = section.state.module;
-                                       
-                                       let ruleHostDevice = acConfig.device || globalLocation.device;
-                                       let locName = acConfig.building || globalLocation.building;
-                                       if (locName) {
-                                         const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
-                                         const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
-                                         if (selectedSZ && selectedSZ.type === 'location') {
-                                           locName = acConfig.subZone || globalLocation.subZone;
-                                         }
-                                         const locInfo = locationDetails[locName];
-                                         if (locInfo && locInfo.deviceList) {
-                                           const rd = locInfo.deviceList.find(d => 
-                                             (d.label && d.label.toUpperCase().includes('RULE')) || 
-                                             (d.id && String(d.id).toUpperCase().includes('RULE'))
-                                           );
-                                           if (rd) ruleHostDevice = rd.id;
-                                         }
-                                       }
-                                       fetchAndOpenRuleEngineModal(target, config, targetModuleId, ruleHostDevice, ruleIndex);
-                                     }}
-
+                                        const target = section.title === 'Lower Limits' ? 'RULE1' : 'RULE2';
+                                        const config = target === 'RULE1' ? ugRule1Config : ugRule2Config;
+                                        const targetModuleId = section.state.module;
+                                        const ruleIndex = target === 'RULE1' ? 0 : 1;
+                                        
+                                        let ruleHostDevice = acConfig.device || globalLocation.device;
+                                        const locName = ugLowerConfig.building || globalLocation.building;
+                                        if (locName) {
+                                          const szOptions = getFieldList('subZone', { ...globalLocation, ...ugLowerConfig });
+                                          const selectedSZ = szOptions.find(o => o.id === (ugLowerConfig.subZone || globalLocation.subZone));
+                                          if (selectedSZ && selectedSZ.type === 'location') {
+                                            locName = ugLowerConfig.subZone || globalLocation.subZone;
+                                          }
+                                          const locInfo = locationDetails[locName];
+                                          if (locInfo && locInfo.deviceList) {
+                                            const rd = locInfo.deviceList.find(d => 
+                                              (d.label && d.label.toUpperCase().includes('RULE')) || 
+                                              (d.id && String(d.id).toUpperCase().includes('RULE'))
+                                            );
+                                            if (rd) ruleHostDevice = rd.id;
+                                          }
+                                        }
+                                        fetchAndOpenRuleEngineModal(target, config, targetModuleId, ruleHostDevice, ruleIndex);
+                                      }}
                                     >
                                       <Zap size={14} className="shadow-glow-blue" />
                                       Rule Engine Configuration
@@ -5633,7 +5652,6 @@ const ConfigTemplates = () => {
                                               const ruleIndex = idx;
                                               
                                               // Find the rule host device to update its cache
-
                                               let ruleHostDevice = acConfig.device;
                                               let locName = acConfig.building || globalLocation.building;
                                               if (locName) {
