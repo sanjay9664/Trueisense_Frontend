@@ -6952,6 +6952,7 @@ const ConfigTemplates = () => {
           border: 1px solid rgba(255, 255, 255, 0.2);
           cursor: pointer;
         }
+          
         .scada-radio .form-check-input:checked {
           background-color: var(--bs-info);
           border-color: var(--bs-info);
