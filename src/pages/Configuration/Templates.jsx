@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Row, Col, Card, Form, Button, Badge, Modal, Spinner } from 'react-bootstrap';
 import { Save, Settings, Database, Activity, Zap, Droplets, LayoutGrid, CheckCircle2, ChevronRight, Layers, History, Eye, Info, X, Home, ArrowDownCircle, ArrowUpCircle, MapPin, AlertTriangle, Wind, Thermometer } from 'lucide-react';
-import { loginToSochiot, getSochiotUserMe, getSochiotLocationData, getSochiotDeviceDetails, getSochiotZoneData } from '../../services/authService';
+import { loginToSochiot, getSochiotUserMe, getSochiotLocationData, getSochiotDeviceDetails, getSochiotZoneData, getSochiotDeviceModules } from '../../services/authService';
+
+const CONFIG_API_URL = '/sochiot-config';
 
 const ConfigTemplates = () => {
   const [selectedCategory, setSelectedCategory] = useState('Water Management');
@@ -91,6 +93,7 @@ const ConfigTemplates = () => {
   const [hierarchyData, setHierarchyData] = useState([]);
   const [isSendingRules, setIsSendingRules] = useState(false);
   const [isLoadingRuleDetails, setIsLoadingRuleDetails] = useState(false);
+  const [currentRuleHostDevice, setCurrentRuleHostDevice] = useState(null);
 
   const handleSendRule = async (config) => {
     if (!config || !config.moduleId) {
@@ -159,23 +162,26 @@ const ConfigTemplates = () => {
       }
 
       // 2. Find the rule host device (rule_178) under the current building
-      const activeAcDevice = acConfig.device;
-      let ruleHostDevice = activeAcDevice;
-      if (activeAcDevice) {
-        let locName = acConfig.building || globalLocation.building;
-        if (locName) {
-          const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
-          const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
-          if (selectedSZ && selectedSZ.type === 'location') {
-            locName = acConfig.subZone || globalLocation.subZone;
-          }
-          const locInfo = locationDetails[locName];
-          if (locInfo && locInfo.deviceList) {
-            const rd = locInfo.deviceList.find(d => 
-              (d.label && d.label.toUpperCase().includes('RULE')) || 
-              (d.id && String(d.id).toUpperCase().includes('RULE'))
-            );
-            if (rd) ruleHostDevice = rd.id;
+      let ruleHostDevice = currentRuleHostDevice;
+      if (!ruleHostDevice) {
+        const activeAcDevice = acConfig.device;
+        ruleHostDevice = activeAcDevice;
+        if (activeAcDevice) {
+          let locName = acConfig.building || globalLocation.building;
+          if (locName) {
+            const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
+            const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+            if (selectedSZ && selectedSZ.type === 'location') {
+              locName = acConfig.subZone || globalLocation.subZone;
+            }
+            const locInfo = locationDetails[locName];
+            if (locInfo && locInfo.deviceList) {
+              const rd = locInfo.deviceList.find(d => 
+                (d.label && d.label.toUpperCase().includes('RULE')) || 
+                (d.id && String(d.id).toUpperCase().includes('RULE'))
+              );
+              if (rd) ruleHostDevice = rd.id;
+            }
           }
         }
       }
@@ -223,7 +229,11 @@ const ConfigTemplates = () => {
       const settingFields = rawModule.settingFieldsList || rawModule.settingFieldVOList || rawModule.settingFieldList || [];
       const fieldCOS = settingFields.map(f => ({
         id: f.id,
-        currentValue: fieldValueMap.hasOwnProperty(f.fieldName) ? fieldValueMap[f.fieldName] : (f.currentValue || f.defaultValue || '')
+        currentValue: fieldValueMap.hasOwnProperty(f.fieldName)
+          ? fieldValueMap[f.fieldName]
+          : (f.currentValue !== undefined && f.currentValue !== null && f.currentValue !== ''
+              ? f.currentValue
+              : (f.value !== undefined && f.value !== null && f.value !== '' ? f.value : (f.defaultValue || '')))
       }));
 
       // 6. Build and send the PUT payload
@@ -235,7 +245,7 @@ const ConfigTemplates = () => {
 
       const token = localStorage.getItem('sochiot_token');
       console.log('[Apply Rules] PUT payload:', JSON.stringify(putPayload, null, 2));
-      const response = await fetch(`https://app.sochiot.com/api/config-engine/module/${targetModuleId}`, {
+      const response = await fetch(`${CONFIG_API_URL}/module/${targetModuleId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -300,6 +310,95 @@ const ConfigTemplates = () => {
       setTimeout(() => setToastMessage(null), 4000);
     } finally {
       setIsSendingRules(false);
+    }
+  };
+
+  const fetchAndOpenRuleEngineModal = async (target, defaultConfig, targetModuleId, ruleHostDevice, ruleIndex) => {
+    setCurrentRuleTarget(target);
+    setCurrentRuleHostDevice(ruleHostDevice);
+    setShowRuleEngineModal(true);
+    setIsLoadingRuleDetails(true);
+
+    const token = localStorage.getItem('sochiot_token');
+    try {
+      console.log('[fetchAndOpenRuleEngineModal] Fetching rule module details for:', targetModuleId);
+      const res = await fetch(`${CONFIG_API_URL}/module/${targetModuleId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const fetched = await res.json();
+        const moduleData = fetched.data || fetched;
+        let settingFields = moduleData.settingFieldVOList || moduleData.settingFieldList || moduleData.settingFields || [];
+        if (settingFields.length === 0 && deviceDetails[ruleHostDevice]) {
+          const cachedModule = deviceDetails[ruleHostDevice].modules?.[targetModuleId];
+          if (cachedModule && cachedModule.rawModule?.settingFieldsList) {
+            settingFields = cachedModule.rawModule.settingFieldsList;
+          }
+        }
+
+        const getSettingVal = (fName) => {
+          const sf = settingFields.find(item => item.fieldName === fName);
+          if (!sf) return '';
+          if (sf.currentValue !== undefined && sf.currentValue !== null && sf.currentValue !== '') return sf.currentValue;
+          if (sf.value !== undefined && sf.value !== null && sf.value !== '') return sf.value;
+          return sf.defaultValue !== undefined ? sf.defaultValue : '';
+        };
+        const repeatDaysRaw = getSettingVal("condition_date_time_repeat_days") || "";
+        const repeatDays = typeof repeatDaysRaw === 'string'
+          ? (repeatDaysRaw ? repeatDaysRaw.split(',') : [])
+          : (Array.isArray(repeatDaysRaw) ? repeatDaysRaw : []);
+        const condType = getSettingVal("condition_type") || "NA";
+        const isSched = condType === 'DATE_TIME_REPEAT' || condType === 'DATE_TIME_ONCE' || !!getSettingVal("condition_date_time");
+
+        const latestParsedRule = {
+          moduleId: targetModuleId,
+          ruleName: moduleData.moduleName || moduleData.name || defaultConfig.ruleName || `RULE_${ruleIndex + 1}`,
+          condition: {
+            isScheduleEnabled: isSched,
+            timeDate: getSettingVal("condition_date_time") || "",
+            repeatDays: repeatDays,
+            type: condType,
+            modbus: getSettingVal("condition_modbus") || "",
+            comparisonType: getSettingVal("comparison_type") || "EQUAL",
+            comparisonValue: getSettingVal("comparison_value") || ""
+          },
+          consequence: {
+            type: getSettingVal("consequence_type") || "MODBUS",
+            modbus: getSettingVal("consequence_modbus") || "",
+            value: getSettingVal("consequence_value") || ""
+          }
+        };
+        setRuleEngineConfig(latestParsedRule);
+
+        setDeviceDetails(prev => {
+          const copy = { ...prev };
+          if (!copy[ruleHostDevice]) {
+            copy[ruleHostDevice] = { modules: {} };
+          }
+          if (!copy[ruleHostDevice].modules) {
+            copy[ruleHostDevice].modules = {};
+          }
+          copy[ruleHostDevice].modules[targetModuleId] = {
+            id: targetModuleId,
+            name: moduleData.moduleName || moduleData.name || defaultConfig.ruleName || `RULE_${ruleIndex + 1}`,
+            parsedRule: latestParsedRule,
+            rawModule: {
+              ...moduleData,
+              settingFieldsList: settingFields
+            }
+          };
+          return copy;
+        });
+      } else {
+        setRuleEngineConfig({ ...defaultConfig, moduleId: targetModuleId });
+      }
+    } catch (e) {
+      console.error('[fetchAndOpenRuleEngineModal] Error:', e);
+      setRuleEngineConfig({ ...defaultConfig, moduleId: targetModuleId });
+    } finally {
+      setIsLoadingRuleDetails(false);
     }
   };
 
@@ -1658,11 +1757,33 @@ const ConfigTemplates = () => {
     try {
       const data = await getSochiotDeviceDetails(deviceId);
       if (data) {
-        // Sochiot API can have modules in root 'modules' or 'deviceTemplateVO.moduleTemplates'
-        const moduleSource = data.modules || data.deviceTemplateVO?.moduleTemplates || [];
-        const moduleMap = {};
+        let moduleSource = [];
+        
+        // If device has a uuid, fetch the actual instantiated modules with instantiated IDs and fields!
+        if (data.uuid) {
+          try {
+            console.log('Fetching instantiated modules for device uuid:', data.uuid);
+            const instModules = await getSochiotDeviceModules(data.uuid);
+            if (instModules && instModules.length > 0) {
+              moduleSource = instModules;
+            } else if (instModules && instModules.data && instModules.data.length > 0) {
+              moduleSource = instModules.data;
+            }
+          } catch (err) {
+            console.error('Error fetching instantiated modules:', err);
+          }
+        }
+        
+        // Fallback to static template modules if instantiated modules fetch returned empty
+        if (moduleSource.length === 0) {
+          moduleSource = data.modules || data.deviceTemplateVO?.moduleTemplates || [];
+        }
 
-        moduleSource.forEach(m => {
+        const moduleMap = {};
+        const token = localStorage.getItem('sochiot_token');
+
+        // Fetch detailed settings for all rule engine modules in parallel
+        await Promise.all(moduleSource.map(async (m) => {
           // Event fields can be in root or inside moduleTypeVO
           const fieldsSource = m.eventFieldVOS || m.moduleTypeVO?.eventFieldVOS || [];
           const fields = fieldsSource.map(f => {
@@ -1679,30 +1800,72 @@ const ConfigTemplates = () => {
                              (m.moduleTypeVO?.name === 'RULE_ENGINE');
 
           let parsedRule = null;
-          let settingFields = [];
-          if (isRuleEngine) {
-            const templates = data.deviceTemplateVO?.moduleTemplates || 
-                              data.deviceTemplate?.moduleTemplates || 
-                              data.deviceTemplateVO?.moduleTemplateVOList || 
-                              data.deviceTemplate?.moduleTemplateVOList || [];
-            
-            let templateModule = templates.find(tm => 
-              tm.id === m.id || 
-              (tm.name && tm.name.toUpperCase().includes('RULE')) || 
-              (tm.moduleName && tm.moduleName.toUpperCase().includes('RULE')) ||
-              tm.moduleTypeVO?.id === m.moduleTypeVO?.id || 
-              tm.moduleTypeVO?.name === m.moduleTypeVO?.name ||
-              tm.moduleTypeVO?.name === 'RULE_ENGINE' ||
-              tm.moduleType?.name === 'RULE_ENGINE'
-            );
+          let settingFields = m.settingFieldVOList || m.settingFieldList || m.settingFields || [];
 
-            settingFields = m.settingFieldVOList || m.settingFieldList || m.settingFields || 
-                            templateModule?.settingFieldVOList || templateModule?.settingFieldList || templateModule?.settingFields || [];
+          if (isRuleEngine) {
+            // Fetch real-time settings for this exact rule module if not already returned
+            if (settingFields.length === 0) {
+              try {
+                console.log('[fetchDeviceDetails] Fetching settings for rule module:', m.id);
+                const moduleRes = await fetch(`${CONFIG_API_URL}/module/${m.id}`, {
+                  headers: {
+                    'Authorization': `Bearer ${token}`
+                  }
+                });
+                if (moduleRes.ok) {
+                  const fetched = await moduleRes.json();
+                  const moduleData = fetched.data || fetched;
+                  settingFields = moduleData.settingFieldVOList || moduleData.settingFieldList || moduleData.settingFields || [];
+                }
+              } catch (err) {
+                console.error('[fetchDeviceDetails] Error fetching settings for rule module:', m.id, err);
+              }
+            }
+
+            // Fallback to template settingFields if fetch failed or returned empty
+            if (settingFields.length === 0) {
+              const templates = data.deviceTemplateVO?.moduleTemplates || 
+                                data.deviceTemplate?.moduleTemplates || 
+                                data.deviceTemplateVO?.moduleTemplateVOList || 
+                                data.deviceTemplate?.moduleTemplateVOList || [];
+              
+              let templateModule = templates.find(tm => 
+                tm.id === m.id || 
+                (tm.name && m.name && tm.name.toUpperCase() === m.name.toUpperCase()) ||
+                (tm.moduleName && m.moduleName && tm.moduleName.toUpperCase() === m.moduleName.toUpperCase()) ||
+                (tm.name && m.moduleName && tm.name.toUpperCase() === m.moduleName.toUpperCase()) ||
+                (tm.moduleName && m.name && tm.moduleName.toUpperCase() === m.name.toUpperCase())
+              );
+
+              if (!templateModule) {
+                const mNum = String(m.name || m.moduleName || '').replace(/\D/g, '');
+                if (mNum) {
+                  templateModule = templates.find(tm => {
+                    const tmNum = String(tm.name || tm.moduleName || '').replace(/\D/g, '');
+                    return tmNum === mNum && (tm.name || tm.moduleName || '').toUpperCase().includes('RULE');
+                  });
+                }
+              }
+
+              if (!templateModule) {
+                templateModule = templates.find(tm => 
+                  tm.moduleTypeVO?.id === m.moduleTypeVO?.id || 
+                  tm.moduleTypeVO?.name === m.moduleTypeVO?.name ||
+                  tm.moduleTypeVO?.name === 'RULE_ENGINE' ||
+                  tm.moduleType?.name === 'RULE_ENGINE'
+                );
+              }
+
+              settingFields = m.settingFieldVOList || m.settingFieldList || m.settingFields || 
+                              templateModule?.settingFieldVOList || templateModule?.settingFieldList || templateModule?.settingFields || [];
+            }
 
             const getSettingVal = (fName) => {
               const sf = settingFields.find(item => item.fieldName === fName);
               if (!sf) return '';
-              return sf.currentValue !== undefined ? sf.currentValue : (sf.defaultValue !== undefined ? sf.defaultValue : '');
+              if (sf.currentValue !== undefined && sf.currentValue !== null && sf.currentValue !== '') return sf.currentValue;
+              if (sf.value !== undefined && sf.value !== null && sf.value !== '') return sf.value;
+              return sf.defaultValue !== undefined ? sf.defaultValue : '';
             };
 
             const repeatDaysRaw = getSettingVal("condition_date_time_repeat_days") || "";
@@ -1743,7 +1906,7 @@ const ConfigTemplates = () => {
               settingFieldsList: settingFields
             }
           };
-        });
+        }));
 
         setDeviceDetails(prev => ({
           ...prev,
@@ -3977,9 +4140,27 @@ const ConfigTemplates = () => {
                                     onClick={() => {
                                       const target = section.title === 'Lower Limits' ? 'RULE1' : 'RULE2';
                                       const config = target === 'RULE1' ? agRule1Config : agRule2Config;
-                                      setCurrentRuleTarget(target);
-                                      setRuleEngineConfig({ ...config, moduleId: section.state.module });
-                                      setShowRuleEngineModal(true);
+                                      const ruleIndex = target === 'RULE1' ? 0 : 1;
+                                      const targetModuleId = section.state.module;
+                                      
+                                      let ruleHostDevice = acConfig.device || globalLocation.device;
+                                      let locName = acConfig.building || globalLocation.building;
+                                      if (locName) {
+                                        const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
+                                        const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+                                        if (selectedSZ && selectedSZ.type === 'location') {
+                                          locName = acConfig.subZone || globalLocation.subZone;
+                                        }
+                                        const locInfo = locationDetails[locName];
+                                        if (locInfo && locInfo.deviceList) {
+                                          const rd = locInfo.deviceList.find(d => 
+                                            (d.label && d.label.toUpperCase().includes('RULE')) || 
+                                            (d.id && String(d.id).toUpperCase().includes('RULE'))
+                                          );
+                                          if (rd) ruleHostDevice = rd.id;
+                                        }
+                                      }
+                                      fetchAndOpenRuleEngineModal(target, config, targetModuleId, ruleHostDevice, ruleIndex);
                                     }}
                                   >
                                     <Zap size={14} className="shadow-glow-blue" />
@@ -4226,12 +4407,30 @@ const ConfigTemplates = () => {
                                       variant="link"
                                       className={`p-0 text-${section.color} text-decoration-none fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-2 transition-all hover-opacity-100 opacity-70`}
                                       onClick={() => {
-                                        const target = section.title === 'Lower Limits' ? 'RULE1' : 'RULE2';
-                                        const config = target === 'RULE1' ? ugRule1Config : ugRule2Config;
-                                        setCurrentRuleTarget(target);
-                                        setRuleEngineConfig({ ...config, moduleId: section.state.module });
-                                        setShowRuleEngineModal(true);
-                                      }}
+                                       const target = section.title === 'Lower Limits' ? 'RULE1' : 'RULE2';
+                                       const config = target === 'RULE1' ? ugRule1Config : ugRule2Config;
+                                       const ruleIndex = target === 'RULE1' ? 0 : 1;
+                                       const targetModuleId = section.state.module;
+                                       
+                                       let ruleHostDevice = acConfig.device || globalLocation.device;
+                                       let locName = acConfig.building || globalLocation.building;
+                                       if (locName) {
+                                         const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
+                                         const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+                                         if (selectedSZ && selectedSZ.type === 'location') {
+                                           locName = acConfig.subZone || globalLocation.subZone;
+                                         }
+                                         const locInfo = locationDetails[locName];
+                                         if (locInfo && locInfo.deviceList) {
+                                           const rd = locInfo.deviceList.find(d => 
+                                             (d.label && d.label.toUpperCase().includes('RULE')) || 
+                                             (d.id && String(d.id).toUpperCase().includes('RULE'))
+                                           );
+                                           if (rd) ruleHostDevice = rd.id;
+                                         }
+                                       }
+                                       fetchAndOpenRuleEngineModal(target, config, targetModuleId, ruleHostDevice, ruleIndex);
+                                     }}
                                     >
                                       <Zap size={14} className="shadow-glow-blue" />
                                       Rule Engine Configuration
@@ -5358,15 +5557,8 @@ const ConfigTemplates = () => {
                                           <Button
                                             variant="link"
                                             className="p-0 text-info text-decoration-none fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-1 transition-all hover-opacity-100 opacity-70"
-                                            onClick={async () => {
-                                              setCurrentRuleTarget(`RULE_${idx}`);
-                                              setShowRuleEngineModal(true);
-                                              setIsLoadingRuleDetails(true);
-                                              
+                                            onClick={() => {
                                               const targetModuleId = rule.moduleId || acConfig.device;
-                                              const token = localStorage.getItem('sochiot_token');
-                                              
-                                              // Find the rule host device to update its cache
                                               let ruleHostDevice = acConfig.device;
                                               let locName = acConfig.building || globalLocation.building;
                                               if (locName) {
@@ -5384,75 +5576,7 @@ const ConfigTemplates = () => {
                                                   if (rd) ruleHostDevice = rd.id;
                                                 }
                                               }
-
-                                              try {
-                                                const res = await fetch(`https://app.sochiot.com/api/config-engine/module/${targetModuleId}`, {
-                                                  headers: {
-                                                    'Authorization': `Bearer ${token}`
-                                                  }
-                                                });
-                                                if (res.ok) {
-                                                  const fetched = await res.json();
-                                                  let settingFields = fetched.settingFieldVOList || fetched.settingFieldList || fetched.settingFields || [];
-                                                  if (settingFields.length === 0 && deviceDetails[ruleHostDevice]) {
-                                                    const cachedModule = deviceDetails[ruleHostDevice].modules?.[targetModuleId];
-                                                    if (cachedModule && cachedModule.rawModule?.settingFieldsList) {
-                                                      settingFields = cachedModule.rawModule.settingFieldsList;
-                                                    }
-                                                  }
-                                                  
-                                                  const getSettingVal = (fName) => {
-                                                    const sf = settingFields.find(item => item.fieldName === fName);
-                                                    if (!sf) return '';
-                                                    return sf.currentValue !== undefined ? sf.currentValue : (sf.defaultValue !== undefined ? sf.defaultValue : '');
-                                                  };
-                                                  const repeatDaysRaw = getSettingVal("condition_date_time_repeat_days") || "";
-                                                  const repeatDays = typeof repeatDaysRaw === 'string'
-                                                    ? (repeatDaysRaw ? repeatDaysRaw.split(',') : [])
-                                                    : (Array.isArray(repeatDaysRaw) ? repeatDaysRaw : []);
-                                                  const condType = getSettingVal("condition_type") || "NA";
-                                                  const isSched = condType === 'DATE_TIME_REPEAT' || condType === 'DATE_TIME_ONCE' || !!getSettingVal("condition_date_time");
-                                                  
-                                                  const latestParsedRule = {
-                                                    moduleId: targetModuleId,
-                                                    ruleName: fetched.moduleName || fetched.name || rule.ruleName || `RULE_${idx + 1}`,
-                                                    condition: {
-                                                      isScheduleEnabled: isSched,
-                                                      timeDate: getSettingVal("condition_date_time") || "",
-                                                      repeatDays: repeatDays,
-                                                      type: condType,
-                                                      modbus: getSettingVal("condition_modbus") || "",
-                                                      comparisonType: getSettingVal("comparison_type") || "EQUAL",
-                                                      comparisonValue: getSettingVal("comparison_value") || ""
-                                                    },
-                                                    consequence: {
-                                                      type: getSettingVal("consequence_type") || "MODBUS",
-                                                      modbus: getSettingVal("consequence_modbus") || "",
-                                                      value: getSettingVal("consequence_value") || ""
-                                                    }
-                                                  };
-                                                  setRuleEngineConfig(latestParsedRule);
-                                                  
-                                                  setDeviceDetails(prev => {
-                                                    const copy = { ...prev };
-                                                    if (copy[ruleHostDevice]?.modules?.[targetModuleId]) {
-                                                      copy[ruleHostDevice].modules[targetModuleId].parsedRule = latestParsedRule;
-                                                      copy[ruleHostDevice].modules[targetModuleId].rawModule = {
-                                                        ...fetched,
-                                                        settingFieldsList: settingFields
-                                                      };
-                                                    }
-                                                    return copy;
-                                                  });
-                                                } else {
-                                                  setRuleEngineConfig({ ...rule, moduleId: targetModuleId });
-                                                }
-                                              } catch (e) {
-                                                console.error(e);
-                                                setRuleEngineConfig({ ...rule, moduleId: targetModuleId });
-                                              } finally {
-                                                setIsLoadingRuleDetails(false);
-                                              }
+                                              fetchAndOpenRuleEngineModal(`RULE_${idx}`, rule, targetModuleId, ruleHostDevice, idx);
                                             }}
                                           >
                                             <Zap size={14} className="shadow-glow-blue" />
