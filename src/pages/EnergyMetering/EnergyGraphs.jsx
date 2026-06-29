@@ -6,7 +6,7 @@ import { Maximize2, X, Zap, Settings2 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3002/api/v1';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3001/api/v1';
 
 const getLocalDateString = (date) => {
   const tzOffset = date.getTimezoneOffset() * 60000;

@@ -13,7 +13,7 @@ const PARAMETERS = [
   { key: 'aqi', label: 'AQI (Index)', defaultKey: 'aqi' }
 ];
 
-const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3002/api/v1';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3001/api/v1';
 
 const AQIPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();
@@ -307,6 +307,13 @@ const AQIPDFReport = () => {
       doc.text(`Min Temperature: ${fmt(summary.minTemperature, 2)} °C`, 95, 54);
       doc.text(`Max Temperature: ${fmt(summary.maxTemperature, 2)} °C`, 95, 59);
       
+      if (summary.targetMinTemp !== undefined && summary.targetMaxTemp !== undefined) {
+        doc.text(`Target Temp Range: ${fmt(summary.targetMinTemp, 1)} °C - ${fmt(summary.targetMaxTemp, 1)} °C`, 175, 54);
+      }
+      if (summary.targetMinHum !== undefined && summary.targetMaxHum !== undefined) {
+        doc.text(`Target Hum Range: ${fmt(summary.targetMinHum, 1)} % - ${fmt(summary.targetMaxHum, 1)} %`, 175, 59);
+      }
+      
       doc.setDrawColor(224, 94, 0, 0.15);
       doc.line(14, 68, 283, 68);
     }
@@ -317,8 +324,8 @@ const AQIPDFReport = () => {
       const end = new Date(item.windowEnd);
       const adjustedEnd = interval === 'DAILY' ? new Date(end.getTime() - 1000) : end;
       
-      const devTemp = item.temperatureAvg !== null ? item.temperatureAvg - 24 : null;
-      const devHum = item.humidityAvg !== null ? item.humidityAvg - 50 : null;
+      const devTemp = item.deviationTemp !== undefined ? item.deviationTemp : (item.temperatureAvg !== null ? item.temperatureAvg - 24 : null);
+      const devHum = item.deviationHumidity !== undefined ? item.deviationHumidity : (item.deviationHum !== undefined ? item.deviationHum : (item.humidityAvg !== null ? item.humidityAvg - 50 : null));
 
       const formatDate = (d) => {
         return d.toLocaleDateString('en-IN');
