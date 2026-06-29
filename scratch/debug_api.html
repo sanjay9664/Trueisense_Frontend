@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sochiot API Debugger</title>
+  <style>
+    body { font-family: sans-serif; background: #121212; color: #e0e0e0; padding: 20px; }
+    input, button { padding: 10px; margin: 5px; font-size: 14px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; }
+    button { background: #ff9800; color: #000; font-weight: bold; cursor: pointer; }
+    pre { background: #1e1e1e; padding: 15px; border-radius: 6px; overflow: auto; border: 1px solid #333; max-height: 600px; }
+    .row { margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Sochiot API Debugger</h1>
+  <p>Use this tool to check exactly what the Sochiot API returns.</p>
+  
+  <div class="row">
+    <label>Token (Bearer JWT):</label><br/>
+    <input type="text" id="token" style="width: 80%;" placeholder="Paste your sochiot_token from localStorage here..."/>
+  </div>
+  
+  <div class="row">
+    <label>Endpoint URL:</label><br/>
+    <input type="text" id="url" style="width: 80%;" value="https://app.sochiot.com/api/config-engine/module/4447"/>
+  </div>
+
+  <button onclick="runFetch()">Fetch API</button>
+
+  <h2>Result:</h2>
+  <pre id="output">JSON will appear here...</pre>
+
+  <script>
+    // Try to auto-populate token from localStorage if running on localhost
+    try {
+      const t = localStorage.getItem('sochiot_token') || localStorage.getItem('token');
+      if (t) document.getElementById('token').value = t;
+    } catch(e) {}
+
+    async function runFetch() {
+      const url = document.getElementById('url').value;
+      const token = document.getElementById('token').value;
+      const out = document.getElementById('output');
+      out.textContent = "Fetching...";
+      try {
+        const res = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        out.textContent = `Status: ${res.status} ${res.statusText}\n\n`;
+        const json = await res.json();
+        out.textContent += JSON.stringify(json, null, 2);
+      } catch (err) {
+        out.textContent += `Error: ${err.message}\nStack: ${err.stack}`;
+      }
+    }
+  </script>
+</body>
+</html>
