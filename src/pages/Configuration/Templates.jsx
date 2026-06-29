@@ -244,9 +244,8 @@ const ConfigTemplates = () => {
 
       const settingFields = rawModule.settingFieldsList || rawModule.settingFieldVOList || rawModule.settingFieldList || [];
       console.log('[Apply Rules] rawModule settingFields:', settingFields);
-      const fieldCOS = settingFields.map(f => ({
-        id: f.moduleFieldMappingId || f.id,
-        currentValue: fieldValueMap.hasOwnProperty(f.fieldName)
+      const fieldCOS = settingFields.map(f => {
+        let val = fieldValueMap.hasOwnProperty(f.fieldName)
           ? fieldValueMap[f.fieldName]
           : (f.currentValue !== undefined && f.currentValue !== null && f.currentValue !== ''
               ? f.currentValue
@@ -4230,7 +4229,7 @@ const ConfigTemplates = () => {
                                       const ruleIndex = target === 'RULE1' ? 0 : 1;
                                       
                                       let ruleHostDevice = acConfig.device || globalLocation.device;
-                                      const locName = agLowerConfig.building || globalLocation.building;
+                                      let locName = agLowerConfig.building || globalLocation.building;
                                       if (locName) {
                                         const szOptions = getFieldList('subZone', { ...globalLocation, ...agLowerConfig });
                                         const selectedSZ = szOptions.find(o => o.id === (agLowerConfig.subZone || globalLocation.subZone));
@@ -4500,7 +4499,7 @@ const ConfigTemplates = () => {
                                         const ruleIndex = target === 'RULE1' ? 0 : 1;
                                         
                                         let ruleHostDevice = acConfig.device || globalLocation.device;
-                                        const locName = ugLowerConfig.building || globalLocation.building;
+                                        let locName = ugLowerConfig.building || globalLocation.building;
                                         if (locName) {
                                           const szOptions = getFieldList('subZone', { ...globalLocation, ...ugLowerConfig });
                                           const selectedSZ = szOptions.find(o => o.id === (ugLowerConfig.subZone || globalLocation.subZone));
