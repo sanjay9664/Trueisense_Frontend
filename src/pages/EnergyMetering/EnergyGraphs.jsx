@@ -165,6 +165,44 @@ const isCore7Setting = (setting, categoryContext) => {
   return matchesCore;
 };
 
+// Filter out duplicates by displayName/sochiotFieldName, prioritizing entries with units
+const filterDuplicateSettings = (settingsData, categoryContext) => {
+  if (!Array.isArray(settingsData)) return [];
+  
+  const filtered = settingsData.filter(s => s.graphable === true && isCore7Setting(s, categoryContext));
+  
+  // Sort so settings with real units come first
+  const sorted = [...filtered].sort((a, b) => {
+    const aUnitClean = String(a.unit || '').trim().toLowerCase();
+    const bUnitClean = String(b.unit || '').trim().toLowerCase();
+    const aHasUnit = aUnitClean !== '' && aUnitClean !== 'units' && aUnitClean !== 'unit';
+    const bHasUnit = bUnitClean !== '' && bUnitClean !== 'units' && bUnitClean !== 'unit';
+    if (aHasUnit && !bHasUnit) return -1;
+    if (!aHasUnit && bHasUnit) return 1;
+    return 0;
+  });
+
+  const unique = [];
+  const seenNames = new Set();
+  
+  for (const s of sorted) {
+    let name = String(s.displayName || s.sochiotFieldName || '').trim().toLowerCase();
+    // Strip trailing parentheses like (v), (units), (a), (hz), (pf)
+    name = name.replace(/\s*\([^)]*\)\s*$/, '');
+    // Strip trailing unit words
+    name = name.replace(/\s+(v|a|hz|units|pf)$/, '');
+    name = name.trim();
+
+    if (!name) continue;
+    if (!seenNames.has(name)) {
+      seenNames.add(name);
+      unique.push(s);
+    }
+  }
+
+  return unique;
+};
+
 const getParameterType = (displayName, fieldName) => {
   const name = String(displayName || fieldName || '').toLowerCase();
   if (name.includes('energy') || name.includes('consumption') || name.includes('kwh') || name.includes('kvah') || name.includes('kvarh')) {
@@ -700,7 +738,8 @@ const EnergyGraphs = () => {
   const [settings, setSettings] = useState(() => {
     const cachedId = localStorage.getItem(`selected_device_${categoryContext}`) || '';
     try {
-      return JSON.parse(localStorage.getItem(`scada_settings_${selectedSiteId}_${cachedId}`) || '[]');
+      const parsed = JSON.parse(localStorage.getItem(`scada_settings_${selectedSiteId}_${cachedId}`) || '[]');
+      return filterDuplicateSettings(parsed, categoryContext);
     } catch (e) {
       return [];
     }
@@ -709,7 +748,8 @@ const EnergyGraphs = () => {
     const cachedId = localStorage.getItem(`selected_device_${categoryContext}`) || '';
     try {
       const parsed = JSON.parse(localStorage.getItem(`scada_settings_${selectedSiteId}_${cachedId}`) || '[]');
-      return parsed.map(s => s.sochiotFieldName);
+      const filtered = filterDuplicateSettings(parsed, categoryContext);
+      return filtered.map(s => s.sochiotFieldName);
     } catch (e) {
       return [];
     }
@@ -881,7 +921,7 @@ const EnergyGraphs = () => {
 
         // If settingsRes is fetched successfully and matches the targeted cachedId, apply it
         if (settingsRes?.success && Array.isArray(settingsRes.data) && targetDeviceId === String(cachedId)) {
-          finalSettings = settingsRes.data.filter(s => s.graphable === true && isCore7Setting(s, categoryContext));
+          finalSettings = filterDuplicateSettings(settingsRes.data, categoryContext);
           setSettings(finalSettings);
           setSelectedSettings(finalSettings.map(s => s.sochiotFieldName));
           localStorage.setItem(`scada_settings_${selectedSiteId}_${targetDeviceId}`, JSON.stringify(finalSettings));
@@ -895,7 +935,7 @@ const EnergyGraphs = () => {
           if (res.ok) {
             const result = await res.json();
             if (result.success && Array.isArray(result.data)) {
-              finalSettings = result.data.filter(s => s.graphable === true && isCore7Setting(s, categoryContext));
+              finalSettings = filterDuplicateSettings(result.data, categoryContext);
               setSettings(finalSettings);
               setSelectedSettings(finalSettings.map(s => s.sochiotFieldName));
               localStorage.setItem(`scada_settings_${selectedSiteId}_${targetDeviceId}`, JSON.stringify(finalSettings));
@@ -947,7 +987,7 @@ const EnergyGraphs = () => {
         }
         const result = await res.json();
         if (result.success && Array.isArray(result.data)) {
-          const graphableSettings = result.data.filter(s => s.graphable === true && isCore7Setting(s, categoryContext));
+          const graphableSettings = filterDuplicateSettings(result.data, categoryContext);
           setSettings(graphableSettings);
           setSelectedSettings(graphableSettings.map(s => s.sochiotFieldName));
           localStorage.setItem(`scada_settings_${selectedSiteId}_${selectedDeviceId}`, JSON.stringify(graphableSettings));
@@ -1491,7 +1531,7 @@ const EnergyGraphs = () => {
           </div>
         ) : (
           <Row className="g-4">
-            {settings
+            {filterDuplicateSettings(settings, categoryContext)
               .filter(setting => selectedSettings.includes(setting.sochiotFieldName))
               .sort((a, b) => getSortPriority(a) - getSortPriority(b))
               .map((setting, idx) => {

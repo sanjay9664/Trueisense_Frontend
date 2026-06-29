@@ -327,13 +327,17 @@ const EnergyPDFReport = () => {
       const end = new Date(item.windowEnd);
       const adjustedEnd = interval === 'DAILY' ? new Date(end.getTime() - 1000) : end;
       
-      const totalKwh = item.closingEnergy !== null && item.openingEnergy !== null
-        ? Math.max(0, item.closingEnergy - item.openingEnergy)
-        : null;
+      const totalKwh = item.energyDelta !== undefined && item.energyDelta !== null
+        ? item.energyDelta
+        : (item.closingEnergy !== null && item.openingEnergy !== null
+            ? Math.max(0, item.closingEnergy - item.openingEnergy)
+            : null);
 
-      const totalKvah = item.closingKvah !== null && item.openingKvah !== null
-        ? Math.max(0, item.closingKvah - item.openingKvah)
-        : null;
+      const totalKvah = item.kvahDelta !== undefined && item.kvahDelta !== null
+        ? item.kvahDelta
+        : (item.closingKvah !== null && item.openingKvah !== null
+            ? Math.max(0, item.closingKvah - item.openingKvah)
+            : null);
 
       return [
         start.toLocaleString('en-IN'),
