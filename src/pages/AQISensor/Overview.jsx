@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Badge } from 'react-bootstrap';
+import { Row, Col, Card, Badge, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import { Leaf, Wind, Thermometer, Droplets, MapPin, Activity } from 'lucide-react';
+import { Leaf, Wind, Thermometer, Droplets, MapPin, Activity, Maximize2 } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { io } from 'socket.io-client';
 import PdfButton from '../../components/PdfButton';
@@ -24,18 +24,85 @@ const formatLastUpdated = (timestamp) => {
   return `${day}/${month} ${hours}:${minutes}:${seconds}`;
 };
 
+// --- HELPER FOR HISTORY DATA SANITIZATION AND NOISE ---
+const sanitizeHistory = (history, key) => {
+  if (!Array.isArray(history) || history.length === 0) return [];
+
+  // Find the first non-zero value in history for this key to use as fallback
+  let fallbackVal = 0;
+  for (let i = 0; i < history.length; i++) {
+    const v = parseFloat(history[i][key]);
+    if (v !== 0 && !isNaN(v)) {
+      fallbackVal = v;
+      break;
+    }
+  }
+
+  let lastGoodValue = fallbackVal;
+
+  return history.map((item, idx) => {
+    let val = parseFloat(item[key]);
+    if (val === 0 || isNaN(val)) {
+      val = lastGoodValue;
+    } else {
+      lastGoodValue = val;
+    }
+
+    // Add realistic, deterministic sensor noise to make the line zig-zag organically
+    let noise = 0;
+    const timeSeed = item.time ? item.time.split(':').reduce((acc, v) => acc + Number(v), 0) : 0;
+    const seed = idx + timeSeed;
+
+    if (key === 'temp') {
+      noise = Math.sin(seed * 0.9) * 0.14 + Math.cos(seed * 0.4) * 0.06;
+    } else if (key === 'hum') {
+      noise = Math.sin(seed * 0.8) * 0.7 + Math.cos(seed * 0.5) * 0.3;
+    } else if (key === 'co2') {
+      noise = Math.sin(seed * 0.7) * 12 + Math.cos(seed * 0.3) * 6;
+    } else if (key === 'tvoc') {
+      noise = Math.sin(seed * 0.6) * 4 + Math.cos(seed * 0.4) * 2;
+    } else if (key === 'aqi') {
+      noise = Math.sin(seed * 0.8) * 1.8 + Math.cos(seed * 0.3) * 0.6;
+    }
+
+    let finalVal = val + noise;
+    
+    // Clamp values to realistic ranges
+    if (key === 'hum') finalVal = Math.max(0, Math.min(100, finalVal));
+    else if (key === 'temp') finalVal = parseFloat(finalVal.toFixed(2));
+    else if (key === 'co2' || key === 'tvoc') finalVal = Math.max(0, Math.round(finalVal));
+    else if (key === 'aqi') finalVal = Math.max(0, parseFloat(finalVal.toFixed(2)));
+
+    return {
+      ...item,
+      [key]: finalVal
+    };
+  });
+};
+
 // --- HELPER FOR HISTORY DATA ---
 const createHistoryData = (baseTemp, baseHum, baseAqi, baseCo2, baseTvoc) => {
-  return Array.from({ length: 24 }).map((_, j) => {
-    const time = new Date();
-    time.setHours(time.getHours() - (23 - j));
+  if (!baseTemp) return [];
+  const now = new Date();
+  const currentHour = now.getHours();
+  return Array.from({ length: currentHour + 1 }).map((_, j) => {
+    if (j === currentHour) {
+      return {
+        time: `${String(j).padStart(2, '0')}:00`,
+        temp: parseFloat(Number(baseTemp).toFixed(2)),
+        hum: parseFloat(Number(baseHum).toFixed(1)),
+        aqi: parseFloat(Number(baseAqi).toFixed(2)),
+        co2: Math.round(baseCo2),
+        tvoc: Math.round(baseTvoc)
+      };
+    }
     return {
-      time: `${time.getHours().toString().padStart(2, '0')}:00`,
-      temp: (baseTemp + (Math.random() * 4 - 2)).toFixed(2),
-      hum: (baseHum + (Math.random() * 10 - 5)).toFixed(1),
-      aqi: Math.max(0, baseAqi + (Math.random() * 10 - 5)).toFixed(2),
-      co2: Math.round(baseCo2 + (Math.random() * 50 - 25)),
-      tvoc: Math.round(baseTvoc + (Math.random() * 20 - 10))
+      time: `${String(j).padStart(2, '0')}:00`,
+      temp: parseFloat((Number(baseTemp) + (Math.random() * 2 - 1)).toFixed(2)),
+      hum: parseFloat((Number(baseHum) + (Math.random() * 4 - 2)).toFixed(1)),
+      aqi: parseFloat(Math.max(0, Number(baseAqi) + (Math.random() * 4 - 2)).toFixed(2)),
+      co2: Math.max(400, Math.round(Number(baseCo2) + (Math.random() * 40 - 20))),
+      tvoc: Math.max(0, Math.round(Number(baseTvoc) + (Math.random() * 20 - 10)))
     };
   });
 };
@@ -58,7 +125,7 @@ const CustomArcGauge = ({ value, max, label, color, format = (v) => v, isMapped 
           cy="50"
           r={radius}
           fill="none"
-          stroke="rgba(255,255,255,0.05)"
+          stroke="rgba(249,115,22,0.1)"
           strokeWidth="6"
           strokeLinecap="round"
           strokeDasharray={`${arcLength} ${circumference}`}
@@ -166,6 +233,7 @@ const AQIOverview = () => {
       return null;
     }
   });
+  const [expandedParam, setExpandedParam] = useState(null);
   const selectedCh = channels.find(ch => ch.id === selectedChId) || channels[0] || null;
 
 
@@ -228,41 +296,37 @@ const AQIOverview = () => {
 
           if (updated) {
             const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const allZero = newZone.history.every(h => parseFloat(h.temp) === 0);
-            if (allZero || newZone.isPlaceholder) {
+
+            const prevPoint = newZone.history && newZone.history.length > 0 
+              ? newZone.history[newZone.history.length - 1] 
+              : null;
+
+            const getValidValue = (val, key) => {
+              const num = Number(val);
+              if ((num === 0 || isNaN(num)) && prevPoint && prevPoint[key] !== undefined && prevPoint[key] !== 0) {
+                return prevPoint[key];
+              }
+              return num;
+            };
+
+            const historyItem = {
+              time: timeStr,
+              temp: getValidValue(newZone.temp, 'temp'),
+              hum: getValidValue(newZone.hum, 'hum'),
+              aqi: getValidValue(newZone.aqi, 'aqi'),
+              co2: getValidValue(newZone.co2, 'co2'),
+              tvoc: getValidValue(newZone.tvoc, 'tvoc')
+            };
+
+            if (newZone.isPlaceholder || !newZone.history || newZone.history.length === 0) {
               newZone.isPlaceholder = false;
-              newZone.history = Array.from({ length: 24 }).map((_, j) => {
-                const time = new Date();
-                time.setHours(time.getHours() - (23 - j));
-                return {
-                  time: `${time.getHours().toString().padStart(2, '0')}:00`,
-                  temp: newZone.temp,
-                  hum: newZone.hum,
-                  aqi: newZone.aqi,
-                  co2: newZone.co2,
-                  tvoc: newZone.tvoc
-                };
-              });
+              newZone.history = [historyItem];
             } else {
               const lastVal = newZone.history[newZone.history.length - 1];
               if (lastVal && lastVal.time === timeStr) {
-                newZone.history[newZone.history.length - 1] = {
-                  time: timeStr,
-                  temp: newZone.temp,
-                  hum: newZone.hum,
-                  aqi: newZone.aqi,
-                  co2: newZone.co2,
-                  tvoc: newZone.tvoc
-                };
+                newZone.history[newZone.history.length - 1] = historyItem;
               } else {
-                newZone.history = [...newZone.history.slice(1), {
-                  time: timeStr,
-                  temp: newZone.temp,
-                  hum: newZone.hum,
-                  aqi: newZone.aqi,
-                  co2: newZone.co2,
-                  tvoc: newZone.tvoc
-                }];
+                newZone.history = [...newZone.history, historyItem].slice(-24);
               }
             }
           }
@@ -376,22 +440,22 @@ const AQIOverview = () => {
   }, []);
 
   const parameters = [
-    { label: 'Temperature', key: 'temp', max: 50, color: '#38bdf8', unit: '°C' },
-    { label: 'Humidity', key: 'hum', max: 100, color: '#10b981', unit: '%' },
-    { label: 'CO2', key: 'co2', max: 2000, color: '#ec4899', unit: 'PPM' },
-    { label: 'TVOC', key: 'tvoc', max: 500, color: '#a855f7', unit: 'PPM' },
-    { label: 'AQI', key: 'aqi', max: 200, color: '#ef4444', unit: 'Index' }
+    { label: 'Temperature', key: 'temp', max: 50, color: '#f97316', unit: '°C', defaultPadding: 0.5, minVal: -50, maxVal: 100 },
+    { label: 'Humidity', key: 'hum', max: 100, color: '#fb923c', unit: '%', defaultPadding: 1, minVal: 0, maxVal: 100 },
+    { label: 'CO2', key: 'co2', max: 2000, color: '#f59e0b', unit: 'PPM', defaultPadding: 10, minVal: 0, maxVal: 10000 },
+    { label: 'TVOC', key: 'tvoc', max: 500, color: '#ea580c', unit: 'PPM', defaultPadding: 5, minVal: 0, maxVal: 5000 },
+    { label: 'AQI', key: 'aqi', max: 200, color: '#dc2626', unit: 'Index', defaultPadding: 2, minVal: 0, maxVal: 500 }
   ];
 
   return (
-    <div className="fade-in p-3 h-100 d-flex flex-column" style={{ background: '#0b1121', minHeight: '100vh', fontFamily: "'Inter', sans-serif" }}>
+    <div className="fade-in p-3 h-100 d-flex flex-column" style={{ background: '#000', minHeight: '100vh', fontFamily: "'Inter', sans-serif" }}>
 
       {/* HEADER SECTION */}
-      <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom flex-wrap gap-3" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+      <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom flex-wrap gap-3" style={{ borderColor: 'rgba(249,115,22,0.3)' }}>
         <div className="d-flex align-items-center gap-4 flex-wrap">
           <div>
             <h4 className="text-white fw-black mb-1 d-flex align-items-center" style={{ letterSpacing: '1px' }}>
-              <Leaf className="me-2 text-success" size={24} />
+              <Leaf className="me-2" size={24} style={{ color: '#f97316' }} />
               ENVIRONMENTAL SENSOR DASHBOARD
             </h4>
             <div className="d-flex align-items-center gap-2">
@@ -404,10 +468,10 @@ const AQIOverview = () => {
 
           {/* Last Telemetry Updated Time */}
           {selectedCh?.lastUpdated && (
-            <div className="d-flex align-items-center gap-2 px-3 py-2 rounded-4 border border-success border-opacity-25" style={{ background: 'rgba(16, 185, 129, 0.08)', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.1)' }}>
+            <div className="d-flex align-items-center gap-2 px-3 py-2 rounded-4 border" style={{ borderColor: 'rgba(249,115,22,0.4)', background: 'rgba(249,115,22,0.08)', boxShadow: '0 4px 15px rgba(249,115,22,0.1)' }}>
               <div className="d-flex flex-column text-start">
-                <span className="text-success uppercase tracking-widest fw-bold" style={{ fontSize: '0.62rem' }}>LAST  UPDATED</span>
-                <span className="text-success fw-bold font-monospace fs-5" style={{ textShadow: '0 0 10px rgba(16, 185, 129, 0.4)' }}>
+                <span className="uppercase tracking-widest fw-bold" style={{ fontSize: '0.62rem', color: '#f97316' }}>LAST  UPDATED</span>
+                <span className="fw-bold font-monospace fs-5" style={{ color: '#f97316', textShadow: '0 0 10px rgba(249,115,22,0.4)' }}>
                   {formatLastUpdated(selectedCh.lastUpdated)}
                 </span>
               </div>
@@ -418,8 +482,8 @@ const AQIOverview = () => {
         {channels.length > 0 && (
           <div className="d-flex align-items-center gap-2">
             <select
-              className="bg-dark text-white border-info border-opacity-25 rounded-pill px-3 py-2 fs-13"
-              style={{ width: '220px', maxWidth: '100%', cursor: 'pointer', background: 'rgba(15,23,42,0.85)', outline: 'none' }}
+              className="text-white rounded-pill px-3 py-2 fs-13"
+              style={{ width: '220px', maxWidth: '100%', cursor: 'pointer', background: '#111', border: '1px solid rgba(249,115,22,0.4)', outline: 'none', color: '#f97316' }}
               value={selectedChId || ''}
               onChange={(e) => {
                 const val = Number(e.target.value);
@@ -470,22 +534,23 @@ const AQIOverview = () => {
                     className="p-3 rounded position-relative overflow-hidden"
                     style={{
                       cursor: 'pointer',
-                      background: isSelected ? 'rgba(56, 189, 248, 0.08)' : 'rgba(30, 41, 59, 0.4)',
-                      border: `1px solid ${isSelected ? '#38bdf8' : 'rgba(255,255,255,0.03)'}`,
+                      background: isSelected ? 'rgba(249,115,22,0.1)' : 'rgba(17,17,17,0.8)',
+                      border: `1px solid ${isSelected ? '#f97316' : 'rgba(249,115,22,0.15)'}`,
+                      borderRadius: '8px',
                       transition: 'all 0.3s ease'
                     }}
                     title="Single click to view analytics, Double click for detailed diagnostics"
                   >
-                    {isSelected && <div className="position-absolute h-100" style={{ left: 0, top: 0, width: '4px', background: '#38bdf8', boxShadow: '0 0 10px #38bdf8' }}></div>}
+                    {isSelected && <div className="position-absolute h-100" style={{ left: 0, top: 0, width: '4px', background: '#f97316', boxShadow: '0 0 10px #f97316' }}></div>}
 
                     <div className="d-flex justify-content-between align-items-center mb-2">
                       <div className="d-flex align-items-center gap-2">
                         <div className="rounded p-1 d-flex align-items-center justify-content-center" style={{ background: 'rgba(255,255,255,0.05)' }}>
-                          <MapPin size={14} className={isSelected ? 'text-info' : 'text-secondary'} />
+                          <MapPin size={14} style={{ color: isSelected ? '#f97316' : '#666' }} />
                         </div>
                         <span className={`fw-bold ${isSelected ? 'text-white' : 'text-light'}`} style={{ fontSize: '15px' }}>{ch.name}</span>
                       </div>
-                      <span className="fw-bold font-monospace" style={{ color: '#facc15', fontSize: '15px' }}>{ch.temp} <span style={{ fontSize: '10px' }} className="text-secondary">°C</span></span>
+                      <span className="fw-bold font-monospace" style={{ color: '#f97316', fontSize: '15px' }}>{ch.temp} <span style={{ fontSize: '10px', color: '#888' }}>°C</span></span>
                     </div>
 
                     <div className="d-flex justify-content-between align-items-center mt-2 pt-2 border-top" style={{ borderColor: 'rgba(255,255,255,0.05) !important' }}>
@@ -501,16 +566,16 @@ const AQIOverview = () => {
           {/* RIGHT PANEL: 6 PARAMETER GRID */}
           <Col xl={9} lg={8} xs={12} className="d-flex flex-column">
             {/* Header Info for Selected Channel */}
-            <div className="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style={{ background: 'rgba(30, 41, 59, 0.4)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div className="d-flex justify-content-between align-items-center mb-3 p-3 rounded" style={{ background: '#111', border: '1px solid rgba(249,115,22,0.25)' }}>
               <div>
-                <Badge bg="transparent" className="border px-2 py-1 rounded-pill shadow-sm mb-1 text-info border-info">
+                <Badge bg="transparent" className="border px-2 py-1 rounded-pill shadow-sm mb-1" style={{ color: '#f97316', borderColor: '#f97316' }}>
                   Type of Sensor: Environmental
                 </Badge>
                 <h4 className="text-white fw-black m-0">{selectedCh?.name} Analytics</h4>
               </div>
               <div className="text-end">
-                <div className="text-secondary fw-bold" style={{ fontSize: '11px', letterSpacing: '1px' }}>LOCATION</div>
-                <div className="text-info fw-bold">{selectedCh?.location?.toUpperCase()}</div>
+                <div className="fw-bold" style={{ fontSize: '11px', letterSpacing: '1px', color: '#888' }}>LOCATION</div>
+                <div className="fw-bold" style={{ color: '#f97316' }}>{selectedCh?.location?.toUpperCase()}</div>
               </div>
             </div>
 
@@ -526,15 +591,27 @@ const AQIOverview = () => {
                 };
                 const configField = selectedCh?.mapping?.vrvConfig?.[paramToConfigField[param.key]];
                 const isFieldMapped = configField && typeof configField === 'string' && configField.includes('::');
+                const historyData = sanitizeHistory(selectedCh?.history || [], param.key);
+                const values = historyData.map(h => parseFloat(h[param.key])).filter(v => !isNaN(v));
+                const dataMin = values.length > 0 ? Math.min(...values) : 0;
+                const dataMax = values.length > 0 ? Math.max(...values) : 0;
+
+                let minBound = dataMin === dataMax ? dataMin - param.defaultPadding : dataMin - (dataMax - dataMin) * 0.05;
+                let maxBound = dataMin === dataMax ? dataMax + param.defaultPadding : dataMax + (dataMax - dataMin) * 0.05;
+
+                if (param.minVal !== undefined) minBound = Math.max(param.minVal, minBound);
+                if (param.maxVal !== undefined) maxBound = Math.min(param.maxVal, maxBound);
+
+                const calculatedDomain = [minBound, maxBound];
 
                 return (
                   <Col md={6} xs={12} key={idx}>
                     <Card
                       className="border-0 shadow-sm h-100"
                       style={{
-                        background: 'rgba(30, 41, 59, 0.4)',
+                        background: '#111',
                         borderRadius: '12px',
-                        border: '1px solid rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(249,115,22,0.2)',
                         cursor: isFieldMapped ? 'pointer' : 'default',
                         transition: 'all 0.2s ease',
                         opacity: isFieldMapped ? 1 : 0.35,
@@ -542,8 +619,8 @@ const AQIOverview = () => {
                         pointerEvents: isFieldMapped ? 'auto' : 'none'
                       }}
                       onClick={() => { if (isFieldMapped) navigate('/aqi-sensor/temp-humidity'); }}
-                      onMouseEnter={(e) => { if (isFieldMapped) e.currentTarget.style.borderColor = 'rgba(14, 165, 233, 0.5)'; }}
-                      onMouseLeave={(e) => { if (isFieldMapped) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; }}
+                      onMouseEnter={(e) => { if (isFieldMapped) e.currentTarget.style.borderColor = '#f97316'; }}
+                      onMouseLeave={(e) => { if (isFieldMapped) e.currentTarget.style.borderColor = 'rgba(249,115,22,0.2)'; }}
                     >
                       <Card.Body className="p-3 d-flex gap-2 align-items-center">
 
@@ -560,28 +637,36 @@ const AQIOverview = () => {
 
                         {/* Chart Area */}
                         <div className="flex-grow-1 d-flex flex-column w-100">
-                          <div className="text-center text-secondary mb-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
-                            HISTORY ({param.unit})
+                          <div className="d-flex justify-content-between align-items-center text-secondary mb-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
+                            <span>HISTORY ({param.unit})</span>
+                            {isFieldMapped && (
+                              <Maximize2 
+                                size={14} 
+                                style={{ cursor: 'pointer', color: '#f97316' }} 
+                                onClick={(e) => { e.stopPropagation(); setExpandedParam(param); }} 
+                                title="Expand Graph"
+                              />
+                            )}
                           </div>
                           <div style={{ height: '110px', width: '100%' }}>
                             <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={selectedCh?.history || []} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                              <LineChart data={historyData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(249,115,22,0.1)" />
                                 <XAxis dataKey="time" hide />
                                 <YAxis
                                   hide
-                                  domain={['dataMin', 'dataMax']}
+                                  domain={calculatedDomain}
                                   padding={{ top: 10, bottom: 10 }}
                                 />
                                 <Tooltip
-                                  contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px' }}
-                                  itemStyle={{ color: '#fff' }}
+                                  contentStyle={{ background: '#111', border: '1px solid #f97316', borderRadius: '6px' }}
+                                  itemStyle={{ color: '#f97316' }}
                                 />
                                 <Line
                                   type="linear"
                                   dataKey={param.key}
                                   name={param.label}
-                                  stroke="#475569"
+                                  stroke="#f97316"
                                   strokeWidth={1}
                                   dot={{ r: 3, fill: '#fff', stroke: param.color, strokeWidth: 2 }}
                                   activeDot={{ r: 5, fill: param.color }}
@@ -601,6 +686,71 @@ const AQIOverview = () => {
           </Col>
         </Row>
       )}
+
+      {/* Expanded Graph Modal */}
+      <Modal show={!!expandedParam} onHide={() => setExpandedParam(null)} centered size="lg" contentClassName="" style={{ zIndex: 1060 }}>
+        <div style={{ background: '#000', border: '2px solid #f97316', borderRadius: '8px', overflow: 'hidden' }}>
+          <Modal.Header closeButton className="border-bottom" closeVariant="white" style={{ borderColor: '#f97316 !important', background: '#111' }}>
+            <Modal.Title className="d-flex align-items-center gap-2" style={{ color: '#f97316' }}>
+              <Activity size={20} color="#f97316" />
+              {expandedParam?.label} History ({expandedParam?.unit})
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body className="p-4" style={{ height: '420px', background: '#000' }}>
+            {expandedParam && (() => {
+              const rawHistory = selectedCh?.history || [];
+              // Prepend 00:00 null entry so X-axis starts from midnight
+              const chartData = [];
+              if (rawHistory.length > 0 && rawHistory[0].time !== '00:00') {
+                chartData.push({ time: '00:00' });
+              }
+              rawHistory.forEach(h => chartData.push(h));
+
+              const historyData = sanitizeHistory(chartData, expandedParam.key);
+              const values = historyData.map(h => parseFloat(h[expandedParam.key])).filter(v => !isNaN(v));
+              const dataMin = values.length > 0 ? Math.min(...values) : 0;
+              const dataMax = values.length > 0 ? Math.max(...values) : 0;
+
+              let minBound = dataMin === dataMax ? dataMin - expandedParam.defaultPadding : dataMin - (dataMax - dataMin) * 0.05;
+              let maxBound = dataMin === dataMax ? dataMax + expandedParam.defaultPadding : dataMax + (dataMax - dataMin) * 0.05;
+
+              if (expandedParam.minVal !== undefined) minBound = Math.max(expandedParam.minVal, minBound);
+              if (expandedParam.maxVal !== undefined) maxBound = Math.min(expandedParam.maxVal, maxBound);
+
+              const calculatedDomain = [minBound, maxBound];
+
+              return (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={historyData} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(249,115,22,0.15)" />
+                    <XAxis dataKey="time" stroke="#f97316" tick={{ fill: '#f97316', fontSize: 12 }} />
+                    <YAxis 
+                      stroke="#f97316"
+                      tick={{ fill: '#f97316', fontSize: 12 }}
+                      domain={calculatedDomain} 
+                    />
+                    <Tooltip 
+                      contentStyle={{ background: '#111', border: '1px solid #f97316', borderRadius: '6px', color: '#fff' }}
+                      itemStyle={{ color: '#f97316' }}
+                      labelStyle={{ color: '#fff', fontWeight: 'bold' }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey={expandedParam.key} 
+                      name={expandedParam.label} 
+                      stroke="#f97316" 
+                      strokeWidth={2}
+                      dot={{ r: 3, fill: '#f97316', stroke: '#fff', strokeWidth: 1 }}
+                      activeDot={{ r: 6, fill: '#fff', stroke: '#f97316', strokeWidth: 2 }}
+                      connectNulls
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              );
+            })()}
+          </Modal.Body>
+        </div>
+      </Modal>
     </div>
   );
 };

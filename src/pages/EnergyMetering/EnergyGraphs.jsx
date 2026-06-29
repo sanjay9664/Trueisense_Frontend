@@ -1021,6 +1021,44 @@ const EnergyGraphs = () => {
         const results = await Promise.all(promises);
 
         const mergedData = {};
+        
+        // Pre-fill time slots to ensure X-axis covers the full day (00:00 to 23:59)
+        if (fromDate === toDate) {
+          if (globalInterval === 'MIN_15') {
+            const baseDate = new Date(`${fromDate}T00:00:00`);
+            for (let i = 0; i < 96; i++) {
+              const slotTime = new Date(baseDate.getTime() + i * 15 * 60000);
+              const timeKeyStr = slotTime.toISOString();
+              const formattedTime = slotTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+              const fullDateStr = slotTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+              const fullTimeStr = slotTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+              mergedData[timeKeyStr] = {
+                time: formattedTime,
+                fullDate: fullDateStr,
+                fullTime: fullTimeStr,
+                windowStart: timeKeyStr,
+                windowEnd: new Date(slotTime.getTime() + 15 * 60000).toISOString()
+              };
+            }
+          } else if (globalInterval === 'HOURLY') {
+            const baseDate = new Date(`${fromDate}T00:00:00`);
+            for (let i = 0; i < 24; i++) {
+              const slotTime = new Date(baseDate.getTime() + i * 60 * 60000);
+              const timeKeyStr = slotTime.toISOString();
+              const formattedTime = slotTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+              const fullDateStr = slotTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+              const fullTimeStr = slotTime.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+              mergedData[timeKeyStr] = {
+                time: formattedTime,
+                fullDate: fullDateStr,
+                fullTime: fullTimeStr,
+                windowStart: timeKeyStr,
+                windowEnd: new Date(slotTime.getTime() + 60 * 60000).toISOString()
+              };
+            }
+          }
+        }
+
         results.forEach(result => {
           result.snapshots.forEach(snap => {
             const timeKey = snap.windowStart;
