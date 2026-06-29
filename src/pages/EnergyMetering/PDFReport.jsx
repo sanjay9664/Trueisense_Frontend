@@ -17,7 +17,7 @@ const PARAMETERS = [
   { key: 'iB', label: 'Current B', defaultKey: '3,159' },
   { key: 'pf', label: 'Power Factor (PF)', defaultKey: '4,24F' }
 ];
-const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3002/api/v1';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3001/api/v1';
 
 const EnergyPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();

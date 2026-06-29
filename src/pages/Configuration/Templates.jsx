@@ -230,8 +230,6 @@ const ConfigTemplates = () => {
       console.log('[Apply Rules] rawModule settingFields:', settingFields);
       const fieldCOS = settingFields.map(f => ({
 
-        id: f.id,
-
         id: f.moduleFieldMappingId || f.id,
 
         currentValue: fieldValueMap.hasOwnProperty(f.fieldName)
@@ -341,8 +339,6 @@ const ConfigTemplates = () => {
         const fetched = await res.json();
         const moduleData = fetched.data || fetched;
         let settingFields = moduleData.settingFieldVOList || moduleData.settingFieldList || moduleData.settingFields || [];
-
-        if (settingFields.length === 0 && deviceDetails[ruleHostDevice]) {
 
         const rawMappingList = moduleData.moduleFieldMappingVOS || moduleData.moduleFieldMappingVOList;
         if (rawMappingList && rawMappingList.length > 0) {
@@ -1858,8 +1854,6 @@ const ConfigTemplates = () => {
           }
           let parsedRule = null;
 
-          let settingFields = m.settingFieldVOList || m.settingFieldList || m.settingFields || [];
-
           if (isRuleEngine) {
             // Fetch real-time settings for this exact rule module if not already returned
             if (settingFields.length === 0) {
@@ -1890,33 +1884,6 @@ const ConfigTemplates = () => {
                 console.error('[fetchDeviceDetails] Error fetching settings for rule module:', m.id, err);
               }
             }
-
-
-            // Fallback to template settingFields if fetch failed or returned empty
-            if (settingFields.length === 0) {
-              const templates = data.deviceTemplateVO?.moduleTemplates || 
-                                data.deviceTemplate?.moduleTemplates || 
-                                data.deviceTemplateVO?.moduleTemplateVOList || 
-                                data.deviceTemplate?.moduleTemplateVOList || [];
-              
-              let templateModule = templates.find(tm => 
-                tm.id === m.id || 
-                (tm.name && m.name && tm.name.toUpperCase() === m.name.toUpperCase()) ||
-                (tm.moduleName && m.moduleName && tm.moduleName.toUpperCase() === m.moduleName.toUpperCase()) ||
-                (tm.name && m.moduleName && tm.name.toUpperCase() === m.moduleName.toUpperCase()) ||
-                (tm.moduleName && m.name && tm.moduleName.toUpperCase() === m.name.toUpperCase())
-              );
-
-              if (!templateModule) {
-                const mNum = String(m.name || m.moduleName || '').replace(/\D/g, '');
-                if (mNum) {
-                  templateModule = templates.find(tm => {
-                    const tmNum = String(tm.name || tm.moduleName || '').replace(/\D/g, '');
-                    return tmNum === mNum && (tm.name || tm.moduleName || '').toUpperCase().includes('RULE');
-                  });
-                }
-              }
-
 
 
             // Fallback to template settingFields if fetch failed or returned empty
@@ -4238,22 +4205,11 @@ const ConfigTemplates = () => {
                                       const target = section.title === 'Lower Limits' ? 'RULE1' : 'RULE2';
                                       const config = target === 'RULE1' ? agRule1Config : agRule2Config;
 
-                                      const ruleIndex = target === 'RULE1' ? 0 : 1;
-                                      const targetModuleId = section.state.module;
-                                      
-                                      let ruleHostDevice = acConfig.device || globalLocation.device;
-                                      let locName = acConfig.building || globalLocation.building;
-                                      if (locName) {
-                                        const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
-                                        const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
-                                        if (selectedSZ && selectedSZ.type === 'location') {
-                                          locName = acConfig.subZone || globalLocation.subZone;
-
                                       const targetModuleId = section.state.module;
                                       const ruleIndex = target === 'RULE1' ? 0 : 1;
                                       
                                       let ruleHostDevice = acConfig.device || globalLocation.device;
-                                      const locName = agLowerConfig.building || globalLocation.building;
+                                      let locName = agLowerConfig.building || globalLocation.building;
                                       if (locName) {
                                         const szOptions = getFieldList('subZone', { ...globalLocation, ...agLowerConfig });
                                         const selectedSZ = szOptions.find(o => o.id === (agLowerConfig.subZone || globalLocation.subZone));
@@ -4542,31 +4498,6 @@ const ConfigTemplates = () => {
                                        }
                                        fetchAndOpenRuleEngineModal(target, config, targetModuleId, ruleHostDevice, ruleIndex);
                                      }}
-
-                                        const target = section.title === 'Lower Limits' ? 'RULE1' : 'RULE2';
-                                        const config = target === 'RULE1' ? ugRule1Config : ugRule2Config;
-                                        const targetModuleId = section.state.module;
-                                        const ruleIndex = target === 'RULE1' ? 0 : 1;
-                                        
-                                        let ruleHostDevice = acConfig.device || globalLocation.device;
-                                        const locName = ugLowerConfig.building || globalLocation.building;
-                                        if (locName) {
-                                          const szOptions = getFieldList('subZone', { ...globalLocation, ...ugLowerConfig });
-                                          const selectedSZ = szOptions.find(o => o.id === (ugLowerConfig.subZone || globalLocation.subZone));
-                                          if (selectedSZ && selectedSZ.type === 'location') {
-                                            locName = ugLowerConfig.subZone || globalLocation.subZone;
-                                          }
-                                          const locInfo = locationDetails[locName];
-                                          if (locInfo && locInfo.deviceList) {
-                                            const rd = locInfo.deviceList.find(d => 
-                                              (d.label && d.label.toUpperCase().includes('RULE')) || 
-                                              (d.id && String(d.id).toUpperCase().includes('RULE'))
-                                            );
-                                            if (rd) ruleHostDevice = rd.id;
-                                          }
-                                        }
-                                        fetchAndOpenRuleEngineModal(target, config, targetModuleId, ruleHostDevice, ruleIndex);
-                                      }}
 
                                     >
                                       <Zap size={14} className="shadow-glow-blue" />
@@ -5695,8 +5626,6 @@ const ConfigTemplates = () => {
                                             variant="link"
                                             className="p-0 text-info text-decoration-none fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-1 transition-all hover-opacity-100 opacity-70"
                                             onClick={() => {
-
-                                              const targetModuleId = rule.moduleId || acConfig.device;
 
                                               const target = `RULE_${idx}`;
                                               const config = rule;
