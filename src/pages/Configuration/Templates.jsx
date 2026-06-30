@@ -1928,6 +1928,14 @@ const ConfigTemplates = () => {
 
     // Voltages
     if (nameLower.includes('voltage') || nameLower.includes('volt') || keyLower.startsWith('v')) {
+      if (nameLower.includes('avg') || nameLower.includes('average')) return 'AVG. VOLTAGE L-L';
+      if (nameLower.includes('r-y') || nameLower.includes('ry') || keyLower.includes('vry')) return 'VOLTAGE R-Y';
+      if (nameLower.includes('y-b') || nameLower.includes('yb') || keyLower.includes('vyb')) return 'VOLTAGE Y-B';
+      if (nameLower.includes('b-r') || nameLower.includes('br') || keyLower.includes('vbr')) return 'VOLTAGE B-R';
+      if (nameLower.includes('r-n') || nameLower.includes('rn') || keyLower.includes('vrn')) return 'VOLTAGE R-N';
+      if (nameLower.includes('y-n') || nameLower.includes('yn') || keyLower.includes('vyn')) return 'VOLTAGE Y-N';
+      if (nameLower.includes('b-n') || nameLower.includes('bn') || keyLower.includes('vbn')) return 'VOLTAGE B-N';
+
       if (nameLower.match(/\br(-phase)?\b/) || keyLower.match(/\b(v_?r|u1|r)\b/)) return 'VOLTAGE R-PHASE (V)';
       if (nameLower.match(/\by(-phase)?\b/) || keyLower.match(/\b(v_?y|u2|y)\b/)) return 'VOLTAGE Y-PHASE (V)';
       if (nameLower.match(/\bb(-phase)?\b/) || keyLower.match(/\b(v_?b|u3|b)\b/)) return 'VOLTAGE B-PHASE (V)';
@@ -1935,6 +1943,7 @@ const ConfigTemplates = () => {
 
     // Currents
     if (nameLower.includes('current') || nameLower.includes('amp') || keyLower.startsWith('i') || keyLower.startsWith('a')) {
+      if (nameLower.includes('avg') || nameLower.includes('average')) return 'AVERAGE CURRENT';
       if (nameLower.match(/\br(-phase)?\b/) || keyLower.match(/\b(i_?r|a_?r|i1|a1|r)\b/)) return 'R-CURRENT (A)';
       if (nameLower.match(/\by(-phase)?\b/) || keyLower.match(/\b(i_?y|a_?y|i2|a2|y)\b/)) return 'Y-CURRENT (A)';
       if (nameLower.match(/\bb(-phase)?\b/) || keyLower.match(/\b(i_?b|a_?b|i3|a3|b)\b/)) return 'B-CURRENT (A)';
@@ -2560,55 +2569,128 @@ const ConfigTemplates = () => {
           }
 
           Promise.all(fetchPromises).then(() => {
+            // Write debug info to localStorage to verify allFields content
+            try {
+              localStorage.setItem('debug_fields_json', JSON.stringify({
+                allFields,
+                locName
+              }));
+            } catch (e) {
+              console.error('Debug write error:', e);
+            }
+
             const usedFields = new Set();
-            const findField = (...suggestionKeys) => {
-              // 1. Exact case-insensitive match (highest priority)
-              for (const suggestionKey of suggestionKeys) {
-                const upperKey = suggestionKey.toUpperCase();
-                const found = allFields.find(f => 
-                  !usedFields.has(f.id) && 
-                  ((f.label || '').toUpperCase() === upperKey || (f.id || '').toUpperCase() === upperKey)
-                );
-                if (found) {
-                  usedFields.add(found.id);
-                  return found.id;
-                }
+            const findFieldByModuleAndLabel = (deviceKeywords, labelKeywords) => {
+              // 1. Filter fields by device keywords in their label (e.g. check if the label has [T&H_178] or [EM_LIVEWIZE_178])
+              const candidateFields = allFields.filter(f => {
+                const labelUpper = String(f.label || '').toUpperCase();
+                return deviceKeywords.some(kw => labelUpper.includes(kw.toUpperCase()));
+              });
+
+              // 2. Search candidates by label keywords (case-insensitive)
+              for (const kw of labelKeywords) {
+                const upperKw = kw.toUpperCase();
+                const found = candidateFields.find(f => {
+                  const label = String(f.label || '').toUpperCase();
+                  const id = String(f.id).toUpperCase();
+                  return label.includes(upperKw) || id.includes(upperKw);
+                });
+                if (found) return found.id;
               }
-              // 2. Partial includes match (only for keys > 2 chars)
-              for (const suggestionKey of suggestionKeys) {
-                if (suggestionKey.length <= 2) continue;
-                const upperKey = suggestionKey.toUpperCase();
-                const found = allFields.find(f => 
-                  !usedFields.has(f.id) && 
-                  ((f.label || '').toUpperCase().includes(upperKey) || (f.id || '').toUpperCase().includes(upperKey))
-                );
-                if (found) {
-                  usedFields.add(found.id);
-                  return found.id;
-                }
+
+              // Fallback: search all fields if module-specific search failed
+              for (const kw of labelKeywords) {
+                const upperKw = kw.toUpperCase();
+                const found = allFields.find(f => {
+                  const label = String(f.label || '').toUpperCase();
+                  const id = String(f.id).toUpperCase();
+                  return label.includes(upperKw) || id.includes(upperKw);
+                });
+                if (found) return found.id;
               }
+
               return '';
             };
+
+            const selectedDevice = locInfo && locInfo.deviceList ? locInfo.deviceList.find(d => String(d.id) === String(value)) : null;
+            const selectedDeviceName = selectedDevice ? (selectedDevice.label.split(' / ')[1] || selectedDevice.label) : '';
+
+            // Extract numeric suffix to match peer devices (e.g. 178)
+            const getDeviceSuffix = (name) => {
+              const match = String(name).match(/\d+$/);
+              return match ? match[0] : '';
+            };
+            const selectedSuffix = getDeviceSuffix(selectedDeviceName);
+
+            // Detect if selected device is sensor or meter
+            const isSelectedSensor = selectedDeviceName.toUpperCase().includes('T&H') || selectedDeviceName.toUpperCase().includes('TEMP') || selectedDeviceName.toUpperCase().includes('SENSOR');
+            const isSelectedMeter = selectedDeviceName.toUpperCase().includes('EM') || selectedDeviceName.toUpperCase().includes('LIVEWIZE') || selectedDeviceName.toUpperCase().includes('METER');
+
+            let peerSensorName = '';
+            let peerMeterName = '';
+
+            if (locInfo && locInfo.deviceList) {
+              if (isSelectedMeter) {
+                // Find sensor with the same numeric suffix first
+                let peer = locInfo.deviceList.find(d => {
+                  const name = (d.label.split(' / ')[1] || d.label).toUpperCase();
+                  const nameSuffix = getDeviceSuffix(name);
+                  return name !== selectedDeviceName.toUpperCase() && 
+                         nameSuffix && nameSuffix === selectedSuffix && 
+                         (name.includes('T&H') || name.includes('TEMP') || name.includes('SENSOR'));
+                });
+                // Fallback to any sensor in the building if suffix match not found
+                if (!peer) {
+                  peer = locInfo.deviceList.find(d => {
+                    const name = (d.label.split(' / ')[1] || d.label).toUpperCase();
+                    return name !== selectedDeviceName.toUpperCase() && (name.includes('T&H') || name.includes('TEMP') || name.includes('SENSOR'));
+                  });
+                }
+                if (peer) peerSensorName = peer.label.split(' / ')[1] || peer.label;
+              }
+              
+              if (isSelectedSensor) {
+                // Find meter with the same numeric suffix first
+                let peer = locInfo.deviceList.find(d => {
+                  const name = (d.label.split(' / ')[1] || d.label).toUpperCase();
+                  const nameSuffix = getDeviceSuffix(name);
+                  return name !== selectedDeviceName.toUpperCase() && 
+                         nameSuffix && nameSuffix === selectedSuffix && 
+                         (name.includes('EM') || name.includes('LIVEWIZE') || name.includes('METER'));
+                });
+                // Fallback to any meter in the building if suffix match not found
+                if (!peer) {
+                  peer = locInfo.deviceList.find(d => {
+                    const name = (d.label.split(' / ')[1] || d.label).toUpperCase();
+                    return name !== selectedDeviceName.toUpperCase() && (name.includes('EM') || name.includes('LIVEWIZE') || name.includes('METER'));
+                  });
+                }
+                if (peer) peerMeterName = peer.label.split(' / ')[1] || peer.label;
+              }
+            }
+
+            const sensorKeywords = isSelectedSensor ? [selectedDeviceName] : (peerSensorName ? [peerSensorName] : ['T&H', 'TEMP', 'SENSOR']);
+            const meterKeywords = isSelectedMeter ? [selectedDeviceName] : (peerMeterName ? [peerMeterName] : ['EM', 'METER', 'LIVEWIZE']);
 
             setter(prev => ({
               ...prev,
               device: value,
-              temperature: findField('ROOM TEMP', 'ROOM_TEMP', 'TEMPERATURE', 'TEMPARATURE', 'TEMP'),
-              humidity: findField('HUMIDITY', 'HUMID', 'HUM', 'RH'),
-              ampere: findField('CURRENT L1', 'L1 AMPS', 'AMPERE', 'AMP', 'AMPS', 'CURRENT'),
-              kw: findField('KW-R', 'KW', 'POWER', 'LOAD', 'TOTAL_KW', 'ACTIVE_POWER'),
-              avgVoltageLL: findField('AVG. VOLATGE L-L', 'AVG VOLTAGE L-L', 'AVG VLL', 'VLL AVG', 'AVG. VOLTAGE L-L'),
-              avgCurrent: findField('AVERAGE CURRENT', 'I AVG', 'IAVG', 'AVG CURRENT'),
-              avgPowerKva: findField('POWER KVA (AVG)', 'POWER KVA', 'KVA (AVG)', 'APPARENT POWER AVG', 'KVA AVG', 'AVG KVA'),
-              voltageRN: findField('VOLTAGE R-N', 'VRN', 'V RN', 'VOLTAGE R', 'VR', 'U1'),
-              voltageYN: findField('VOLTAGE Y-N', 'VYN', 'V YN', 'VOLTAGE Y', 'VY', 'U2'),
-              voltageBR: findField('VOLTAGE B-R', 'VBR', 'V BR', 'VOLTAGE B', 'VB', 'U3'),
-              currentL1: findField('CURRENT L1', 'L1 AMPS', 'IR', 'A1', 'R-CURRENT', 'CURRENT R'),
-              currentL2: findField('CURRENT L2', 'L2 AMPS', 'IY', 'A2', 'Y-CURRENT', 'CURRENT Y'),
-              currentL3: findField('CURRENT L3', 'L3 AMPS', 'IB', 'A3', 'B-CURRENT', 'CURRENT B'),
-              kwR: findField('KW-R', 'KW R', 'R-KW', 'KW_R'),
-              kwY: findField('KW-Y', 'KW Y', 'Y-KW', 'KW_Y'),
-              kwB: findField('KW-B', 'KW B', 'B-KW', 'KW_B')
+              temperature: findFieldByModuleAndLabel(sensorKeywords, ['ROOM TEMP', 'ROOM_TEMP', 'TEMPERATURE', 'TEMP']),
+              humidity: findFieldByModuleAndLabel(sensorKeywords, ['ROOM HUMIDITY', 'HUMIDITY', 'HUMID', 'RH']),
+              ampere: findFieldByModuleAndLabel(meterKeywords, ['AVG CURRENT', 'AVERAGE CURRENT', 'I AVG', 'CURRENT L1', 'AMPERE', 'AMP', 'CURRENT']),
+              kw: findFieldByModuleAndLabel(meterKeywords, ['TOTAL KW', 'ACTIVE POWER', 'KW', 'POWER', 'TOTAL_KW', 'ACTIVE_POWER']),
+              avgVoltageLL: findFieldByModuleAndLabel(meterKeywords, ['AVG. VOLATGE L-L', 'AVG VOLTAGE L-L', 'AVG VLL', 'VLL AVG']),
+              avgCurrent: findFieldByModuleAndLabel(meterKeywords, ['AVG CURRENT', 'AVERAGE CURRENT', 'I AVG']),
+              avgPowerKva: findFieldByModuleAndLabel(meterKeywords, ['POWER KVA (AVG)', 'POWER KVA', 'KVA (AVG)', 'APPARENT POWER AVG', 'KVA AVG', 'AVG KVA']),
+              voltageRN: findFieldByModuleAndLabel(meterKeywords, ['VOLTAGE R-N', 'VRN', 'V RN', 'VOLTAGE R', 'VR', 'U1']),
+              voltageYN: findFieldByModuleAndLabel(meterKeywords, ['VOLTAGE Y-N', 'VYN', 'V YN', 'VOLTAGE Y', 'VY', 'U2']),
+              voltageBR: findFieldByModuleAndLabel(meterKeywords, ['VOLTAGE B-R', 'VBR', 'V BR', 'VOLTAGE B', 'VB', 'U3']),
+              currentL1: findFieldByModuleAndLabel(meterKeywords, ['CURRENT L1', 'L1 AMPS', 'IR', 'A1', 'R-CURRENT', 'CURRENT R']),
+              currentL2: findFieldByModuleAndLabel(meterKeywords, ['CURRENT L2', 'L2 AMPS', 'IY', 'A2', 'Y-CURRENT', 'CURRENT Y']),
+              currentL3: findFieldByModuleAndLabel(meterKeywords, ['CURRENT L3', 'L3 AMPS', 'IB', 'A3', 'B-CURRENT', 'CURRENT B']),
+              kwR: findFieldByModuleAndLabel(meterKeywords, ['KW-R', 'KW R', 'R-KW', 'KW_R']),
+              kwY: findFieldByModuleAndLabel(meterKeywords, ['KW-Y', 'KW Y', 'Y-KW', 'KW_Y']),
+              kwB: findFieldByModuleAndLabel(meterKeywords, ['KW-B', 'KW B', 'B-KW', 'KW_B'])
             }));
           });
           return;
@@ -3072,6 +3154,49 @@ const ConfigTemplates = () => {
     };
     fetchTemplates();
   }, []);
+
+  // Auto-load saved AC template when navigating to AC > Overview
+  useEffect(() => {
+    if (selectedCategory === 'AC' && selectedModule === 'Overview') {
+      const existing = savedTemplates.find(t =>
+        t.category === 'AC' &&
+        t.module === 'Overview' &&
+        t.mapping?.acConfig?.acUnit
+      );
+      if (existing && !acConfig.acUnit) {
+        const savedAcConfig = existing.mapping.acConfig || {};
+        const loadedAcUnit = savedAcConfig.acUnit;
+        setAcConfig({
+          organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '',
+          acUnit: loadedAcUnit, temperature: '', humidity: '', ampere: '', kw: '',
+          avgVoltageLL: '', avgCurrent: '', avgPowerKva: '',
+          voltageRN: '', voltageYN: '', voltageBR: '',
+          currentL1: '', currentL2: '', currentL3: '',
+          kwR: '', kwY: '', kwB: '',
+          enabled: true, autoMode: 'SCHEDULE',
+          ...savedAcConfig
+        });
+        setTemplateName(loadedAcUnit);
+        const loaded = existing.mapping.rules || [
+          existing.mapping.rule1Config || existing.mapping.ruleEngineConfig || initialRuleState,
+          existing.mapping.rule2Config || initialRuleState
+        ];
+        setAcRules(loaded);
+        if (existing.mapping.globalHierarchy) setGlobalLocation(existing.mapping.globalHierarchy);
+
+        // Fetch location details so device dropdowns work
+        const building = savedAcConfig.building;
+        if (building) {
+          fetchLocationDetails(building);
+        }
+        // Fetch device details so register dropdowns work
+        const device = savedAcConfig.device;
+        if (device) {
+          fetchDeviceDetails(device);
+        }
+      }
+    }
+  }, [selectedCategory, selectedModule, savedTemplates]);
 
 
   // Identify disabled towers for UI feedback in dropdowns
@@ -5630,6 +5755,7 @@ const ConfigTemplates = () => {
                                 t.mapping?.acConfig?.acUnit === targetVal
                               );
                               if (existing) {
+                                setEditingTemplateId(existing.id);
                                 setAcConfig(existing.mapping.acConfig || {
                                   organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: targetVal,
                                   temperature: '', humidity: '', ampere: '', kw: '',
@@ -5698,6 +5824,7 @@ const ConfigTemplates = () => {
                                 }
                                 if (existing.mapping.globalHierarchy) setGlobalLocation(existing.mapping.globalHierarchy);
                               } else {
+                                setEditingTemplateId(null);
                                 setAcConfig({
                                   organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '',
                                   acUnit: targetVal, temperature: '', humidity: '', ampere: '', kw: '',
@@ -5781,6 +5908,35 @@ const ConfigTemplates = () => {
                                       </div>
                                     ));
                                   })()}
+                                </div>
+                              </div>
+
+                              <div className="p-3 rounded-4 bg-dark bg-opacity-40 border border-info border-opacity-15 mb-3">
+                                <div className="d-flex justify-content-between align-items-center mb-2">
+                                  <span className="text-secondary fs-10 uppercase fw-black opacity-60">DEBUG: LOADED DEVICES</span>
+                                </div>
+                                <div className="text-info fs-10 font-monospace" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                  {Object.keys(locationDetails).map(loc => (
+                                    <div key={loc} className="mb-2">
+                                      <strong>Location {loc}:</strong>
+                                      <div className="ms-2">
+                                        {(locationDetails[loc]?.deviceList || []).map(d => {
+                                          const devInfo = deviceDetails[d.id];
+                                          const moduleCount = devInfo ? Object.keys(devInfo.modules || {}).length : 'NOT_LOADED';
+                                          return (
+                                            <div key={d.id}>
+                                              - {d.label} (ID: {d.id}) | Modules: {moduleCount}
+                                              {devInfo && Object.values(devInfo.modules).map(m => (
+                                                <div key={m.id} className="ms-3 text-secondary">
+                                                  * [{m.name}] Fields: {(m.fields || []).map(f => `${f.label} (${f.id})`).join(', ')}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
                               </div>
 
