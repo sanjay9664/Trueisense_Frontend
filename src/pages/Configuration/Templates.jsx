@@ -659,8 +659,7 @@ const ConfigTemplates = () => {
     };
 
     fetchLiveTelemetry();
-    const interval = setInterval(fetchLiveTelemetry, 2000);
-    return () => clearInterval(interval);
+    // Removed setInterval to prevent continuous 2-second API polling on the Templates page
   }, [selectedCategory, selectedModule, acConfig.device, acConfig.temperature, acConfig.humidity, acConfig.ampere, acConfig.kw, acConfig.avgVoltageLL, acConfig.avgCurrent, acConfig.avgPowerKva, acConfig.voltageRN, acConfig.voltageYN, acConfig.voltageBR, acConfig.currentL1, acConfig.currentL2, acConfig.currentL3, acConfig.kwR, acConfig.kwY, acConfig.kwB]);
 
   const [selectedUgPumpNo, setSelectedUgPumpNo] = useState(1);
@@ -1197,7 +1196,7 @@ const ConfigTemplates = () => {
     ugStartPressConfig, ugStopPressConfig, ugLocalModeConfig, ugRemoteModeConfig,
     ugTankLevelConfig, pressureConfig,
     elecVoltageConfig, elecCurrentConfig, elecSystemConfig, elecConsumptionConfig,
-    locationIdMap, locationDetails, deviceDetails,
+    locationIdMap,
     emVoltageConfig, emCurrentConfig, emPowerConfig, emSystemConfig, emConsumptionConfig,
     emChangeConfig, emWarningConfig, emReadConfig,
     dgEngineConfig, dgPowerConfig, dgFuelConfig, dgFaultConfig, acConfig
@@ -1970,21 +1969,6 @@ const ConfigTemplates = () => {
       const data = await getSochiotDeviceDetails(deviceId);
       if (data) {
         let moduleSource = [];
-        
-        // If device has a uuid, fetch the actual instantiated modules with instantiated IDs and fields!
-        if (data.uuid) {
-          try {
-            console.log('Fetching instantiated modules for device uuid:', data.uuid);
-            const instModules = await getSochiotDeviceModules(data.uuid);
-            if (instModules && instModules.length > 0) {
-              moduleSource = instModules;
-            } else if (instModules && instModules.data && instModules.data.length > 0) {
-              moduleSource = instModules.data;
-            }
-          } catch (err) {
-            console.error('Error fetching instantiated modules:', err);
-          }
-        }
         
         // Fallback to static template modules if instantiated modules fetch returned empty
         if (moduleSource.length === 0) {
@@ -7512,3 +7496,4 @@ const ConfigTemplates = () => {
 };
 
 export default ConfigTemplates;
+

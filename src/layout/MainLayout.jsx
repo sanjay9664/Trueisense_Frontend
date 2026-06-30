@@ -391,8 +391,8 @@ const MainLayout = ({ children }) => {
     // Initial sync on mount
     syncUserPermissions();
 
-    // Poll every 5 seconds for live database updates
-    const interval = setInterval(syncUserPermissions, 5000);
+    // Poll every 5 minutes for live database updates
+    const interval = setInterval(syncUserPermissions, 300000);
     return () => clearInterval(interval);
   }, []);
 
