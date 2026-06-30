@@ -88,6 +88,7 @@ const ConfigTemplates = () => {
   const [deviceIdInput, setDeviceIdInput] = useState('');
   const [gatewayUuidInput, setGatewayUuidInput] = useState('');
   const [filterModule, setFilterModule] = useState('ALL');
+  const [savedSettingsSearchTerm, setSavedSettingsSearchTerm] = useState('');
   const [selectedTemplates, setSelectedTemplates] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
@@ -2963,7 +2964,43 @@ const ConfigTemplates = () => {
         const locInfo = locationDetails[locName];
         const allLocationFields = [];
         if (locInfo && locInfo.deviceList) {
-          locInfo.deviceList.forEach(d => {
+          // Identify selected device and its name/suffix
+          const selectedDeviceId = rowState.device || globalLocation.device;
+          const selectedDeviceObj = locInfo.deviceList.find(d => String(d.id) === String(selectedDeviceId));
+          const selectedDeviceName = selectedDeviceObj ? (selectedDeviceObj.label.split(' / ')[1] || selectedDeviceObj.label) : '';
+
+          const getDeviceSuffix = (name) => {
+            const match = String(name).match(/\d+$/);
+            return match ? match[0] : '';
+          };
+          const selectedSuffix = getDeviceSuffix(selectedDeviceName);
+
+          // Filter devices to only show:
+          // 1. The selected device itself.
+          // 2. The peer device (on the same gateway/location) that has the same suffix.
+          const allowedDevices = locInfo.deviceList.filter(d => {
+            if (String(d.id) === String(selectedDeviceId)) return true;
+            
+            // Check if suffix matches
+            const name = (d.label.split(' / ')[1] || d.label).toUpperCase();
+            const nameSuffix = getDeviceSuffix(name);
+            if (selectedSuffix && nameSuffix === selectedSuffix) {
+              // Exclude IO modules, rules, and testing registers
+              const isIOorRule = name.includes('IO_') || name.includes('RULE') || name.includes('TEST') || name.includes('INPUT') || name.includes('OUTPUT');
+              if (isIOorRule) return false;
+              
+              // Keep only actual peer meters/sensors
+              const isSensor = name.includes('T&H') || name.includes('TEMP') || name.includes('SENSOR');
+              const isMeter = name.includes('EM') || name.includes('LIVEWIZE') || name.includes('METER') || name.includes('MFM') || name.includes('EPM');
+              return isSensor || isMeter;
+            }
+            return false;
+          });
+
+          // If no allowed devices (e.g., none selected yet), fallback to all devices
+          const devicesToScan = allowedDevices.length > 0 ? allowedDevices : locInfo.deviceList;
+
+          devicesToScan.forEach(d => {
             const devInfo = deviceDetails[d.id];
             if (devInfo && devInfo.modules) {
               Object.values(devInfo.modules).forEach(m => {
@@ -5911,34 +5948,7 @@ const ConfigTemplates = () => {
                                 </div>
                               </div>
 
-                              <div className="p-3 rounded-4 bg-dark bg-opacity-40 border border-info border-opacity-15 mb-3">
-                                <div className="d-flex justify-content-between align-items-center mb-2">
-                                  <span className="text-secondary fs-10 uppercase fw-black opacity-60">DEBUG: LOADED DEVICES</span>
-                                </div>
-                                <div className="text-info fs-10 font-monospace" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                                  {Object.keys(locationDetails).map(loc => (
-                                    <div key={loc} className="mb-2">
-                                      <strong>Location {loc}:</strong>
-                                      <div className="ms-2">
-                                        {(locationDetails[loc]?.deviceList || []).map(d => {
-                                          const devInfo = deviceDetails[d.id];
-                                          const moduleCount = devInfo ? Object.keys(devInfo.modules || {}).length : 'NOT_LOADED';
-                                          return (
-                                            <div key={d.id}>
-                                              - {d.label} (ID: {d.id}) | Modules: {moduleCount}
-                                              {devInfo && Object.values(devInfo.modules).map(m => (
-                                                <div key={m.id} className="ms-3 text-secondary">
-                                                  * [{m.name}] Fields: {(m.fields || []).map(f => `${f.label} (${f.id})`).join(', ')}
-                                                </div>
-                                              ))}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
+
 
                               <div className={`transition-all ${!acConfig.enabled ? 'opacity-25 grayscale' : ''}`}>
                                 <Row className="g-3 position-relative z-1">
@@ -5974,19 +5984,19 @@ const ConfigTemplates = () => {
                                         <hr className="border-info opacity-20 my-3" />
                                         <Row className="g-3">
                                           {[
-                                            { label: 'TEMPERATURE (C)', key: 'temperature', placeholder: 'e.g. temperature' },
-                                            { label: 'HUMIDITY (%)', key: 'humidity', placeholder: 'e.g. humidity' },
-                                            { label: 'AMPERE (A)', key: 'ampere', placeholder: 'e.g. ampere' },
-                                            { label: 'KW (KW)', key: 'kw', placeholder: 'e.g. kw' },
-                                            { label: 'AVG. VOLTAGE L-L', key: 'avgVoltageLL', placeholder: 'e.g. average voltage L-L' },
-                                            { label: 'AVERAGE CURRENT', key: 'avgCurrent', placeholder: 'e.g. average current' },
-                                            { label: 'POWER KVA (AVG)', key: 'avgPowerKva', placeholder: 'e.g. power kVA average' },
-                                            { label: 'VOLTAGE R-N', key: 'voltageRN', placeholder: 'e.g. voltage R-N' },
-                                            { label: 'VOLTAGE Y-N', key: 'voltageYN', placeholder: 'e.g. voltage Y-N' },
-                                            { label: 'VOLTAGE B-R', key: 'voltageBR', placeholder: 'e.g. voltage B-R' },
-                                            { label: 'CURRENT L1', key: 'currentL1', placeholder: 'e.g. current L1' },
-                                            { label: 'CURRENT L2', key: 'currentL2', placeholder: 'e.g. current L2' },
-                                            { label: 'CURRENT L3', key: 'currentL3', placeholder: 'e.g. current L3' },
+                                            { label: 'Room Temp', key: 'temperature', placeholder: 'e.g. temperature' },
+                                            { label: 'Humidity', key: 'humidity', placeholder: 'e.g. humidity' },
+                                            { label: 'Ampere', key: 'ampere', placeholder: 'e.g. ampere' },
+                                            { label: 'kW', key: 'kw', placeholder: 'e.g. kw' },
+                                            { label: 'Avg. Volatge L-L', key: 'avgVoltageLL', placeholder: 'e.g. average voltage L-L' },
+                                            { label: 'Average Current', key: 'avgCurrent', placeholder: 'e.g. average current' },
+                                            { label: 'Power kVA (Avg.)', key: 'avgPowerKva', placeholder: 'e.g. power kVA average' },
+                                            { label: 'Voltage R-N', key: 'voltageRN', placeholder: 'e.g. voltage R-N' },
+                                            { label: 'Voltage Y-N', key: 'voltageYN', placeholder: 'e.g. voltage Y-N' },
+                                            { label: 'Voltage B-R', key: 'voltageBR', placeholder: 'e.g. voltage B-R' },
+                                            { label: 'Current L1', key: 'currentL1', placeholder: 'e.g. current L1' },
+                                            { label: 'Current L2', key: 'currentL2', placeholder: 'e.g. current L2' },
+                                            { label: 'Current L3', key: 'currentL3', placeholder: 'e.g. current L3' },
                                             { label: 'KW-R', key: 'kwR', placeholder: 'e.g. kw-R' },
                                             { label: 'KW-Y', key: 'kwY', placeholder: 'e.g. kw-Y' },
                                             { label: 'KW-B', key: 'kwB', placeholder: 'e.g. kw-B' }
@@ -6489,9 +6499,9 @@ const ConfigTemplates = () => {
         </>
       ) : (
         <div className="list-mode-view scale-in">
-          <div className="d-flex align-items-center justify-content-between mb-4 p-3 bg-dark bg-opacity-20 rounded-4 border border-white border-opacity-5">
-            <div className="d-flex align-items-center gap-3">
-              <span className="fs-11 text-secondary fw-black uppercase letter-spacing-1 ms-2">Filter By:</span>
+          <div className="d-flex align-items-center justify-content-between mb-4 p-3 bg-dark bg-opacity-20 rounded-4 border border-white border-opacity-5 flex-wrap gap-3">
+            <div className="d-flex align-items-center gap-3 flex-grow-1">
+              <span className="fs-11 text-secondary fw-black uppercase letter-spacing-1 ms-2 text-nowrap">Filter By:</span>
               <div className="d-flex gap-2 flex-wrap">
                 {['ALL', ...Array.from(new Set(savedTemplates.map(t => t.category === 'AC' ? 'AC' : t.module))).sort()].map(mod => (
                   <Button
@@ -6505,6 +6515,19 @@ const ConfigTemplates = () => {
                 ))}
               </div>
             </div>
+
+            {/* SEARCH INPUT BAR */}
+            <div className="d-flex align-items-center gap-2" style={{ minWidth: '240px' }}>
+              <Form.Control
+                type="text"
+                placeholder="SEARCH AC, PUMPS, METERS..."
+                value={savedSettingsSearchTerm}
+                onChange={(e) => setSavedSettingsSearchTerm(e.target.value)}
+                className="premium-input px-3 fs-11 fw-bold border-info border-opacity-20 shadow-inner text-white bg-black bg-opacity-30"
+                style={{ height: '38px', borderRadius: '8px', letterSpacing: '0.5px' }}
+              />
+            </div>
+
             <div className="d-flex align-items-center gap-3">
               <Form.Check
                 type="checkbox"
@@ -6521,72 +6544,96 @@ const ConfigTemplates = () => {
 
           <Row className="g-4">
             {savedTemplates.filter(t => {
-              if (filterModule === 'ALL') return true;
-              const itemKey = t.category === 'AC' ? 'AC' : t.module;
-              return itemKey === filterModule;
+              // Module filter
+              if (filterModule !== 'ALL') {
+                const itemKey = t.category === 'AC' ? 'AC' : t.module;
+                if (itemKey !== filterModule) return false;
+              }
+              // Text search filter
+              if (savedSettingsSearchTerm) {
+                const query = savedSettingsSearchTerm.toLowerCase();
+                const nameMatch = (t.name || '').toLowerCase().includes(query);
+                const modMatch = (t.module || '').toLowerCase().includes(query);
+                const catMatch = (t.category || '').toLowerCase().includes(query);
+                const unitMatch = (t.mapping?.acConfig?.acUnit || '').toLowerCase().includes(query);
+                const energyTargetMatch = (t.mapping?.energyMeteringTarget || '').toLowerCase().includes(query);
+                return nameMatch || modMatch || catMatch || unitMatch || energyTargetMatch;
+              }
+              return true;
             }).length === 0 ? (
               <Col md={12}>
                 <Card className="bg-dark bg-opacity-20 border border-white border-opacity-5 rounded-4 p-5 text-center">
                   <LayoutGrid size={48} className="text-secondary mb-3 mx-auto opacity-50" />
                   <h5 className="text-white fw-bold">{filterModule === 'ALL' ? 'No Settings Saved' : `No ${filterModule} Mappings Found`}</h5>
                   <p className="text-secondary">{filterModule === 'ALL' ? "Click 'Add New Mapping' to start configuring your SCADA modules." : "Try clearing the filter or adding a new mapping for this module."}</p>
-                  {filterModule !== 'ALL' && (
-                    <Button variant="outline-info" className="mt-3 fs-11 fw-black px-4" onClick={() => setFilterModule('ALL')}>SHOW ALL MAPPINGS</Button>
+                  {(filterModule !== 'ALL' || savedSettingsSearchTerm) && (
+                    <Button variant="outline-info" className="mt-3 fs-11 fw-black px-4" onClick={() => { setFilterModule('ALL'); setSavedSettingsSearchTerm(''); }}>CLEAR FILTERS</Button>
                   )}
                 </Card>
               </Col>
             ) : (
               savedTemplates
                 .filter(t => {
-                  if (filterModule === 'ALL') return true;
-                  const itemKey = t.category === 'AC' ? 'AC' : t.module;
-                  return itemKey === filterModule;
+                  if (filterModule !== 'ALL') {
+                    const itemKey = t.category === 'AC' ? 'AC' : t.module;
+                    if (itemKey !== filterModule) return false;
+                  }
+                  if (savedSettingsSearchTerm) {
+                    const query = savedSettingsSearchTerm.toLowerCase();
+                    const nameMatch = (t.name || '').toLowerCase().includes(query);
+                    const modMatch = (t.module || '').toLowerCase().includes(query);
+                    const catMatch = (t.category || '').toLowerCase().includes(query);
+                    const unitMatch = (t.mapping?.acConfig?.acUnit || '').toLowerCase().includes(query);
+                    const energyTargetMatch = (t.mapping?.energyMeteringTarget || '').toLowerCase().includes(query);
+                    return nameMatch || modMatch || catMatch || unitMatch || energyTargetMatch;
+                  }
+                  return true;
                 })
                 .map((template) => (
                   <Col xl={3} lg={4} md={6} key={template.id}>
                     <Card className={`premium-figma-card border-0 rounded-4 overflow-hidden h-100 d-flex flex-column transition-all ${selectedTemplates.includes(template.id) ? 'selected-premium-card' : ''}`}>
-                      <div className="card-inner-glow"></div>
-                      <div className="p-3 position-relative z-1 flex-grow-1">
-                        <div className="mb-4 position-relative">
-                          {/* TOP ROW: Checkbox & Preview */}
-                          <div className="d-flex justify-content-between align-items-center mb-2">
-                            <div className="d-flex align-items-center gap-2">
-                              <Form.Check
-                                type="checkbox"
-                                className="scada-checkbox info m-0"
-                                checked={selectedTemplates.includes(template.id)}
-                                onChange={() => toggleSelectTemplate(template.id)}
-                              />
-                              <div className="status-indicator-pulse"></div>
-                            </div>
+                       <div className="card-inner-glow"></div>
+                       <div className="p-3 position-relative z-1 flex-grow-1">
+                         <div className="mb-4 position-relative">
+                           {/* TOP ROW: Checkbox & Preview */}
+                           <div className="d-flex justify-content-between align-items-center mb-2">
+                             <div className="d-flex align-items-center gap-2">
+                               <Form.Check
+                                 type="checkbox"
+                                 className="scada-checkbox info m-0"
+                                 checked={selectedTemplates.includes(template.id)}
+                                 onChange={() => toggleSelectTemplate(template.id)}
+                               />
+                               <div className="status-indicator-pulse"></div>
+                             </div>
 
-                            <div
-                              className="preview-badge-premium d-flex align-items-center gap-2 cursor-pointer transition-all hover-glow-blue"
-                              style={{
-                                padding: '4px 12px',
-                                borderRadius: '8px',
-                                background: 'rgba(56, 189, 248, 0.12)',
-                                border: '1px solid rgba(56, 189, 248, 0.2)',
-                                backdropFilter: 'blur(8px)',
-                                boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
-                                zIndex: 10
-                              }}
-                              onClick={(e) => { e.stopPropagation(); handlePreview(template); }}
-                            >
-                              <Eye size={12} className="text-info shadow-glow-blue" />
-                              <span className="fw-black text-info uppercase tracking-widest" style={{ fontSize: '0.65rem' }}>Preview</span>
-                            </div>
-                          </div>
+                             <div
+                               className="preview-badge-premium d-flex align-items-center gap-2 cursor-pointer transition-all hover-glow-blue"
+                               style={{
+                                 padding: '4px 12px',
+                                 borderRadius: '8px',
+                                 background: 'rgba(56, 189, 248, 0.12)',
+                                 border: '1px solid rgba(56, 189, 248, 0.2)',
+                                 backdropFilter: 'blur(8px)',
+                                 boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                                 zIndex: 10
+                               }}
+                               onClick={(e) => { e.stopPropagation(); handlePreview(template); }}
+                             >
+                               <Eye size={12} className="text-info shadow-glow-blue" />
+                               <span className="fw-black text-info uppercase tracking-widest" style={{ fontSize: '0.65rem' }}>Preview</span>
+                             </div>
+                           </div>
 
-                          {/* TEXT SECTION: Moved Lower */}
-                          <div className="mt-3 pt-1">
-                            <h6 className="text-info fw-black mb-0 tracking-widest uppercase text-truncate" style={{ fontSize: '0.7rem', textShadow: '0 0 12px rgba(56, 189, 248, 0.4)' }}>
-                              {template.name || template.module}
-                            </h6>
-                            <div className="text-secondary fs-12 uppercase fw-bold opacity-40 letter-spacing-1 text-truncate mt-1" style={{ fontSize: '0.55rem' }}>
-                              {template.module} • {template.category}
-                            </div>
-                          </div>
+                           {/* TEXT SECTION: Moved Lower */}
+                           <div className="mt-3 pt-1">
+                             <h6 className="text-info fw-black mb-0 tracking-widest uppercase text-truncate" style={{ fontSize: '0.7rem', textShadow: '0 0 12px rgba(56, 189, 248, 0.4)' }}>
+                               {template.category === 'AC' ? (template.mapping?.acConfig?.acUnit || template.name || template.module) : (template.name || template.module)}
+                             </h6>
+                             <div className="text-secondary fs-12 uppercase fw-bold opacity-40 letter-spacing-1 text-truncate mt-1" style={{ fontSize: '0.55rem' }}>
+                               {template.module} • {template.category}
+                             </div>
+                           </div>
                         </div>
 
                         {template.module === 'AG Tank' && template.mapping && template.mapping.agTankRange && (template.mapping.agTankRange.domStart || template.mapping.agTankRange.flushStart) && (
