@@ -4,6 +4,7 @@ import { FileText, Download, FileSpreadsheet, Zap, CheckCircle2, AlertCircle, Ac
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
+import { normalizeMeterName, normalizeMeterSortKey } from '../../services/meterUtils';
 
 const PARAMETERS = [
   { key: 'ebKwh', label: 'EB Active Energy (EB KWH)', defaultKey: '3,151' },
@@ -115,8 +116,8 @@ const EnergyPDFReport = () => {
 
   // Natural sort helper
   const naturalSort = (a, b) => {
-    const partsA = String(a).split(/(\d+)/);
-    const partsB = String(b).split(/(\d+)/);
+    const partsA = String(normalizeMeterSortKey(a)).split(/(\d+)/);
+    const partsB = String(normalizeMeterSortKey(b)).split(/(\d+)/);
     for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
       if (partsA[i] === undefined) return -1;
       if (partsB[i] === undefined) return 1;
@@ -149,7 +150,7 @@ const EnergyPDFReport = () => {
       .filter(t => t.module === 'Sub Meters')
       .map(t => ({
         id: t.id,
-        label: t.mapping?.energyMeteringTarget || t.name,
+        label: normalizeMeterName(t.mapping?.energyMeteringTarget || t.name),
         description: 'Sub Meter • Energy Report Target',
         sochiotDeviceId: t.mapping?.deviceId,
         sochiotMeta: null,

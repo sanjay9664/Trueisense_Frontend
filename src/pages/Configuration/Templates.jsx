@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Row, Col, Card, Form, Button, Badge, Modal, Spinner } from 'react-bootstrap';
 import { Save, Settings, Database, Activity, Zap, Droplets, LayoutGrid, CheckCircle2, ChevronRight, Layers, History, Eye, Info, X, Home, ArrowDownCircle, ArrowUpCircle, MapPin, AlertTriangle, Wind, Thermometer } from 'lucide-react';
 import { loginToSochiot, getSochiotUserMe, getSochiotLocationData, getSochiotDeviceDetails, getSochiotZoneData, getSochiotDeviceModules } from '../../services/authService';
+import { normalizeMeterName } from '../../services/meterUtils';
 
 const CONFIG_API_URL = '/sochiot-config';
 
@@ -533,7 +534,15 @@ const ConfigTemplates = () => {
   const [energyMeteringTarget, setEnergyMeteringTarget] = useState('');
   const [subMeterCategory, setSubMeterCategory] = useState('');
   const [vrvConfig, setVrvConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', vrvZone: '', temperature: '', humidity: '', co2: '', tvoc: '', aqi: '', targetTemp: '', enabled: true });
-  const [acConfig, setAcConfig] = useState({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '', temperature: '', humidity: '', enabled: true, autoMode: 'SCHEDULE' });
+  const [acConfig, setAcConfig] = useState({
+    organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '',
+    temperature: '', humidity: '', ampere: '', kw: '', 
+    avgVoltageLL: '', avgCurrent: '', avgPowerKva: '',
+    voltageRN: '', voltageYN: '', voltageBR: '',
+    currentL1: '', currentL2: '', currentL3: '',
+    kwR: '', kwY: '', kwB: '',
+    enabled: true, autoMode: 'SCHEDULE'
+  });
   const [acRules, setAcRules] = useState([initialRuleState, initialRuleState]);
   const acRule1Config = acRules[0] || initialRuleState;
   const acRule2Config = acRules[1] || initialRuleState;
@@ -553,6 +562,106 @@ const ConfigTemplates = () => {
     });
   };
   const [activeACRegisterTarget, setActiveACRegisterTarget] = useState('temperature');
+  const [liveAcTelemetry, setLiveAcTelemetry] = useState({
+    temperature: null,
+    humidity: null,
+    ampere: null,
+    kw: null,
+    avgVoltageLL: null,
+    avgCurrent: null,
+    avgPowerKva: null,
+    voltageRN: null,
+    voltageYN: null,
+    voltageBR: null,
+    currentL1: null,
+    currentL2: null,
+    currentL3: null,
+    kwR: null,
+    kwY: null,
+    kwB: null
+  });
+
+  useEffect(() => {
+    if (selectedCategory !== 'AC' || selectedModule !== 'Overview') return;
+    
+    const fetchLiveTelemetry = async () => {
+      try {
+        const modulesToPoll = new Set();
+        const registers = [
+          acConfig.temperature, acConfig.humidity, acConfig.ampere, acConfig.kw,
+          acConfig.avgVoltageLL, acConfig.avgCurrent, acConfig.avgPowerKva,
+          acConfig.voltageRN, acConfig.voltageYN, acConfig.voltageBR,
+          acConfig.currentL1, acConfig.currentL2, acConfig.currentL3,
+          acConfig.kwR, acConfig.kwY, acConfig.kwB
+        ];
+        registers.forEach(reg => {
+          if (reg && typeof reg === 'string' && reg.includes('::')) {
+            const parts = reg.split('::');
+            if (parts[0]) modulesToPoll.add(String(parts[0]));
+          }
+        });
+        
+        if (acConfig.device) {
+          modulesToPoll.add(String(acConfig.device));
+        }
+
+        const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
+        const pollList = Array.from(modulesToPoll);
+        if (pollList.length === 0) return;
+        
+        const url = `${backendUrl}/api/templates/stats?modules=${pollList.join(',')}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const stats = await res.json();
+          
+          const getRegisterValue = (registerStr) => {
+            if (!registerStr) return null;
+            if (registerStr.includes('::')) {
+              const [modId, fieldId] = registerStr.split('::');
+              const stat = stats.find(s => String(s.moduleId) === String(modId) || String(s.meta?.module_id) === String(modId));
+              if (stat && stat.meta && stat.meta[fieldId] !== undefined) {
+                return stat.meta[fieldId];
+              }
+            } else {
+              for (const stat of stats) {
+                if (stat.meta && stat.meta[registerStr] !== undefined) {
+                  return stat.meta[registerStr];
+                }
+              }
+            }
+            return null;
+          };
+
+          setLiveAcTelemetry(prev => {
+            return {
+              temperature: getRegisterValue(acConfig.temperature) !== null ? getRegisterValue(acConfig.temperature) : (acConfig.temperature ? prev.temperature : null),
+              humidity: getRegisterValue(acConfig.humidity) !== null ? getRegisterValue(acConfig.humidity) : (acConfig.humidity ? prev.humidity : null),
+              ampere: getRegisterValue(acConfig.ampere) !== null ? getRegisterValue(acConfig.ampere) : (acConfig.ampere ? prev.ampere : null),
+              kw: getRegisterValue(acConfig.kw) !== null ? getRegisterValue(acConfig.kw) : (acConfig.kw ? prev.kw : null),
+              avgVoltageLL: getRegisterValue(acConfig.avgVoltageLL) !== null ? getRegisterValue(acConfig.avgVoltageLL) : (acConfig.avgVoltageLL ? prev.avgVoltageLL : null),
+              avgCurrent: getRegisterValue(acConfig.avgCurrent) !== null ? getRegisterValue(acConfig.avgCurrent) : (acConfig.avgCurrent ? prev.avgCurrent : null),
+              avgPowerKva: getRegisterValue(acConfig.avgPowerKva) !== null ? getRegisterValue(acConfig.avgPowerKva) : (acConfig.avgPowerKva ? prev.avgPowerKva : null),
+              voltageRN: getRegisterValue(acConfig.voltageRN) !== null ? getRegisterValue(acConfig.voltageRN) : (acConfig.voltageRN ? prev.voltageRN : null),
+              voltageYN: getRegisterValue(acConfig.voltageYN) !== null ? getRegisterValue(acConfig.voltageYN) : (acConfig.voltageYN ? prev.voltageYN : null),
+              voltageBR: getRegisterValue(acConfig.voltageBR) !== null ? getRegisterValue(acConfig.voltageBR) : (acConfig.voltageBR ? prev.voltageBR : null),
+              currentL1: getRegisterValue(acConfig.currentL1) !== null ? getRegisterValue(acConfig.currentL1) : (acConfig.currentL1 ? prev.currentL1 : null),
+              currentL2: getRegisterValue(acConfig.currentL2) !== null ? getRegisterValue(acConfig.currentL2) : (acConfig.currentL2 ? prev.currentL2 : null),
+              currentL3: getRegisterValue(acConfig.currentL3) !== null ? getRegisterValue(acConfig.currentL3) : (acConfig.currentL3 ? prev.currentL3 : null),
+              kwR: getRegisterValue(acConfig.kwR) !== null ? getRegisterValue(acConfig.kwR) : (acConfig.kwR ? prev.kwR : null),
+              kwY: getRegisterValue(acConfig.kwY) !== null ? getRegisterValue(acConfig.kwY) : (acConfig.kwY ? prev.kwY : null),
+              kwB: getRegisterValue(acConfig.kwB) !== null ? getRegisterValue(acConfig.kwB) : (acConfig.kwB ? prev.kwB : null)
+            };
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching template preview stats:', err);
+      }
+    };
+
+    fetchLiveTelemetry();
+    const interval = setInterval(fetchLiveTelemetry, 2000);
+    return () => clearInterval(interval);
+  }, [selectedCategory, selectedModule, acConfig.device, acConfig.temperature, acConfig.humidity, acConfig.ampere, acConfig.kw, acConfig.avgVoltageLL, acConfig.avgCurrent, acConfig.avgPowerKva, acConfig.voltageRN, acConfig.voltageYN, acConfig.voltageBR, acConfig.currentL1, acConfig.currentL2, acConfig.currentL3, acConfig.kwR, acConfig.kwY, acConfig.kwB]);
 
   const [selectedUgPumpNo, setSelectedUgPumpNo] = useState(1);
   const [pressureTarget, setPressureTarget] = useState('');
@@ -609,9 +718,12 @@ const ConfigTemplates = () => {
   ];
 
   const energyMetersList = useMemo(() => {
-    const list = [{ name: 'Meter-1', id: 'EM-MAIN' }];
+    const list = [{ name: 'Sensor Meter', id: 'EM-MAIN' }];
     for (let i = 1; i <= 50; i++) {
-      list.push({ name: `Meter-${i}`, id: `SM-METER-${String(i).padStart(2, '0')}` });
+      let name = `Meter-${i}`;
+      if (i === 1) name = 'Sensor Meter';
+      else if (i === 2) name = 'Normal Light Meter';
+      list.push({ name, id: `SM-METER-${String(i).padStart(2, '0')}` });
     }
     return list;
   }, []);
@@ -1642,7 +1754,37 @@ const ConfigTemplates = () => {
           
           const searchTerms = searchKey === 'temperature' 
             ? ['TEMPERATURE', 'TEMP', 'TMP', 'T']
-            : ['HUMIDITY', 'HUM', 'HM', 'H'];
+            : searchKey === 'humidity'
+            ? ['HUMIDITY', 'HUM', 'HM', 'H']
+            : searchKey === 'ampere'
+            ? ['AMPERE', 'AMP', 'AMPS', 'I', 'CURRENT']
+            : searchKey === 'kw'
+            ? ['KW', 'POWER', 'LOAD', 'P']
+            : searchKey === 'avgVoltageLL'
+            ? ['AVG. VOLATGE L-L', 'AVG VOLTAGE L-L', 'AVG VLL', 'VLL AVG', 'AVG. VOLTAGE L-L']
+            : searchKey === 'avgCurrent'
+            ? ['AVERAGE CURRENT', 'I AVG', 'IAVG', 'AVG CURRENT']
+            : searchKey === 'avgPowerKva'
+            ? ['POWER KVA (AVG)', 'APPARENT POWER AVG', 'KVA AVG', 'AVG KVA']
+            : searchKey === 'voltageRN'
+            ? ['VOLTAGE R-N', 'VRN', 'V RN', 'VOLTAGE R', 'VR', 'U1']
+            : searchKey === 'voltageYN'
+            ? ['VOLTAGE Y-N', 'VYN', 'V YN', 'VOLTAGE Y', 'VY', 'U2']
+            : searchKey === 'voltageBR'
+            ? ['VOLTAGE B-R', 'VBR', 'V BR', 'VOLTAGE B', 'VB', 'U3']
+            : searchKey === 'currentL1'
+            ? ['CURRENT L1', 'L1 AMPS', 'IR', 'A1', 'R-CURRENT', 'CURRENT R']
+            : searchKey === 'currentL2'
+            ? ['CURRENT L2', 'L2 AMPS', 'IY', 'A2', 'Y-CURRENT', 'CURRENT Y']
+            : searchKey === 'currentL3'
+            ? ['CURRENT L3', 'L3 AMPS', 'IB', 'A3', 'B-CURRENT', 'CURRENT B']
+            : searchKey === 'kwR'
+            ? ['KW-R', 'KW R', 'R-KW', 'KW_R']
+            : searchKey === 'kwY'
+            ? ['KW-Y', 'KW Y', 'Y-KW', 'KW_Y']
+            : searchKey === 'kwB'
+            ? ['KW-B', 'KW B', 'B-KW', 'KW_B']
+            : [];
 
           // 1. Exact match on rawId or label
           for (const term of searchTerms) {
@@ -1667,7 +1809,13 @@ const ConfigTemplates = () => {
 
         setAcConfig(prev => {
           const updated = { ...prev };
-          const keys = ['temperature', 'humidity'];
+          const keys = [
+            'temperature', 'humidity', 'ampere', 'kw',
+            'avgVoltageLL', 'avgCurrent', 'avgPowerKva',
+            'voltageRN', 'voltageYN', 'voltageBR',
+            'currentL1', 'currentL2', 'currentL3',
+            'kwR', 'kwY', 'kwB'
+          ];
           let changed = false;
           
           keys.forEach(k => {
@@ -2003,6 +2151,27 @@ const ConfigTemplates = () => {
     }
     return null;
   };
+
+  useEffect(() => {
+    if (selectedCategory === 'AC') {
+      let locName = acConfig.building || globalLocation.building;
+      if (locName) {
+        const szOptions = getFieldList('subZone', acConfig);
+        const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+        if (selectedSZ && selectedSZ.type === 'location') {
+          locName = acConfig.subZone || globalLocation.subZone;
+        }
+        const locInfo = locationDetails[locName];
+        if (locInfo && locInfo.deviceList) {
+          locInfo.deviceList.forEach(d => {
+            if (!deviceDetails[d.id]) {
+              fetchDeviceDetails(d.id);
+            }
+          });
+        }
+      }
+    }
+  }, [selectedCategory, acConfig.building, acConfig.subZone, globalLocation.building, globalLocation.subZone, locationDetails, deviceDetails]);
 
   const handleConfigChange = async (config, setter, key, rawValue) => {
     const value = rawValue === 'UNSELECT' ? '' : rawValue;
@@ -2377,7 +2546,92 @@ const ConfigTemplates = () => {
     } else if (key === 'device') {
       updated.module = '';
       updated.field = '';
-      if (value) fetchDeviceDetails(value);
+      if (value) {
+        if (selectedCategory === 'AC') {
+          let locName = updated.building || globalLocation.building;
+          const szOptions = getFieldList('subZone', updated);
+          const selectedSZ = szOptions.find(o => o.id === (updated.subZone || globalLocation.subZone));
+          if (selectedSZ && selectedSZ.type === 'location') {
+            locName = updated.subZone || globalLocation.subZone;
+          }
+          const locInfo = locationDetails[locName];
+          const allFields = [];
+          
+          const fetchPromises = [];
+          if (locInfo && locInfo.deviceList) {
+            locInfo.deviceList.forEach(d => {
+              fetchPromises.push(
+                fetchDeviceDetails(d.id).then(modules => {
+                  if (modules) {
+                    Object.values(modules).forEach(m => {
+                      (m.fields || []).forEach(f => {
+                        const labelStr = `[${d.label.split(' / ')[1] || d.label}] [${m.name}] ${f.label}`;
+                        allFields.push({ ...f, label: labelStr, id: `${m.id}::${f.id}` });
+                      });
+                    });
+                  }
+                })
+              );
+            });
+          }
+
+          Promise.all(fetchPromises).then(() => {
+            const usedFields = new Set();
+            const findField = (...suggestionKeys) => {
+              // 1. Exact case-insensitive match (highest priority)
+              for (const suggestionKey of suggestionKeys) {
+                const upperKey = suggestionKey.toUpperCase();
+                const found = allFields.find(f => 
+                  !usedFields.has(f.id) && 
+                  ((f.label || '').toUpperCase() === upperKey || (f.id || '').toUpperCase() === upperKey)
+                );
+                if (found) {
+                  usedFields.add(found.id);
+                  return found.id;
+                }
+              }
+              // 2. Partial includes match (only for keys > 2 chars)
+              for (const suggestionKey of suggestionKeys) {
+                if (suggestionKey.length <= 2) continue;
+                const upperKey = suggestionKey.toUpperCase();
+                const found = allFields.find(f => 
+                  !usedFields.has(f.id) && 
+                  ((f.label || '').toUpperCase().includes(upperKey) || (f.id || '').toUpperCase().includes(upperKey))
+                );
+                if (found) {
+                  usedFields.add(found.id);
+                  return found.id;
+                }
+              }
+              return '';
+            };
+
+            setter(prev => ({
+              ...prev,
+              device: value,
+              temperature: findField('ROOM TEMP', 'ROOM_TEMP', 'TEMPERATURE', 'TEMPARATURE', 'TEMP'),
+              humidity: findField('HUMIDITY', 'HUMID', 'HUM', 'RH'),
+              ampere: findField('CURRENT L1', 'L1 AMPS', 'AMPERE', 'AMP', 'AMPS', 'CURRENT'),
+              kw: findField('KW-R', 'KW', 'POWER', 'LOAD', 'TOTAL_KW', 'ACTIVE_POWER'),
+              avgVoltageLL: findField('AVG. VOLATGE L-L', 'AVG VOLTAGE L-L', 'AVG VLL', 'VLL AVG', 'AVG. VOLTAGE L-L'),
+              avgCurrent: findField('AVERAGE CURRENT', 'I AVG', 'IAVG', 'AVG CURRENT'),
+              avgPowerKva: findField('POWER KVA (AVG)', 'POWER KVA', 'KVA (AVG)', 'APPARENT POWER AVG', 'KVA AVG', 'AVG KVA'),
+              voltageRN: findField('VOLTAGE R-N', 'VRN', 'V RN', 'VOLTAGE R', 'VR', 'U1'),
+              voltageYN: findField('VOLTAGE Y-N', 'VYN', 'V YN', 'VOLTAGE Y', 'VY', 'U2'),
+              voltageBR: findField('VOLTAGE B-R', 'VBR', 'V BR', 'VOLTAGE B', 'VB', 'U3'),
+              currentL1: findField('CURRENT L1', 'L1 AMPS', 'IR', 'A1', 'R-CURRENT', 'CURRENT R'),
+              currentL2: findField('CURRENT L2', 'L2 AMPS', 'IY', 'A2', 'Y-CURRENT', 'CURRENT Y'),
+              currentL3: findField('CURRENT L3', 'L3 AMPS', 'IB', 'A3', 'B-CURRENT', 'CURRENT B'),
+              kwR: findField('KW-R', 'KW R', 'R-KW', 'KW_R'),
+              kwY: findField('KW-Y', 'KW Y', 'Y-KW', 'KW_Y'),
+              kwB: findField('KW-B', 'KW B', 'B-KW', 'KW_B')
+            }));
+          });
+          return;
+        } else {
+          fetchDeviceDetails(value);
+        }
+      }
     } else if (key === 'module') {
       updated.field = '';
     }
@@ -2633,6 +2887,31 @@ const ConfigTemplates = () => {
     const isVRVConfig = rowState?.temperature !== undefined || rowState?.humidity !== undefined || rowState?.co2 !== undefined || rowState?.tvoc !== undefined || rowState?.aqi !== undefined;
 
     if (key === 'field') {
+      if (selectedCategory === 'AC') {
+        let locName = buildingName;
+        const szOptions = getFieldList('subZone', rowState);
+        const selectedSZ = szOptions.find(o => o.id === subZoneName);
+        if (selectedSZ && selectedSZ.type === 'location') {
+          locName = subZoneName;
+        }
+        const locInfo = locationDetails[locName];
+        const allLocationFields = [];
+        if (locInfo && locInfo.deviceList) {
+          locInfo.deviceList.forEach(d => {
+            const devInfo = deviceDetails[d.id];
+            if (devInfo && devInfo.modules) {
+              Object.values(devInfo.modules).forEach(m => {
+                (m.fields || []).forEach(f => {
+                  const labelStr = `[${d.label.split(' / ')[1] || d.label}] [${m.name}] ${f.label}`;
+                  allLocationFields.push({ label: labelStr, id: `${m.id}::${f.id}` });
+                });
+              });
+            }
+          });
+        }
+        if (allLocationFields.length > 0) return allLocationFields;
+      }
+
       if (selectedModuleId === 'ALL' || isDGConfig || isEnergyMeteringConfig || isVRVConfig) {
         const allFields = [];
         Object.values(devInfo.modules).forEach(m => {
@@ -3391,7 +3670,7 @@ const ConfigTemplates = () => {
         totalKw: { low: '', normalMin: '', normalMax: '', high: '' },
         totalKva: { low: '', normalMin: '', normalMax: '', high: '' }
       });
-      setEnergyMeteringTarget(template.mapping.energyMeteringTarget || '');
+      setEnergyMeteringTarget(normalizeMeterName(template.mapping.energyMeteringTarget || ''));
       setSubMeterCategory(template.mapping.subMeterCategory || '');
       setVrvConfig(template.mapping.vrvConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', vrvZone: '', temperature: '', humidity: '', co2: '', tvoc: '', aqi: '', targetTemp: '', enabled: true });
       setAcConfig(template.mapping.acConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '', temperature: '', humidity: '', enabled: true });
@@ -5367,7 +5646,15 @@ const ConfigTemplates = () => {
                                 t.mapping?.acConfig?.acUnit === targetVal
                               );
                               if (existing) {
-                                setAcConfig(existing.mapping.acConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: targetVal, temperature: '', humidity: '', enabled: true, autoMode: 'SCHEDULE' });
+                                setAcConfig(existing.mapping.acConfig || {
+                                  organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: targetVal,
+                                  temperature: '', humidity: '', ampere: '', kw: '',
+                                  avgVoltageLL: '', avgCurrent: '', avgPowerKva: '',
+                                  voltageRN: '', voltageYN: '', voltageBR: '',
+                                  currentL1: '', currentL2: '', currentL3: '',
+                                  kwR: '', kwY: '', kwB: '',
+                                  enabled: true, autoMode: 'SCHEDULE'
+                                });
                                 const loaded = existing.mapping.rules || [
                                   existing.mapping.rule1Config || existing.mapping.ruleEngineConfig || initialRuleState,
                                   existing.mapping.rule2Config || initialRuleState
@@ -5429,7 +5716,12 @@ const ConfigTemplates = () => {
                               } else {
                                 setAcConfig({
                                   organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '',
-                                  acUnit: targetVal, temperature: '', humidity: '', enabled: true, autoMode: 'SCHEDULE'
+                                  acUnit: targetVal, temperature: '', humidity: '', ampere: '', kw: '',
+                                  avgVoltageLL: '', avgCurrent: '', avgPowerKva: '',
+                                  voltageRN: '', voltageYN: '', voltageBR: '',
+                                  currentL1: '', currentL2: '', currentL3: '',
+                                  kwR: '', kwY: '', kwB: '',
+                                  enabled: true, autoMode: 'SCHEDULE'
                                 });
                                 setAcRules([initialRuleState, initialRuleState]);
                               }
@@ -5463,19 +5755,48 @@ const ConfigTemplates = () => {
                               </div>
                               
                               <div className="p-3 rounded-4 bg-dark bg-opacity-40 border border-info border-opacity-15 mb-3">
-                                <div className="d-flex justify-content-between align-items-center mb-2">
+                                <div className="d-flex justify-content-between align-items-center mb-3">
                                   <span className="text-secondary fs-12 uppercase fw-black opacity-60">TELEMETRY PREVIEW</span>
                                   <Badge bg="info" className="px-3 py-1 rounded-pill">LIVE</Badge>
                                 </div>
-                                <div className="d-flex gap-4">
-                                  <div className="flex-fill p-2 rounded bg-black bg-opacity-35 border border-white border-opacity-5">
-                                    <span className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-1 d-block">TEMPERATURE</span>
-                                    <span className="fs-6 text-white fw-black font-monospace">30 <span className="fs-12 text-secondary">°C</span></span>
-                                  </div>
-                                  <div className="flex-fill p-2 rounded bg-black bg-opacity-35 border border-white border-opacity-5">
-                                    <span className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-1 d-block">HUMIDITY</span>
-                                    <span className="fs-6 text-white fw-black font-monospace">46.3 <span className="fs-12 text-secondary">%</span></span>
-                                  </div>
+                                <div className="d-flex flex-wrap gap-2">
+                                  {(() => {
+                                    const params = [
+                                      { key: 'temperature', label: 'TEMPERATURE', unit: '°C' },
+                                      { key: 'humidity', label: 'HUMIDITY', unit: '%' },
+                                      { key: 'ampere', label: 'AMPERE', unit: 'A' },
+                                      { key: 'kw', label: 'KW', unit: 'kW' },
+                                      { key: 'avgVoltageLL', label: 'AVG. VOLTAGE L-L', unit: 'V' },
+                                      { key: 'avgCurrent', label: 'AVERAGE CURRENT', unit: 'A' },
+                                      { key: 'avgPowerKva', label: 'POWER KVA (AVG)', unit: 'kVA' },
+                                      { key: 'voltageRN', label: 'VOLTAGE R-N', unit: 'V' },
+                                      { key: 'voltageYN', label: 'VOLTAGE Y-N', unit: 'V' },
+                                      { key: 'voltageBR', label: 'VOLTAGE B-R', unit: 'V' },
+                                      { key: 'currentL1', label: 'CURRENT L1', unit: 'A' },
+                                      { key: 'currentL2', label: 'CURRENT L2', unit: 'A' },
+                                      { key: 'currentL3', label: 'CURRENT L3', unit: 'A' },
+                                      { key: 'kwR', label: 'KW-R', unit: 'kW' },
+                                      { key: 'kwY', label: 'KW-Y', unit: 'kW' },
+                                      { key: 'kwB', label: 'KW-B', unit: 'kW' }
+                                    ];
+                                    const mapped = params.filter(p => acConfig[p.key]);
+                                    if (mapped.length === 0) {
+                                      return (
+                                        <div className="text-center py-2 w-100 opacity-50">
+                                          <span className="fs-11 text-secondary uppercase fw-bold">No registers mapped yet. Map registers below to view preview.</span>
+                                        </div>
+                                      );
+                                    }
+                                    return mapped.map((p, idx) => (
+                                      <div key={idx} className="p-2 rounded bg-black bg-opacity-35 border border-white border-opacity-5 text-center flex-fill" style={{ minWidth: '120px' }}>
+                                        <span className="fs-9 text-secondary fw-black uppercase tracking-widest opacity-50 mb-1 d-block">{p.label}</span>
+                                        <span className="fs-6 text-white fw-black font-monospace">
+                                          {liveAcTelemetry[p.key] !== null ? liveAcTelemetry[p.key] : '--'} 
+                                          <span className="fs-12 text-secondary ms-1">{p.unit}</span>
+                                        </span>
+                                      </div>
+                                    ));
+                                  })()}
                                 </div>
                               </div>
 
@@ -5514,9 +5835,24 @@ const ConfigTemplates = () => {
                                         <Row className="g-3">
                                           {[
                                             { label: 'TEMPERATURE (C)', key: 'temperature', placeholder: 'e.g. temperature' },
-                                            { label: 'HUMIDITY (%)', key: 'humidity', placeholder: 'e.g. humidity' }
+                                            { label: 'HUMIDITY (%)', key: 'humidity', placeholder: 'e.g. humidity' },
+                                            { label: 'AMPERE (A)', key: 'ampere', placeholder: 'e.g. ampere' },
+                                            { label: 'KW (KW)', key: 'kw', placeholder: 'e.g. kw' },
+                                            { label: 'AVG. VOLTAGE L-L', key: 'avgVoltageLL', placeholder: 'e.g. average voltage L-L' },
+                                            { label: 'AVERAGE CURRENT', key: 'avgCurrent', placeholder: 'e.g. average current' },
+                                            { label: 'POWER KVA (AVG)', key: 'avgPowerKva', placeholder: 'e.g. power kVA average' },
+                                            { label: 'VOLTAGE R-N', key: 'voltageRN', placeholder: 'e.g. voltage R-N' },
+                                            { label: 'VOLTAGE Y-N', key: 'voltageYN', placeholder: 'e.g. voltage Y-N' },
+                                            { label: 'VOLTAGE B-R', key: 'voltageBR', placeholder: 'e.g. voltage B-R' },
+                                            { label: 'CURRENT L1', key: 'currentL1', placeholder: 'e.g. current L1' },
+                                            { label: 'CURRENT L2', key: 'currentL2', placeholder: 'e.g. current L2' },
+                                            { label: 'CURRENT L3', key: 'currentL3', placeholder: 'e.g. current L3' },
+                                            { label: 'KW-R', key: 'kwR', placeholder: 'e.g. kw-R' },
+                                            { label: 'KW-Y', key: 'kwY', placeholder: 'e.g. kw-Y' },
+                                            { label: 'KW-B', key: 'kwB', placeholder: 'e.g. kw-B' }
                                           ].map((f, fIdx) => {
                                             const isActive = activeACRegisterTarget === f.key;
+                                            const rawFields = getFieldList('field', { ...globalLocation, ...acConfig, building: acConfig.building || globalLocation.building });
                                             return (
                                               <Col md={6} key={fIdx}>
                                                 <div
@@ -5529,16 +5865,45 @@ const ConfigTemplates = () => {
                                                 >
                                                   <div className="d-flex justify-content-between align-items-center mb-2">
                                                     <Form.Label className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-0">{f.label}</Form.Label>
-                                                    {isActive && <Badge bg="info" className="fs-9 uppercase px-2 py-0.5 rounded-pill">ACTIVE TARGET</Badge>}
+                                                    <div className="d-flex align-items-center gap-2">
+                                                      {acConfig[f.key] && (
+                                                        <span
+                                                          className="fs-10 text-danger fw-bold cursor-pointer me-1"
+                                                          style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setAcConfig(prev => ({ ...prev, [f.key]: '' }));
+                                                          }}
+                                                          onMouseOver={(e) => e.target.style.opacity = '1'}
+                                                          onMouseOut={(e) => e.target.style.opacity = '0.7'}
+                                                        >
+                                                          ✕ CLEAR
+                                                        </span>
+                                                      )}
+                                                      {isActive && <Badge bg="info" className="fs-9 uppercase px-2 py-0.5 rounded-pill">ACTIVE TARGET</Badge>}
+                                                    </div>
                                                   </div>
-                                                  <Form.Control
-                                                    type="text"
-                                                    placeholder={f.placeholder}
-                                                    className="premium-input p-3 fs-11 fw-bold border-info border-opacity-20 shadow-inner text-white bg-black bg-opacity-30"
-                                                    style={{ height: '42px' }}
-                                                    value={acConfig[f.key] || ''}
-                                                    onChange={(e) => setAcConfig(prev => ({ ...prev, [f.key]: e.target.value }))}
-                                                  />
+                                                  <Form.Select
+                                                     className="premium-input px-3 fs-11 fw-bold border-info border-opacity-20 shadow-inner text-white bg-black bg-opacity-30"
+                                                     style={{ height: '42px', color: '#fff' }}
+                                                     value={acConfig[f.key] || ''}
+                                                     onChange={(e) => {
+                                                       const val = e.target.value;
+                                                       setAcConfig(prev => ({ ...prev, [f.key]: val === 'UNSELECT' ? '' : val }));
+                                                     }}
+                                                     onFocus={() => setActiveACRegisterTarget(f.key)}
+                                                   >
+                                                     <option value="" style={{ background: '#1c1c1e', color: '#8e8e93' }}>SELECT REGISTER</option>
+                                                     <option value="UNSELECT" style={{ background: '#1c1c1e', color: '#ef4444', fontWeight: 'bold' }}>✕ UNSELECT / CLEAR</option>
+                                                     {acConfig[f.key] && !rawFields.some(opt => String(opt.id) === String(acConfig[f.key])) && (
+                                                       <option value={acConfig[f.key]} style={{ background: '#1c1c1e' }}>{acConfig[f.key]}</option>
+                                                     )}
+                                                     {rawFields.map(opt => (
+                                                       <option key={opt.id} value={opt.id} style={{ background: '#1c1c1e', color: '#fff' }}>
+                                                         {opt.label} ({opt.id.split('::')[1]})
+                                                       </option>
+                                                     ))}
+                                                   </Form.Select>
                                                 </div>
                                               </Col>
                                             );
@@ -6127,7 +6492,7 @@ const ConfigTemplates = () => {
                           <div className="mt-3 mb-3 p-2 rounded-3 bg-dark bg-opacity-40 border border-white border-opacity-5 scada-data-box">
                             <div className="d-flex justify-content-between align-items-center px-1">
                               <span className="fs-12 text-secondary uppercase fw-black opacity-60">Target Meter</span>
-                              <span className="fs-11 text-info fw-black tracking-widest">{template.mapping.energyMeteringTarget}</span>
+                              <span className="fs-11 text-info fw-black tracking-widest">{normalizeMeterName(template.mapping.energyMeteringTarget)}</span>
                             </div>
                           </div>
                         )}
@@ -6490,7 +6855,7 @@ const ConfigTemplates = () => {
                             <Zap size={16} /> Energy Meter Analysis Matrix
                           </h6>
                           <div className="badge bg-info bg-opacity-10 text-info border border-info border-opacity-20 px-3 py-1 rounded-pill fs-11 fw-black tracking-widest">
-                            {previewTemplate.mapping.energyMeteringTarget}
+                            {normalizeMeterName(previewTemplate.mapping.energyMeteringTarget)}
                           </div>
                         </div>
                         <Row className="g-3">

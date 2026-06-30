@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Form, Button, Table, Badge, Spinner } from 'react-bootstrap';
 import { FiPlus, FiMail, FiBell, FiCheckCircle, FiXCircle, FiInbox, FiEdit2, FiTrash2, FiX, FiChevronRight, FiZap, FiAlertCircle, FiMessageSquare } from 'react-icons/fi';
 import { useTheme } from '../../context/ThemeContext';
+import { normalizeMeterName } from '../../services/meterUtils';
 import RuleEditModal from './RuleEditModal';
 import { 
   loginToSochiot, 
@@ -917,7 +918,7 @@ const AlarmConfig = () => {
       };
 
       const siteStr = (mapping.globalHierarchy?.building || globalLocation.building || 'BMS').substring(0, 3).toUpperCase();
-      const deviceStr = (mapping.energyMeteringTarget || template.name || 'DEV').substring(0, 3).toUpperCase();
+      const deviceStr = (normalizeMeterName(mapping.energyMeteringTarget || template.name) || 'DEV').substring(0, 3).toUpperCase();
       const eventStr = meta.name.substring(0, 3).toUpperCase();
       const srNo = Math.floor(100 + Math.random() * 900);
       const ruleName = `${siteStr}${deviceStr}${eventStr}${srNo}`.replace(/[^A-Z0-9]/g, '');
@@ -1447,7 +1448,7 @@ const AlarmConfig = () => {
             >
               {currentSubCategoryMeters.map(meter => (
                 <option key={meter.id} value={meter.id}>
-                  {meter.mapping?.energyMeteringTarget || meter.name}
+                  {normalizeMeterName(meter.mapping?.energyMeteringTarget || meter.name)}
                 </option>
               ))}
             </Form.Select>

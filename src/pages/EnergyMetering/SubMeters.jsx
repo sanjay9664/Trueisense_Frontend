@@ -4,6 +4,7 @@ import { Zap, Activity, Cpu, ShieldCheck, RefreshCcw, Settings2, Plus, Trash2, F
 import StatusBadge from '../../components/StatusBadge';
 import PdfButton from '../../components/PdfButton';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
+import { normalizeMeterName, normalizeMeterSortKey } from '../../services/meterUtils';
 import { useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import './MFMMeter.css';
@@ -374,7 +375,7 @@ const fetchSavedMeterGroups = async (meters) => {
 };
 
 const naturalSort = (a, b) => {
-  const clean = (str) => String(str || '').trim();
+  const clean = (str) => String(normalizeMeterSortKey(str) || '').trim();
   const partsA = clean(a).split(/(\d+)/);
   const partsB = clean(b).split(/(\d+)/);
   const len = Math.max(partsA.length, partsB.length);
@@ -420,7 +421,7 @@ const SubMeters = () => {
   const getTemplateForMeter = (meterLabel) => {
     return templates.find(t =>
       t.module === 'Sub Meters' &&
-      String(t.mapping?.energyMeteringTarget || t.name || '').trim().toUpperCase() === String(meterLabel || '').trim().toUpperCase()
+      String(normalizeMeterName(t.mapping?.energyMeteringTarget || t.name || '')).trim().toUpperCase() === String(normalizeMeterName(meterLabel || '')).trim().toUpperCase()
     );
   };
 
@@ -547,9 +548,9 @@ const SubMeters = () => {
     if (subMeterTemplates.length > 0) {
       setMeters(prev => {
         const mapped = subMeterTemplates.map(t => {
-          const label = t.mapping?.energyMeteringTarget || t.name;
+          const label = normalizeMeterName(t.mapping?.energyMeteringTarget || t.name);
           const meterId = `SM-${t.id}`;
-          const existing = prev.find(m => m.id === meterId || String(m.label).toUpperCase() === String(label).toUpperCase());
+          const existing = prev.find(m => m.id === meterId || String(normalizeMeterName(m.label)).toUpperCase() === String(label).toUpperCase());
           return {
             id: meterId,
             templateId: String(t.id),
@@ -809,7 +810,7 @@ const SubMeters = () => {
     if (!activeMeter) return null;
     const template = templates.find(t =>
       t.module === 'Sub Meters' &&
-      String(t.mapping?.energyMeteringTarget || '').trim().toUpperCase() === String(activeMeter.label || '').trim().toUpperCase()
+      String(normalizeMeterName(t.mapping?.energyMeteringTarget || '')).trim().toUpperCase() === String(normalizeMeterName(activeMeter.label || '')).trim().toUpperCase()
     );
     if (!template || !template.mapping) return null;
     const mapping = template.mapping;

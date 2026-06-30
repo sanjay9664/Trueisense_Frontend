@@ -4,6 +4,7 @@ import { Zap, Activity, ShieldCheck, HelpCircle, ChevronLeft, ChevronRight, Play
 import StatusBadge from '../../components/StatusBadge';
 import PdfButton from '../../components/PdfButton';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
+import { normalizeMeterName } from '../../services/meterUtils';
 import { io } from 'socket.io-client';
 
 class ErrorBoundary extends React.Component {
@@ -987,7 +988,7 @@ const MainMeter = () => {
             >
               {energyMeters.map(meter => (
                 <option key={meter.id} value={meter.id} className="bg-dark text-white">
-                  {meter.name || meter.mapping?.energyMeteringTarget || 'Unnamed Meter'}
+                  {normalizeMeterName(meter.name || meter.mapping?.energyMeteringTarget) || 'Unnamed Meter'}
                 </option>
               ))}
             </Form.Select>
@@ -1138,7 +1139,7 @@ const MainMeter = () => {
                 <div className="hud-metric-horizontal">
                   <span className="hud-label">METER TARGET</span>
                   <span className="hud-value text-info font-monospace">
-                    {mainMeterTemplate?.mapping?.energyMeteringTarget || mainMeterTemplate?.name || '—'}
+                    {normalizeMeterName(mainMeterTemplate?.mapping?.energyMeteringTarget || mainMeterTemplate?.name) || '—'}
                   </span>
                 </div>
                 <div className="hud-metric-horizontal">

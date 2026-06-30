@@ -3,6 +3,8 @@ import { Row, Col, Card, Badge, Form, Button, Modal } from 'react-bootstrap';
 import { Wind, Thermometer, Droplets, Zap, Power, Settings, Fan, MapPin, Clock, Info, Activity, Edit2, Eye, EyeOff, Trash2, Play, Square, CheckCircle } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
+import { useDeviceStatus } from '../../services/DeviceStatusContext';
+import io from 'socket.io-client';
 
 // --- MOCK DATA ---
 const INITIAL_ACS = [
@@ -148,9 +150,10 @@ const RealisticAC = ({ unit }) => {
 const ACOverview = () => {
   const { isDark } = useTheme();
   const navigate = useNavigate();
+  const { getOverallStatus } = useDeviceStatus();
   const getMappedTelemetry = (unitName) => {
     try {
-      const templatesStr = localStorage.getItem('bms_config_templates');
+      const templatesStr = localStorage.getItem('scada_templates');
       if (!templatesStr) return null;
       const templates = JSON.parse(templatesStr);
       // Find template for AC Overview matching this unit
@@ -167,6 +170,179 @@ const ACOverview = () => {
     }
     return null;
   };
+
+  const getMappedRules = (unitName) => {
+    try {
+      const templatesStr = localStorage.getItem('scada_templates');
+      if (!templatesStr) return null;
+      const templates = JSON.parse(templatesStr);
+      const match = templates.find(t => 
+        t.category === 'AC' && 
+        t.module === 'Overview' && 
+        t.mapping?.acConfig?.acUnit === unitName
+      );
+      if (match && match.mapping?.rules) {
+        return match.mapping.rules;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return null;
+  };
+
+  const sendRulesToEngineForAC = async (unitName, action) => {
+    try {
+      const templatesStr = localStorage.getItem('scada_templates');
+      if (!templatesStr) return;
+      const templates = JSON.parse(templatesStr);
+      const match = templates.find(t => 
+        t.category === 'AC' && 
+        t.module === 'Overview' && 
+        t.mapping?.acConfig?.acUnit === unitName
+      );
+      if (match) {
+        const rules = match.mapping?.rules || [];
+        const deviceId = match.mapping?.acConfig?.device;
+        if (!deviceId || rules.length === 0) return;
+        
+        const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
+        const token = localStorage.getItem('sochiot_token');
+        
+        for (const rule of rules) {
+          const payload = {
+            moduleId: rule.moduleId || deviceId,
+            settingFields: [
+              { fieldName: "condition_date_time", currentValue: rule.condition?.timeDate || "" },
+              { fieldName: "condition_date_time_repeat_days", currentValue: (rule.condition?.repeatDays || []).join(',') },
+              { fieldName: "consequence_value", currentValue: action === 'START' ? "1" : (action === 'STOP' ? "0" : (rule.consequence?.value || "")) },
+              { fieldName: "condition_type", currentValue: rule.condition?.type || "NA" },
+              { fieldName: "condition_modbus", currentValue: rule.condition?.modbus || "" },
+              { fieldName: "comparison_type", currentValue: rule.condition?.comparisonType || "" },
+              { fieldName: "comparison_value", currentValue: rule.condition?.comparisonValue || "" },
+              { fieldName: "consequence_type", currentValue: rule.consequence?.type || "" },
+              { fieldName: "consequence_modbus", currentValue: rule.consequence?.modbus || "" }
+            ]
+          };
+          
+          await fetch(`${backendUrl}/api/rule-engine/apply`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Error sending rules to rule engine:', e);
+    }
+  };
+
+  const getMasterACOnlineStatus = () => {
+    try {
+      const templatesStr = localStorage.getItem('scada_templates');
+      if (!templatesStr) return false;
+      const templates = JSON.parse(templatesStr);
+      const match = templates.find(t => 
+        t.category === 'AC' && 
+        t.module === 'Overview' && 
+        t.mapping?.acConfig?.acUnit === 'Master AC'
+      );
+      if (match && match.mapping?.acConfig) {
+        const deviceId = match.mapping.acConfig.device;
+        const gatewayUuid = match.mapping.gatewayUuid;
+        let isOnline = getOverallStatus(deviceId, gatewayUuid);
+        return isOnline || !!deviceId;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return false;
+  };
+
+  const applyTempRangeRules = async (startVal, endVal) => {
+    try {
+      const templatesStr = localStorage.getItem('scada_templates');
+      if (!templatesStr) return;
+      const templates = JSON.parse(templatesStr);
+      const matchIndex = templates.findIndex(t => 
+        t.category === 'AC' && 
+        t.module === 'Overview' && 
+        t.mapping?.acConfig?.acUnit === 'Master AC'
+      );
+      if (matchIndex === -1) return;
+      const match = templates[matchIndex];
+      const rules = match.mapping?.rules || [];
+      const deviceId = match.mapping?.acConfig?.device;
+      if (!deviceId || rules.length === 0) return;
+      
+      const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
+      const token = localStorage.getItem('sochiot_token');
+      
+      // Update Rule 1 (Start) comparison value
+      if (rules[0]) {
+        rules[0].condition.comparisonValue = String(startVal);
+        const payload1 = {
+          moduleId: rules[0].moduleId || deviceId,
+          settingFields: [
+            { fieldName: "condition_date_time", currentValue: rules[0].condition?.timeDate || "" },
+            { fieldName: "condition_date_time_repeat_days", currentValue: (rules[0].condition?.repeatDays || []).join(',') },
+            { fieldName: "consequence_value", currentValue: rules[0].consequence?.value || "" },
+            { fieldName: "condition_type", currentValue: rules[0].condition?.type || "MODBUS" },
+            { fieldName: "condition_modbus", currentValue: rules[0].condition?.modbus || "" },
+            { fieldName: "comparison_type", currentValue: rules[0].condition?.comparisonType || "" },
+            { fieldName: "comparison_value", currentValue: String(startVal) },
+            { fieldName: "consequence_type", currentValue: rules[0].consequence?.type || "" },
+            { fieldName: "consequence_modbus", currentValue: rules[0].consequence?.modbus || "" }
+          ]
+        };
+        await fetch(`${backendUrl}/api/rule-engine/apply`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload1)
+        });
+      }
+      
+      // Update Rule 2 (Stop) comparison value
+      if (rules[1]) {
+        rules[1].condition.comparisonValue = String(endVal);
+        const payload2 = {
+          moduleId: rules[1].moduleId || deviceId,
+          settingFields: [
+            { fieldName: "condition_date_time", currentValue: rules[1].condition?.timeDate || "" },
+            { fieldName: "condition_date_time_repeat_days", currentValue: (rules[1].condition?.repeatDays || []).join(',') },
+            { fieldName: "consequence_value", currentValue: rules[1].consequence?.value || "" },
+            { fieldName: "condition_type", currentValue: rules[1].condition?.type || "MODBUS" },
+            { fieldName: "condition_modbus", currentValue: rules[1].condition?.modbus || "" },
+            { fieldName: "comparison_type", currentValue: rules[1].condition?.comparisonType || "" },
+            { fieldName: "comparison_value", currentValue: String(endVal) },
+            { fieldName: "consequence_type", currentValue: rules[1].consequence?.type || "" },
+            { fieldName: "consequence_modbus", currentValue: rules[1].consequence?.modbus || "" }
+          ]
+        };
+        await fetch(`${backendUrl}/api/rule-engine/apply`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload2)
+        });
+      }
+      
+      match.mapping.rules = rules;
+      templates[matchIndex] = match;
+      localStorage.setItem('scada_templates', JSON.stringify(templates));
+      window.dispatchEvent(new Event('storage'));
+      
+    } catch (e) {
+      console.error('Error applying temperature range rules:', e);
+    }
+  };
   const [units, setUnits] = useState(() => {
     const saved = localStorage.getItem('bms_ac_units');
     return saved ? JSON.parse(saved) : INITIAL_ACS;
@@ -177,6 +353,28 @@ const ACOverview = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [formData, setFormData] = useState({});
+  const [showTempRangeModal, setShowTempRangeModal] = useState(false);
+  const [tempRangeData, setTempRangeData] = useState({ startTemp: '28', endTemp: '24' });
+
+  // Live Telemetry for template mapped registers
+  const [liveTelemetry, setLiveTelemetry] = useState({
+    temperature: null,
+    humidity: null,
+    ampere: null,
+    kw: null,
+    avgVoltageLL: null,
+    avgCurrent: null,
+    avgPowerKva: null,
+    voltageRN: null,
+    voltageYN: null,
+    voltageBR: null,
+    currentL1: null,
+    currentL2: null,
+    currentL3: null,
+    kwR: null,
+    kwY: null,
+    kwB: null
+  });
 
   // Group & Schedule State
   const [acGroups, setAcGroups] = useState(() => {
@@ -185,6 +383,195 @@ const ACOverview = () => {
   });
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+
+  useEffect(() => {
+    const fetchLiveTelemetry = async () => {
+      try {
+        const templatesStr = localStorage.getItem('scada_templates');
+        if (!templatesStr) return;
+        const templates = JSON.parse(templatesStr);
+        const match = templates.find(t => 
+          t.category === 'AC' && 
+          t.module === 'Overview' && 
+          t.mapping?.acConfig?.acUnit === 'Master AC'
+        );
+        if (!match || !match.mapping?.acConfig) return;
+        const acConfig = match.mapping.acConfig;
+        
+        // Collect all modules to poll
+        const modulesToPoll = new Set();
+        const registers = [
+          acConfig.temperature, acConfig.humidity, acConfig.ampere, acConfig.kw,
+          acConfig.avgVoltageLL, acConfig.avgCurrent, acConfig.avgPowerKva,
+          acConfig.voltageRN, acConfig.voltageYN, acConfig.voltageBR,
+          acConfig.currentL1, acConfig.currentL2, acConfig.currentL3,
+          acConfig.kwR, acConfig.kwY, acConfig.kwB
+        ];
+        registers.forEach(reg => {
+          if (reg && typeof reg === 'string' && reg.includes('::')) {
+            const parts = reg.split('::');
+            if (parts[0]) modulesToPoll.add(String(parts[0]));
+          }
+        });
+        
+        if (acConfig.device) {
+          modulesToPoll.add(String(acConfig.device));
+        }
+
+        const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
+        const pollList = Array.from(modulesToPoll);
+        const url = pollList.length > 0 
+          ? `${backendUrl}/api/templates/stats?modules=${pollList.join(',')}` 
+          : `${backendUrl}/api/templates/stats`;
+
+        const res = await fetch(url);
+        if (res.ok) {
+          const stats = await res.json();
+          
+          const getRegisterValue = (registerStr) => {
+            if (!registerStr) return null;
+            if (registerStr.includes('::')) {
+              const [modId, fieldId] = registerStr.split('::');
+              const stat = stats.find(s => String(s.moduleId) === String(modId) || String(s.meta?.module_id) === String(modId));
+              if (stat && stat.meta && stat.meta[fieldId] !== undefined) {
+                return stat.meta[fieldId];
+              }
+            } else {
+              for (const stat of stats) {
+                if (stat.meta && stat.meta[registerStr] !== undefined) {
+                  return stat.meta[registerStr];
+                }
+              }
+            }
+            return null;
+          };
+
+          setLiveTelemetry(prev => {
+            const nextTemp = getRegisterValue(acConfig.temperature);
+            const nextHum = getRegisterValue(acConfig.humidity);
+            const nextAmp = getRegisterValue(acConfig.ampere);
+            const nextKw = getRegisterValue(acConfig.kw);
+            const nextAvgVol = getRegisterValue(acConfig.avgVoltageLL);
+            const nextAvgCur = getRegisterValue(acConfig.avgCurrent);
+            const nextAvgKva = getRegisterValue(acConfig.avgPowerKva);
+            const nextVRN = getRegisterValue(acConfig.voltageRN);
+            const nextVYN = getRegisterValue(acConfig.voltageYN);
+            const nextVBR = getRegisterValue(acConfig.voltageBR);
+            const nextIL1 = getRegisterValue(acConfig.currentL1);
+            const nextIL2 = getRegisterValue(acConfig.currentL2);
+            const nextIL3 = getRegisterValue(acConfig.currentL3);
+            const nextKwr = getRegisterValue(acConfig.kwR);
+            const nextKwy = getRegisterValue(acConfig.kwY);
+            const nextKwb = getRegisterValue(acConfig.kwB);
+            return {
+              temperature: nextTemp !== null ? nextTemp : prev.temperature,
+              humidity: nextHum !== null ? nextHum : prev.humidity,
+              ampere: nextAmp !== null ? nextAmp : prev.ampere,
+              kw: nextKw !== null ? nextKw : prev.kw,
+              avgVoltageLL: nextAvgVol !== null ? nextAvgVol : prev.avgVoltageLL,
+              avgCurrent: nextAvgCur !== null ? nextAvgCur : prev.avgCurrent,
+              avgPowerKva: nextAvgKva !== null ? nextAvgKva : prev.avgPowerKva,
+              voltageRN: nextVRN !== null ? nextVRN : prev.voltageRN,
+              voltageYN: nextVYN !== null ? nextVYN : prev.voltageYN,
+              voltageBR: nextVBR !== null ? nextVBR : prev.voltageBR,
+              currentL1: nextIL1 !== null ? nextIL1 : prev.currentL1,
+              currentL2: nextIL2 !== null ? nextIL2 : prev.currentL2,
+              currentL3: nextIL3 !== null ? nextIL3 : prev.currentL3,
+              kwR: nextKwr !== null ? nextKwr : prev.kwR,
+              kwY: nextKwy !== null ? nextKwy : prev.kwY,
+              kwB: nextKwb !== null ? nextKwb : prev.kwB
+            };
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching live telemetry:', err);
+      }
+    };
+
+    fetchLiveTelemetry();
+    const interval = setInterval(fetchLiveTelemetry, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
+    const socket = io(backendUrl, { path: '/socket.io', transports: ['websocket', 'polling'] });
+
+    const handleTelemetry = (stats) => {
+      try {
+        const templatesStr = localStorage.getItem('scada_templates');
+        if (!templatesStr) return;
+        const templates = JSON.parse(templatesStr);
+        const match = templates.find(t => 
+          t.category === 'AC' && 
+          t.module === 'Overview' && 
+          t.mapping?.acConfig?.acUnit === 'Master AC'
+        );
+        if (!match || !match.mapping?.acConfig) return;
+        const acConfig = match.mapping.acConfig;
+
+        const getRegisterValue = (registerStr) => {
+          if (!registerStr) return null;
+          if (registerStr.includes('::')) {
+            const [modId, fieldId] = registerStr.split('::');
+            const stat = stats.find(s => String(s.moduleId) === String(modId) || String(s.meta?.module_id) === String(modId));
+            if (stat && stat.meta && stat.meta[fieldId] !== undefined) {
+              return stat.meta[fieldId];
+            }
+          } else {
+            for (const stat of stats) {
+              if (stat.meta && stat.meta[registerStr] !== undefined) {
+                return stat.meta[registerStr];
+              }
+            }
+          }
+          return null;
+        };
+
+        setLiveTelemetry(prev => {
+          const nextTemp = getRegisterValue(acConfig.temperature);
+          const nextHum = getRegisterValue(acConfig.humidity);
+          const nextAmp = getRegisterValue(acConfig.ampere);
+          const nextKw = getRegisterValue(acConfig.kw);
+          const nextAvgVol = getRegisterValue(acConfig.avgVoltageLL);
+          const nextAvgCur = getRegisterValue(acConfig.avgCurrent);
+          const nextAvgKva = getRegisterValue(acConfig.avgPowerKva);
+          const nextVRN = getRegisterValue(acConfig.voltageRN);
+          const nextVYN = getRegisterValue(acConfig.voltageYN);
+          const nextVBR = getRegisterValue(acConfig.voltageBR);
+          const nextIL1 = getRegisterValue(acConfig.currentL1);
+          const nextIL2 = getRegisterValue(acConfig.currentL2);
+          const nextIL3 = getRegisterValue(acConfig.currentL3);
+          const nextKwr = getRegisterValue(acConfig.kwR);
+          const nextKwy = getRegisterValue(acConfig.kwY);
+          const nextKwb = getRegisterValue(acConfig.kwB);
+          return {
+            temperature: nextTemp !== null ? nextTemp : prev.temperature,
+            humidity: nextHum !== null ? nextHum : prev.humidity,
+            ampere: nextAmp !== null ? nextAmp : prev.ampere,
+            kw: nextKw !== null ? nextKw : prev.kw,
+            avgVoltageLL: nextAvgVol !== null ? nextAvgVol : prev.avgVoltageLL,
+            avgCurrent: nextAvgCur !== null ? nextAvgCur : prev.avgCurrent,
+            avgPowerKva: nextAvgKva !== null ? nextAvgKva : prev.avgPowerKva,
+            voltageRN: nextVRN !== null ? nextVRN : prev.voltageRN,
+            voltageYN: nextVYN !== null ? nextVYN : prev.voltageYN,
+            voltageBR: nextVBR !== null ? nextVBR : prev.voltageBR,
+            currentL1: nextIL1 !== null ? nextIL1 : prev.currentL1,
+            currentL2: nextIL2 !== null ? nextIL2 : prev.currentL2,
+            currentL3: nextIL3 !== null ? nextIL3 : prev.currentL3,
+            kwR: nextKwr !== null ? nextKwr : prev.kwR,
+            kwY: nextKwy !== null ? nextKwy : prev.kwY,
+            kwB: nextKwb !== null ? nextKwb : prev.kwB
+          };
+        });
+      } catch (err) {
+        console.error('Error handling WebSocket telemetry update:', err);
+      }
+    };
+
+    socket.on('telemetry_update', handleTelemetry);
+    return () => socket.disconnect();
+  }, []);
   
   useEffect(() => {
     localStorage.setItem('bms_ac_units', JSON.stringify(units));
@@ -196,65 +583,73 @@ const ACOverview = () => {
 
   // Sync AC state, temperature and status based on saved templates
   useEffect(() => {
-    try {
-      const templatesStr = localStorage.getItem('bms_config_templates');
-      if (!templatesStr) return;
-      const templates = JSON.parse(templatesStr);
-      
-      setUnits(prevUnits => {
-        let changed = false;
-        const nextUnits = prevUnits.map(unit => {
-          // Find if there is a matching template mapping for this unit
-          const match = templates.find(t => 
-            t.category === 'AC' && 
-            t.module === 'Overview' && 
-            t.mapping?.acConfig?.acUnit === unit.name
-          );
-          
-          if (match && match.mapping?.acConfig) {
-            const acConfig = match.mapping.acConfig;
-            
-            // 1. Set ON/OFF status based on acConfig.enabled
-            const expectedStatus = acConfig.enabled ? 'ON' : 'OFF';
-            
-            // 2. Set Temperature value based on whether register is mapped.
-            // If mapped, we show 30 (the live template config value)
-            const expectedTemp = acConfig.temperature ? 30 : unit.setTemp;
-            
-            // 3. Set Room Temperature value (if mapped)
-            const expectedRoomTemp = acConfig.temperature ? 30 : unit.roomTemp;
-            
-            // 4. Set Active Auto Mode options based on template autoMode
-            const expectedAutoOptions = acConfig.autoMode ? [acConfig.autoMode] : [];
-            const expectedOpMode = acConfig.autoMode ? 'Auto' : 'Manual';
-            
-            if (
-              unit.status !== expectedStatus || 
-              unit.setTemp !== expectedTemp || 
-              unit.roomTemp !== expectedRoomTemp ||
-              JSON.stringify(unit.activeAutoOptions) !== JSON.stringify(expectedAutoOptions) ||
-              unit.operationMode !== expectedOpMode
-            ) {
-              changed = true;
-              return {
-                ...unit,
-                status: expectedStatus,
-                setTemp: expectedTemp === '--' ? 30 : expectedTemp, // display temperature
-                roomTemp: expectedRoomTemp,
-                activeAutoOptions: expectedAutoOptions,
-                operationMode: expectedOpMode,
-                powerUsage: expectedStatus === 'ON' ? (unit.powerUsage || 1.5) : 0
-              };
-            }
-          }
-          return unit;
-        });
+    const handleSync = () => {
+      try {
+        const templatesStr = localStorage.getItem('scada_templates');
+        if (!templatesStr) return;
+        const templates = JSON.parse(templatesStr);
         
-        return changed ? nextUnits : prevUnits;
-      });
-    } catch (e) {
-      console.error('Error syncing AC template settings:', e);
-    }
+        setUnits(prevUnits => {
+          let changed = false;
+          const nextUnits = prevUnits.map(unit => {
+            // Find if there is a matching template mapping for this unit
+            const match = unit.name === 'Master AC' ? templates.find(t => 
+              t.category === 'AC' && 
+              t.module === 'Overview' && 
+              t.mapping?.acConfig?.acUnit === unit.name
+            ) : null;
+            
+            if (match && match.mapping?.acConfig) {
+              const acConfig = match.mapping.acConfig;
+              
+              // 1. Set ON/OFF status based on acConfig.enabled
+              const expectedStatus = acConfig.enabled ? 'ON' : 'OFF';
+              
+              // 2. Set Temperature value based on whether register is mapped.
+              // If mapped, we show 30 (the live template config value)
+              const expectedTemp = acConfig.temperature ? 30 : unit.setTemp;
+              
+              // 3. Set Room Temperature value (if mapped)
+              const expectedRoomTemp = acConfig.temperature ? 30 : unit.roomTemp;
+              
+              // 4. Set Active Auto Mode options based on template autoMode
+              const expectedAutoOptions = acConfig.autoMode ? [acConfig.autoMode] : [];
+              const expectedOpMode = acConfig.autoMode ? 'Auto' : 'Manual';
+              
+              if (
+                unit.status !== expectedStatus || 
+                unit.setTemp !== expectedTemp || 
+                unit.roomTemp !== expectedRoomTemp ||
+                JSON.stringify(unit.activeAutoOptions) !== JSON.stringify(expectedAutoOptions) ||
+                unit.operationMode !== expectedOpMode
+              ) {
+                changed = true;
+                return {
+                  ...unit,
+                  status: expectedStatus,
+                  setTemp: expectedTemp === '--' ? 30 : expectedTemp, // display temperature
+                  roomTemp: expectedRoomTemp,
+                  activeAutoOptions: expectedAutoOptions,
+                  operationMode: expectedOpMode,
+                  powerUsage: expectedStatus === 'ON' ? (unit.powerUsage || 1.5) : 0
+                };
+              }
+            }
+            return unit;
+          });
+          
+          return changed ? nextUnits : prevUnits;
+        });
+      } catch (e) {
+        console.error('Error syncing AC template settings:', e);
+      }
+    };
+
+    handleSync();
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('storage', handleSync);
+    };
   }, []);
   
   const [newGroupName, setNewGroupName] = useState('');
@@ -384,6 +779,16 @@ const ACOverview = () => {
     setAutoOptions(prev => {
       const newOptions = prev.includes(option) ? [] : [option];
       setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: newOptions } : u));
+      
+      if (option === 'TEMP') {
+        const unit = units.find(u => u.id === controlTargetId);
+        const rules = getMappedRules(unit?.name);
+        const startT = rules?.[0]?.condition?.comparisonValue || '28';
+        const endT = rules?.[1]?.condition?.comparisonValue || '24';
+        setTempRangeData({ startTemp: startT, endTemp: endT });
+        setShowTempRangeModal(true);
+      }
+      
       return newOptions;
     });
   };
@@ -402,6 +807,12 @@ const ACOverview = () => {
       setUnits(units.map(u => u.id === controlTargetId ? { ...u, status: 'ON', powerUsage: 1.5 } : u));
     } else if (action === 'STOP') {
       setUnits(units.map(u => u.id === controlTargetId ? { ...u, status: 'OFF', powerUsage: 0 } : u));
+    }
+
+    // Call rule engine for manual start/stop action
+    const targetUnit = units.find(u => u.id === controlTargetId);
+    if (targetUnit) {
+      sendRulesToEngineForAC(targetUnit.name, action);
     }
 
     setTimeout(() => {
@@ -643,16 +1054,41 @@ const ACOverview = () => {
                 >
                   <Settings size={18} />
                 </button>
-
-                {/* ROOM INFO */}
-                <div className="mb-4 pe-4">
-                  <div className="d-flex align-items-center gap-2 mb-2">
-                    <MapPin size={12} className="text-info" />
-                    <span className="text-info fw-bold text-uppercase" style={{ fontSize: '10px', letterSpacing: '1.5px' }}>{unit.room}</span>
-                  </div>
-                  <h4 className="text-white fw-bold mb-1">{unit.name}</h4>
-                  <div className="text-secondary fw-medium" style={{ fontSize: '12px' }}>{unit.type}</div>
-                </div>
+                 {/* ROOM INFO */}
+                 <div className="mb-4 pe-4">
+                   <div className="d-flex align-items-center justify-content-between">
+                     <div className="d-flex align-items-center gap-2 mb-2">
+                       <MapPin size={12} className="text-info" />
+                       <span className="text-info fw-bold text-uppercase" style={{ fontSize: '10px', letterSpacing: '1.5px' }}>{unit.room}</span>
+                     </div>
+                     {unit.name === 'Master AC' && (
+                       <div className="d-flex align-items-center gap-1 px-2 py-1 rounded-pill" style={{ 
+                         background: getMasterACOnlineStatus() ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                         border: `1px solid ${getMasterACOnlineStatus() ? '#10b981' : '#ef4444'}`,
+                         boxShadow: getMasterACOnlineStatus() ? '0 0 10px rgba(16, 185, 129, 0.3)' : '0 0 10px rgba(239, 68, 68, 0.3)'
+                       }}>
+                         <div style={{
+                           width: '6px',
+                           height: '6px',
+                           borderRadius: '50%',
+                           backgroundColor: getMasterACOnlineStatus() ? '#10b981' : '#ef4444',
+                           boxShadow: getMasterACOnlineStatus() ? '0 0 6px #10b981' : '0 0 6px #ef4444'
+                         }}></div>
+                         <span style={{ 
+                           fontSize: '9px', 
+                           fontWeight: 'bold', 
+                           color: getMasterACOnlineStatus() ? '#34d399' : '#f87171',
+                           letterSpacing: '0.5px',
+                           lineHeight: 1
+                         }}>
+                           {getMasterACOnlineStatus() ? 'ONLINE' : 'OFFLINE'}
+                         </span>
+                       </div>
+                     )}
+                   </div>
+                   <h4 className="text-white fw-bold mb-1">{unit.name}</h4>
+                   <div className="text-secondary fw-medium" style={{ fontSize: '12px' }}>{unit.type}</div>
+                 </div> 
 
                 {/* REALISTIC AC GRAPHIC */}
                 <div className="mb-4 px-2">
@@ -668,19 +1104,25 @@ const ACOverview = () => {
                       <div>
                         <div className="text-secondary fw-bold mb-1 text-uppercase" style={{ fontSize: '10px', letterSpacing: '1px' }}>Room Temp</div>
                         <div className="d-flex align-items-start">
-                          <span className="text-white fw-bold lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1px' }}>{unit.setTemp}</span>
-                          <span className="text-info fw-bold ms-1 mt-1" style={{ fontSize: '1.2rem' }}>{unit.setTemp === '--' ? '' : '°C'}</span>
+                          <span className="text-white fw-bold lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1px' }}>
+                            {unit.name === 'Master AC' && liveTelemetry.temperature !== null ? liveTelemetry.temperature : unit.roomTemp}
+                          </span>
+                          <span className="text-info fw-bold ms-1 mt-1" style={{ fontSize: '1.2rem' }}>
+                            {((unit.name === 'Master AC' && liveTelemetry.temperature !== null) || unit.roomTemp !== '--') ? '°C' : ''}
+                          </span>
                         </div>
                       </div>
 
                       {(() => {
                         const mapping = getMappedTelemetry(unit.name);
-                        if (mapping && mapping.enabled && mapping.humidity) {
+                        if (mapping && mapping.enabled && mapping.humidity && unit.name === 'Master AC') {
                           return (
                             <div className="border-start border-white border-opacity-10 ps-4">
                               <div className="text-secondary fw-bold mb-1 text-uppercase" style={{ fontSize: '10px', letterSpacing: '1px' }}>Humidity</div>
                               <div className="d-flex align-items-start">
-                                <span className="text-white fw-bold lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1px' }}>46.3</span>
+                                <span className="text-white fw-bold lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1px' }}>
+                                  {liveTelemetry.humidity !== null ? liveTelemetry.humidity : '--'}
+                                </span>
                                 <span className="text-warning fw-bold ms-1 mt-1" style={{ fontSize: '1.2rem' }}>%</span>
                               </div>
                             </div>
@@ -713,35 +1155,51 @@ const ACOverview = () => {
                   {/* LIVE TELEMETRY FROM TEMPLATE CONFIGURATION */}
                   {(() => {
                     const mapping = getMappedTelemetry(unit.name);
-                    if (mapping && mapping.enabled) {
+                    if (mapping && mapping.enabled && unit.name === 'Master AC') {
                       return (
                         <div className="p-3 rounded-4 mb-4 border border-info border-opacity-10 bg-dark bg-opacity-20">
-                          <div className="d-flex justify-content-between align-items-center mb-2">
-                            <span className="text-info fw-bold text-uppercase" style={{ fontSize: '9px', letterSpacing: '1px' }}>Mapped Live Telemetry</span>
-                            <Badge bg="transparent" className="px-2 py-0.5 rounded-pill fs-9 text-info border border-info border-opacity-20" style={{ fontSize: '9px' }}>ACTIVE</Badge>
+                          <div className="d-flex justify-content-between align-items-center mb-3">
+                            <span className="text-info fw-bold text-uppercase" style={{ fontSize: '10px', letterSpacing: '1px' }}>Mapped Live Telemetry</span>
+                            <Badge bg="transparent" className="px-2 py-0.5 rounded-pill fs-10 text-info border border-info border-opacity-25" style={{ fontSize: '9px' }}>ACTIVE</Badge>
                           </div>
-                          <Row className="g-2">
-                            {mapping.temperature && (
-                              <Col xs={6}>
-                                <div className="p-2 rounded bg-black bg-opacity-35 border border-white border-opacity-5 text-center">
-                                  <span className="text-secondary fw-bold uppercase d-block text-nowrap" style={{ fontSize: '8px', letterSpacing: '0.5px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={mapping.temperature}>
-                                    TEMP: {mapping.temperature.split('::').pop()}
+                          <div className="d-flex flex-column gap-2">
+                            {[
+                              { key: 'temperature', label: 'Temperature Register', unit: '°C', color: 'info' },
+                              { key: 'humidity', label: 'Humidity Register', unit: '%', color: 'warning' },
+                              { key: 'ampere', label: 'Ampere Register', unit: 'A', color: 'info' },
+                              { key: 'kw', label: 'kW Register', unit: 'kW', color: 'warning' },
+                              { key: 'avgVoltageLL', label: 'Avg. Voltage L-L', unit: 'V', color: 'info' },
+                              { key: 'avgCurrent', label: 'Average Current', unit: 'A', color: 'info' },
+                              { key: 'avgPowerKva', label: 'Power kVA (Avg.)', unit: 'kVA', color: 'warning' },
+                              { key: 'voltageRN', label: 'Voltage R-N', unit: 'V', color: 'info' },
+                              { key: 'voltageYN', label: 'Voltage Y-N', unit: 'V', color: 'info' },
+                              { key: 'voltageBR', label: 'Voltage B-R', unit: 'V', color: 'info' },
+                              { key: 'currentL1', label: 'Current L1', unit: 'A', color: 'info' },
+                              { key: 'currentL2', label: 'Current L2', unit: 'A', color: 'info' },
+                              { key: 'currentL3', label: 'Current L3', unit: 'A', color: 'info' },
+                              { key: 'kwR', label: 'KW-R', unit: 'kW', color: 'warning' },
+                              { key: 'kwY', label: 'KW-Y', unit: 'kW', color: 'warning' },
+                              { key: 'kwB', label: 'KW-B', unit: 'kW', color: 'warning' }
+                            ].map((param, pIdx) => {
+                              const registerVal = mapping[param.key];
+                              if (!registerVal) return null;
+                              const displayRegister = registerVal.includes('::') ? registerVal.split('::')[1] : registerVal;
+                              return (
+                                <div key={pIdx} className="d-flex justify-content-between align-items-center p-2 rounded bg-black bg-opacity-30 border border-white border-opacity-5">
+                                  <div className="d-flex flex-column align-items-start">
+                                    <span className="text-secondary fw-bold uppercase" style={{ fontSize: '9px', letterSpacing: '0.5px' }}>{param.label}</span>
+                                    <span className={`text-${param.color} font-monospace fw-bold`} style={{ fontSize: '11px' }}>
+                                      {displayRegister}
+                                    </span>
+                                  </div>
+                                  <span className="text-white fw-bold font-monospace" style={{ fontSize: '1.1rem' }}>
+                                    {liveTelemetry[param.key] !== null ? liveTelemetry[param.key] : '--'}
+                                    <span className="text-secondary ms-0.5" style={{ fontSize: '12px' }}>{param.unit}</span>
                                   </span>
-                                  <span className="fs-6 text-white fw-bold font-monospace">30<span className="fs-12 text-secondary ms-0.5">°C</span></span>
                                 </div>
-                              </Col>
-                            )}
-                            {mapping.humidity && (
-                              <Col xs={6}>
-                                <div className="p-2 rounded bg-black bg-opacity-35 border border-white border-opacity-5 text-center">
-                                  <span className="text-secondary fw-bold uppercase d-block text-nowrap" style={{ fontSize: '8px', letterSpacing: '0.5px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={mapping.humidity}>
-                                    HUM: {mapping.humidity.split('::').pop()}
-                                  </span>
-                                  <span className="fs-6 text-white fw-bold font-monospace">46.3<span className="fs-12 text-secondary ms-0.5">%</span></span>
-                                </div>
-                              </Col>
-                            )}
-                          </Row>
+                              );
+                            })}
+                          </div>
                         </div>
                       );
                     }
@@ -1218,6 +1676,69 @@ const ACOverview = () => {
           </div>
 
         </Modal.Body>
+      </Modal>
+
+      {/* TEMPERATURE RANGE DISPLAY MODAL */}
+      <Modal show={showTempRangeModal} onHide={() => setShowTempRangeModal(false)} centered size="md" className="premium-modal">
+        <Modal.Header closeButton closeVariant="white" className="border-bottom-0 pb-0" style={{ background: '#0f172a' }}>
+          <Modal.Title className="text-white fs-5 fw-bold d-flex align-items-center gap-2">
+            <Thermometer size={20} className="text-info" />
+            Configure Temperature Range
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="px-4 py-4" style={{ background: '#0f172a', color: '#fff' }}>
+          <div className="d-flex flex-column gap-3">
+            <div className="p-3 rounded bg-black bg-opacity-30 border border-white border-opacity-5">
+              <Form.Group>
+                <Form.Label className="text-info fw-bold uppercase tracking-widest fs-11 d-block mb-2">Starting Temperature (°C)</Form.Label>
+                <div className="d-flex align-items-center gap-2">
+                  <Form.Control
+                    type="number"
+                    min="16"
+                    max="35"
+                    value={tempRangeData.startTemp}
+                    onChange={(e) => setTempRangeData({ ...tempRangeData, startTemp: e.target.value })}
+                    className="premium-input py-2 text-center text-white fw-bold fs-5 font-monospace"
+                    style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                  />
+                  <span className="text-secondary fw-bold fs-5">°C</span>
+                </div>
+                <small className="text-secondary mt-1 d-block" style={{ fontSize: '10px' }}>AC will automatically START when the room temperature reaches this limit.</small>
+              </Form.Group>
+            </div>
+            <div className="p-3 rounded bg-black bg-opacity-30 border border-white border-opacity-5">
+              <Form.Group>
+                <Form.Label className="text-success fw-bold uppercase tracking-widest fs-11 d-block mb-2">Ending Temperature (°C)</Form.Label>
+                <div className="d-flex align-items-center gap-2">
+                  <Form.Control
+                    type="number"
+                    min="16"
+                    max="35"
+                    value={tempRangeData.endTemp}
+                    onChange={(e) => setTempRangeData({ ...tempRangeData, endTemp: e.target.value })}
+                    className="premium-input py-2 text-center text-white fw-bold fs-5 font-monospace"
+                    style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                  />
+                  <span className="text-secondary fw-bold fs-5">°C</span>
+                </div>
+                <small className="text-secondary mt-1 d-block" style={{ fontSize: '10px' }}>AC will automatically STOP when the room temperature drops below this limit.</small>
+              </Form.Group>
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="border-top-0 pt-0 px-4 pb-4 justify-content-end" style={{ background: '#0f172a' }}>
+          <Button variant="outline-secondary" className="rounded-pill px-4 me-2" onClick={() => setShowTempRangeModal(false)}>Cancel</Button>
+          <Button 
+            variant="info" 
+            className="rounded-pill px-4 fw-bold shadow" 
+            onClick={async () => {
+              await applyTempRangeRules(tempRangeData.startTemp, tempRangeData.endTemp);
+              setShowTempRangeModal(false);
+            }}
+          >
+            Save & Apply Rules
+          </Button>
+        </Modal.Footer>
       </Modal>
 
       {/* STYLE SHEET */}

@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import PdfButton from '../../components/PdfButton';
 import StatusBadge from '../../components/StatusBadge';
+import { normalizeMeterName } from '../../services/meterUtils';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
 import SolarDashboard from './SolarDashboard';
 
@@ -114,7 +115,7 @@ const fetchPersistedGroups = async () => {
 };
 
 const resolveSubMeterCategory = (template) => {
-  const targetName = String(template?.mapping?.energyMeteringTarget || template?.name || '').toUpperCase();
+  const targetName = String(normalizeMeterName(template?.mapping?.energyMeteringTarget || template?.name || '')).toUpperCase();
   const mappedCategory = template?.mapping?.subMeterCategory || template?.category;
   if (mappedCategory) return mappedCategory;
   if (targetName.includes('COMMERCIAL') || targetName.includes('WING') || targetName.includes('OFFICE')) return 'Commercial';
@@ -463,7 +464,7 @@ const EnergyMeteringOverview = () => {
     return {
       id: `${isMain ? 'MAIN' : 'SM'}-${template.id || index + 1}`,
       templateId: String(template.id || index + 1),
-      name: template.mapping?.energyMeteringTarget || template.name || `${isMain ? 'Main Feed' : 'Sub Meter'} ${index + 1}`,
+      name: normalizeMeterName(template.mapping?.energyMeteringTarget || template.name) || `${isMain ? 'Main Feed' : 'Sub Meter'} ${index + 1}`,
       category: isMain ? 'Main Feed' : resolveSubMeterCategory(template),
       isMain,
       isOnline,
