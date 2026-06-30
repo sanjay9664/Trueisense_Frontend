@@ -1741,11 +1741,19 @@ const ACOverview = () => {
           <div className="d-flex justify-content-center align-items-center gap-2 w-100" style={{ minHeight: '110px', transition: 'all 0.3s ease' }}>
             {controlMode === 'Manual' ? (
               <>
-                <button onClick={() => handleControlAction('START')} className="action-btn-premium start-btn" style={{ width: '100px', height: '85px' }}>
+                <button 
+                  onClick={() => handleControlAction('START')} 
+                  className={`action-btn-premium start-btn ${units.find(u => u.id === controlTargetId)?.status === 'ON' ? 'active' : ''}`} 
+                  style={{ width: '100px', height: '85px' }}
+                >
                   <Play size={24} className="mb-2" />
                   <span>START</span>
                 </button>
-                <button onClick={() => handleControlAction('STOP')} className="action-btn-premium stop-btn" style={{ width: '100px', height: '85px' }}>
+                <button 
+                  onClick={() => handleControlAction('STOP')} 
+                  className={`action-btn-premium stop-btn ${units.find(u => u.id === controlTargetId)?.status === 'OFF' ? 'active' : ''}`} 
+                  style={{ width: '100px', height: '85px' }}
+                >
                   <Square size={22} className="mb-2" fill="currentColor" />
                   <span>STOP</span>
                 </button>
@@ -1932,6 +1940,8 @@ const ACOverview = () => {
 
         .start-btn { color: #10b981; border-color: rgba(16, 185, 129, 0.2); background: rgba(16, 185, 129, 0.05); }
         .stop-btn { color: #ef4444; border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.05); }
+        .start-btn.active { background: linear-gradient(135deg, #10b981, #059669) !important; border-color: #10b981 !important; color: #ffffff !important; box-shadow: 0 10px 25px rgba(16, 185, 129, 0.45) !important; }
+        .stop-btn.active { background: linear-gradient(135deg, #ef4444, #dc2626) !important; border-color: #ef4444 !important; color: #ffffff !important; box-shadow: 0 10px 25px rgba(239, 68, 68, 0.45) !important; }
         .schedule-btn { color: #0ea5e9; border-color: rgba(14, 165, 233, 0.3); background: rgba(14, 165, 233, 0.02); }
         .sensor-btn { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); background: rgba(245, 158, 11, 0.02); }
         .temp-btn { color: #ec4899; border-color: rgba(236, 72, 153, 0.3); background: rgba(236, 72, 153, 0.02); }
