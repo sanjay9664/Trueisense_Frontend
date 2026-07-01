@@ -1259,7 +1259,7 @@ const ACOverview = () => {
       <Row className="g-4 mb-5">
         {/* AC UNIT CARDS */}
         {units.map((unit) => (
-          <Col xl={3} lg={4} md={6} key={unit.id}>
+          <Col xl={3} lg={4} md={6} sm={12} xs={12} key={unit.id}>
             <Card className="border-0 h-100 overflow-hidden premium-card" style={{ 
               background: 'linear-gradient(135deg, rgba(16, 16, 24, 0.75) 0%, rgba(8, 8, 12, 0.9) 100%)', 
               borderRadius: '24px', 
@@ -1370,54 +1370,81 @@ const ACOverview = () => {
 
                 {/* CONTROLS AREA */}
                 <div className="mt-auto">
-                                    {/* Room Temp & Power */}
-                  <div className="d-flex align-items-center justify-content-between p-3 rounded-4 mb-3" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                    <div className="d-flex gap-4">
-                      <div>
-                        <div className="text-secondary fw-bold mb-1 text-uppercase" style={{ fontSize: '10px', letterSpacing: '1px', opacity: 0.8 }}>Room Temp</div>
-                        <div className="d-flex align-items-start">
-                          <span className="text-white fw-black lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1.5px', textShadow: '0 0 10px rgba(249, 115, 22, 0.4)' }}>
+                                    {/* Room Temp & Humidity Grid */}
+                  <Row className="g-3 mb-3">
+                    <Col xs={6}>
+                      <div className="p-3 rounded-4 text-center h-100" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div className="text-secondary fw-bold mb-1 text-uppercase text-nowrap" style={{ fontSize: '10px', letterSpacing: '0.5px', opacity: 0.8 }}>Room Temp</div>
+                        <div className="d-flex align-items-baseline justify-content-center text-nowrap mt-1">
+                          <span className="text-white fw-black lh-1" style={{ fontSize: '2rem', letterSpacing: '-1px', textShadow: '0 0 10px rgba(249, 115, 22, 0.4)' }}>
                             {getMappedTelemetry(unit.name) && getUnitTelemetry(unit.name).temperature !== null ? getUnitTelemetry(unit.name).temperature : unit.roomTemp}
                           </span>
-                          <span className="fw-bold ms-1 mt-1" style={{ fontSize: '1.2rem', color: '#f97316' }}>
+                          <span className="fw-bold ms-1" style={{ fontSize: '1.1rem', color: '#f97316' }}>
                             {((getMappedTelemetry(unit.name) && getUnitTelemetry(unit.name).temperature !== null) || unit.roomTemp !== '--') ? '°C' : ''}
                           </span>
                         </div>
                       </div>
+                    </Col>
 
-                      <div className="border-start border-white border-opacity-10 ps-4">
-                        <div className="text-secondary fw-bold mb-1 text-uppercase" style={{ fontSize: '10px', letterSpacing: '1px', opacity: 0.8 }}>Humidity</div>
-                        <div className="d-flex align-items-start">
-                          <span className="text-white fw-black lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1.5px', textShadow: '0 0 10px rgba(245, 158, 11, 0.4)' }}>
+                    <Col xs={6}>
+                      <div className="p-3 rounded-4 text-center h-100" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div className="text-secondary fw-bold mb-1 text-uppercase text-nowrap" style={{ fontSize: '10px', letterSpacing: '0.5px', opacity: 0.8 }}>Humidity</div>
+                        <div className="d-flex align-items-baseline justify-content-center text-nowrap mt-1">
+                          <span className="text-white fw-black lh-1" style={{ fontSize: '2rem', letterSpacing: '-1px', textShadow: '0 0 10px rgba(245, 158, 11, 0.4)' }}>
                             {(() => {
                               const ut = getUnitTelemetry(unit.name);
                               return ut.humidity !== null ? ut.humidity : (unit.humidity !== undefined ? unit.humidity : '--');
                             })()}
                           </span>
-                          <span className="text-warning fw-bold ms-1 mt-1" style={{ fontSize: '1.2rem' }}>%</span>
+                          <span className="text-warning fw-bold ms-1" style={{ fontSize: '1.1rem' }}>%</span>
                         </div>
                       </div>
-                    </div>
+                    </Col>
+                  </Row>
 
-                    <button 
-                      onClick={() => openControlModal(unit.id)}
-                      className={`rounded-circle d-flex align-items-center justify-content-center sleek-power ${unit.status === 'ON' ? 'on' : 'off'}`} 
-                      style={{ 
-                        width: '56px', height: '56px', 
-                        background: unit.status === 'ON' 
-                          ? (isDark ? 'linear-gradient(135deg, #0ea5e9, #0284c7)' : '#ffffff') 
-                          : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
-                        border: unit.status === 'ON' ? 'none' : `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-                        color: unit.status === 'ON' 
-                          ? (isDark ? '#fff' : '#0ea5e9') 
-                          : (isDark ? '#64748b' : '#94a3b8'),
-                        boxShadow: unit.status === 'ON' ? '0 10px 20px rgba(14, 165, 233, 0.3)' : 'none',
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      <Power size={24} strokeWidth={unit.status === 'ON' ? 2.5 : 2} />
-                    </button>
-                  </div>
+                  {/* Sleek Control Button */}
+                  <button 
+                    onClick={() => openControlModal(unit.id)}
+                    className="w-100 mb-3 d-flex align-items-center justify-content-center gap-2 fw-bold tracking-wider text-uppercase"
+                    style={{
+                      background: unit.status === 'ON' 
+                        ? 'linear-gradient(135deg, #ff7a00 0%, #ff5100 100%)' 
+                        : 'rgba(255, 255, 255, 0.04)',
+                      color: unit.status === 'ON' ? '#ffffff' : '#94a3b8',
+                      border: unit.status === 'ON' ? '1px solid rgba(255, 122, 0, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '16px',
+                      padding: '12px 24px',
+                      boxShadow: unit.status === 'ON' 
+                        ? '0 6px 20px rgba(255, 122, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)' 
+                        : 'inset 0 1px 0 rgba(255, 255, 255, 0.02)',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      letterSpacing: '1px',
+                      textShadow: unit.status === 'ON' ? '0 1px 2px rgba(0,0,0,0.3)' : 'none'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      if (unit.status === 'ON') {
+                        e.currentTarget.style.boxShadow = '0 8px 25px rgba(255, 122, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3)';
+                      } else {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 122, 0, 0.25)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      if (unit.status === 'ON') {
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 122, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
+                      } else {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                      }
+                    }}
+                  >
+                    <Power size={14} strokeWidth={unit.status === 'ON' ? 3 : 2} style={{ color: unit.status === 'ON' ? '#ffffff' : '#f97316' }} />
+                    <span style={{ color: unit.status === 'ON' ? '#ffffff' : '#e2e8f0' }}>AC {unit.status}</span>
+                  </button>
 
                   {/* PREMIUM ENERGY TELEMETRY DETAILS PANEL */}
                   {(() => {
@@ -1435,6 +1462,8 @@ const ACOverview = () => {
 
                     if (mappedItems.length === 0) return null;
 
+                    const isSingle = mappedItems.length === 1;
+
                     return (
                       <div 
                         className="p-3 rounded-4 mb-4 border" 
@@ -1449,17 +1478,17 @@ const ACOverview = () => {
                           {mappedItems.map((item) => {
                             const value = telemetry[item.key];
                             return (
-                              <div key={item.key} className={mappedItems.length === 1 ? "col-12" : "col-6"}>
+                              <div key={item.key} className={isSingle ? "col-12" : "col-6"}>
                                 <div className="d-flex flex-column">
-                                  <span className="text-secondary fw-bold mb-2 text-uppercase d-flex align-items-center gap-2" style={{ fontSize: '11px', letterSpacing: '0.5px', opacity: 0.85 }}>
+                                  <span className="text-secondary fw-bold mb-2 text-uppercase d-flex align-items-center gap-2 text-wrap" style={{ fontSize: isSingle ? '11px' : '9px', letterSpacing: '0.5px', opacity: 0.85, lineHeight: 1.2 }}>
                                     {item.icon}
                                     {item.label}
                                   </span>
-                                  <div className="d-flex align-items-baseline">
-                                    <span className="text-white fw-black font-monospace lh-1" style={{ fontSize: '2.2rem', letterSpacing: '-1px', textShadow: `0 0 10px ${item.glow}` }}>
+                                  <div className="d-flex align-items-baseline text-nowrap">
+                                    <span className="text-white fw-black font-monospace lh-1" style={{ fontSize: isSingle ? '2.2rem' : '1.5rem', letterSpacing: '-1px', textShadow: `0 0 10px ${item.glow}` }}>
                                       {value !== null && value !== undefined ? value : '--'}
                                     </span>
-                                    <span className="fw-bold ms-1.5 font-monospace" style={{ fontSize: '12px', color: item.color }}>{item.unit}</span>
+                                    <span className="fw-bold ms-1.5 font-monospace" style={{ fontSize: isSingle ? '12px' : '10px', color: item.color }}>{item.unit}</span>
                                   </div>
                                 </div>
                               </div>
