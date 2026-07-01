@@ -14,7 +14,104 @@ const INITIAL_ACS = [
   { id: 4, name: 'Server Room AC', type: '2.0 Ton Cassette AC', room: 'Server Room', status: 'ON', mode: '--', setTemp: '--', roomTemp: 18.5, fanSpeed: '--', powerUsage: 2.5, scheduleStart: '', scheduleEnd: '', operationMode: 'Auto', activeAutoOptions: [] },
 ];
 
-const RealisticAC = ({ unit }) => {
+const RealisticAC = ({ unit, telemetry, mapping }) => {
+  const hasTelemetry = mapping && mapping.enabled;
+  const tiles = [];
+  
+  if (hasTelemetry) {
+    tiles.push({
+      label: mapping.currentL1 ? 'Current L1' : (mapping.avgCurrent ? 'Avg Current' : 'Ampere'),
+      shortLabel: mapping.currentL1 ? 'L1' : (mapping.avgCurrent ? 'Avg.C' : 'Amp'),
+      key: mapping.currentL1 ? 'currentL1' : (mapping.avgCurrent ? 'avgCurrent' : 'ampere'),
+      unit: 'A'
+    });
+    tiles.push({
+      label: mapping.kwR ? 'kW-R' : 'kW',
+      shortLabel: mapping.kwR ? 'kW-R' : 'kW',
+      key: mapping.kwR ? 'kwR' : 'kw',
+      unit: 'kW'
+    });
+    tiles.push({
+      label: mapping.voltageBR ? 'Voltage B-R' : 'Avg Voltage L-L',
+      shortLabel: mapping.voltageBR ? 'V.BR' : 'V.LL',
+      key: mapping.voltageBR ? 'voltageBR' : 'avgVoltageLL',
+      unit: 'V'
+    });
+    tiles.push({
+      label: 'Voltage R-N',
+      shortLabel: 'V.RN',
+      key: 'voltageRN',
+      unit: 'V'
+    });
+    if (mapping.kwhR) {
+      tiles.push({
+        label: 'KWH-R',
+        shortLabel: 'kwhR',
+        key: 'kwhR',
+        unit: 'kWH'
+      });
+    }
+    if (mapping.kwhY) {
+      tiles.push({
+        label: 'KWH-Y',
+        shortLabel: 'kwhY',
+        key: 'kwhY',
+        unit: 'kWH'
+      });
+    }
+    if (mapping.kwhB) {
+      tiles.push({
+        label: 'KWH-B',
+        shortLabel: 'kwhB',
+        key: 'kwhB',
+        unit: 'kWH'
+      });
+    }
+    if (mapping.pfR) {
+      tiles.push({
+        label: 'PF-R',
+        shortLabel: 'pf.R',
+        key: 'pfR',
+        unit: 'PF'
+      });
+    }
+    if (mapping.pfY) {
+      tiles.push({
+        label: 'PF-Y',
+        shortLabel: 'pf.Y',
+        key: 'pfY',
+        unit: 'PF'
+      });
+    }
+    if (mapping.pfB) {
+      tiles.push({
+        label: 'PF-B',
+        shortLabel: 'pf.B',
+        key: 'pfB',
+        unit: 'PF'
+      });
+    }
+  }
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (tiles.length === 0) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % tiles.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [tiles.length]);
+
+  const activeTile = tiles[currentIndex];
+
+  const getTileValue = (tile) => {
+    if (!tile || !telemetry) return '--';
+    const registerVal = mapping[tile.key];
+    const value = registerVal ? telemetry[tile.key] : null;
+    return value !== null && value !== undefined ? `${value}` : '--';
+  };
+
   return (
     <div style={{
       width: '100%',
@@ -53,7 +150,7 @@ const RealisticAC = ({ unit }) => {
         position: 'absolute',
         right: '15px',
         top: '20px',
-        background: '#0f172a',
+        background: '#090d16',
         padding: '4px 10px',
         borderRadius: '6px',
         display: 'flex',
@@ -62,23 +159,49 @@ const RealisticAC = ({ unit }) => {
         fontFamily: "'Courier New', monospace",
         fontWeight: 'bold',
         fontSize: '12px',
-        boxShadow: unit.status === 'ON' ? '0 0 10px rgba(14, 165, 233, 0.4)' : 'inset 0 0 4px rgba(0,0,0,0.8)',
+        boxShadow: unit.status === 'ON' ? '0 0 10px rgba(249, 115, 22, 0.5)' : 'inset 0 0 4px rgba(0,0,0,0.8)',
         transition: 'all 0.3s ease',
-        border: '1px solid rgba(255,255,255,0.1)'
+        border: '1px solid rgba(249, 115, 22, 0.2)'
       }}>
-        {/* Power Display */}
-        <span style={{ 
-          color: unit.status === 'ON' ? '#10b981' : '#475569', 
-          borderRight: '1px solid #334155', 
-          paddingRight: '8px',
-          textShadow: unit.status === 'ON' ? '0 0 5px #10b981' : 'none'
-        }}>
-          {unit.status === 'ON' ? `${unit.powerUsage}kW` : '--'}
-        </span>
+        {/* Power Display / Live Telemetry */}
+        {hasTelemetry ? (
+          <span style={{ 
+            color: '#f97316', 
+            borderRight: '1px solid rgba(249, 115, 22, 0.2)', 
+            paddingRight: '8px',
+            textShadow: '0 0 6px rgba(249, 115, 22, 0.6)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            fontSize: '12px'
+          }}>
+            <span style={{ 
+              color: '#ffedd5', 
+              fontSize: '10px', 
+              marginRight: '5px', 
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              fontWeight: '800'
+            }}>
+              {activeTile?.shortLabel}:
+            </span>
+            <span>
+              {getTileValue(activeTile)} {activeTile?.unit}
+            </span>
+          </span>
+        ) : (
+          <span style={{ 
+            color: unit.status === 'ON' ? '#f97316' : '#475569', 
+            borderRight: '1px solid rgba(249, 115, 22, 0.2)', 
+            paddingRight: '8px',
+            textShadow: unit.status === 'ON' ? '0 0 5px #f97316' : 'none'
+          }}>
+            {unit.status === 'ON' ? `${unit.powerUsage}kW` : '--'}
+          </span>
+        )}
         {/* Temp Display */}
         <span style={{ 
-          color: unit.status === 'ON' ? '#0ea5e9' : '#475569',
-          textShadow: unit.status === 'ON' ? '0 0 5px #0ea5e9' : 'none'
+          color: unit.status === 'ON' ? '#f59e0b' : '#475569',
+          textShadow: unit.status === 'ON' ? '0 0 5px #f59e0b' : 'none'
         }}>
           {unit.status === 'ON' ? (unit.setTemp === '--' ? '--' : `${unit.setTemp}°`) : '--'}
         </span>
@@ -364,7 +487,13 @@ const ACOverview = () => {
       currentL3: null,
       kwR: null,
       kwY: null,
-      kwB: null
+      kwB: null,
+      kwhR: null,
+      kwhY: null,
+      kwhB: null,
+      pfR: null,
+      pfY: null,
+      pfB: null
     };
   };
 
@@ -448,7 +577,9 @@ const ACOverview = () => {
             acConfig.avgVoltageLL, acConfig.avgCurrent, acConfig.avgPowerKva,
             acConfig.voltageRN, acConfig.voltageYN, acConfig.voltageBR,
             acConfig.currentL1, acConfig.currentL2, acConfig.currentL3,
-            acConfig.kwR, acConfig.kwY, acConfig.kwB
+            acConfig.kwR, acConfig.kwY, acConfig.kwB,
+            acConfig.kwhR, acConfig.kwhY, acConfig.kwhB,
+            acConfig.pfR, acConfig.pfY, acConfig.pfB
           ];
           registers.forEach(reg => {
             if (reg && typeof reg === 'string') {
@@ -523,6 +654,12 @@ const ACOverview = () => {
               const nextKwr = getRegisterValue(acConfig.kwR);
               const nextKwy = getRegisterValue(acConfig.kwY);
               const nextKwb = getRegisterValue(acConfig.kwB);
+              const nextKwhr = getRegisterValue(acConfig.kwhR);
+              const nextKwhy = getRegisterValue(acConfig.kwhY);
+              const nextKwhb = getRegisterValue(acConfig.kwhB);
+              const nextPfr = getRegisterValue(acConfig.pfR);
+              const nextPfy = getRegisterValue(acConfig.pfY);
+              const nextPfb = getRegisterValue(acConfig.pfB);
               
               nextTelemetry[acUnit] = {
                 temperature: nextTemp !== null ? nextTemp : (prevUnit.temperature !== undefined ? prevUnit.temperature : null),
@@ -540,7 +677,13 @@ const ACOverview = () => {
                 currentL3: nextIL3 !== null ? nextIL3 : (prevUnit.currentL3 !== undefined ? prevUnit.currentL3 : null),
                 kwR: nextKwr !== null ? nextKwr : (prevUnit.kwR !== undefined ? prevUnit.kwR : null),
                 kwY: nextKwy !== null ? nextKwy : (prevUnit.kwY !== undefined ? prevUnit.kwY : null),
-                kwB: nextKwb !== null ? nextKwb : (prevUnit.kwB !== undefined ? prevUnit.kwB : null)
+                kwB: nextKwb !== null ? nextKwb : (prevUnit.kwB !== undefined ? prevUnit.kwB : null),
+                kwhR: nextKwhr !== null ? nextKwhr : (prevUnit.kwhR !== undefined ? prevUnit.kwhR : null),
+                kwhY: nextKwhy !== null ? nextKwhy : (prevUnit.kwhY !== undefined ? prevUnit.kwhY : null),
+                kwhB: nextKwhb !== null ? nextKwhb : (prevUnit.kwhB !== undefined ? prevUnit.kwhB : null),
+                pfR: nextPfr !== null ? nextPfr : (prevUnit.pfR !== undefined ? prevUnit.pfR : null),
+                pfY: nextPfy !== null ? nextPfy : (prevUnit.pfY !== undefined ? prevUnit.pfY : null),
+                pfB: nextPfb !== null ? nextPfb : (prevUnit.pfB !== undefined ? prevUnit.pfB : null)
               };
             });
             return nextTelemetry;
@@ -618,6 +761,12 @@ const ACOverview = () => {
             const nextKwr = getRegisterValue(acConfig.kwR);
             const nextKwy = getRegisterValue(acConfig.kwY);
             const nextKwb = getRegisterValue(acConfig.kwB);
+            const nextKwhr = getRegisterValue(acConfig.kwhR);
+            const nextKwhy = getRegisterValue(acConfig.kwhY);
+            const nextKwhb = getRegisterValue(acConfig.kwhB);
+            const nextPfr = getRegisterValue(acConfig.pfR);
+            const nextPfy = getRegisterValue(acConfig.pfY);
+            const nextPfb = getRegisterValue(acConfig.pfB);
 
             nextTelemetry[acUnit] = {
               temperature: nextTemp !== null ? nextTemp : (prevUnit.temperature !== undefined ? prevUnit.temperature : null),
@@ -635,7 +784,13 @@ const ACOverview = () => {
               currentL3: nextIL3 !== null ? nextIL3 : (prevUnit.currentL3 !== undefined ? prevUnit.currentL3 : null),
               kwR: nextKwr !== null ? nextKwr : (prevUnit.kwR !== undefined ? prevUnit.kwR : null),
               kwY: nextKwy !== null ? nextKwy : (prevUnit.kwY !== undefined ? prevUnit.kwY : null),
-              kwB: nextKwb !== null ? nextKwb : (prevUnit.kwB !== undefined ? prevUnit.kwB : null)
+              kwB: nextKwb !== null ? nextKwb : (prevUnit.kwB !== undefined ? prevUnit.kwB : null),
+              kwhR: nextKwhr !== null ? nextKwhr : (prevUnit.kwhR !== undefined ? prevUnit.kwhR : null),
+              kwhY: nextKwhy !== null ? nextKwhy : (prevUnit.kwhY !== undefined ? prevUnit.kwhY : null),
+              kwhB: nextKwhb !== null ? nextKwhb : (prevUnit.kwhB !== undefined ? prevUnit.kwhB : null),
+              pfR: nextPfr !== null ? nextPfr : (prevUnit.pfR !== undefined ? prevUnit.pfR : null),
+              pfY: nextPfy !== null ? nextPfy : (prevUnit.pfY !== undefined ? prevUnit.pfY : null),
+              pfB: nextPfb !== null ? nextPfb : (prevUnit.pfB !== undefined ? prevUnit.pfB : null)
             };
           });
           return nextTelemetry;
@@ -1084,17 +1239,17 @@ const ACOverview = () => {
         {/* SUMMARY WIDGET */}
         <div className="d-flex align-items-center gap-3">
           <Button 
+            disabled
             className="rounded-pill fw-bold d-flex align-items-center border-0 shadow-none text-white" 
-            style={{ background: '#0ea5e9', padding: '10px 24px', letterSpacing: '0.3px', transition: 'all 0.3s ease' }} 
-            onClick={() => setShowGroupModal(true)}
+            style={{ background: '#0ea5e9', padding: '10px 24px', letterSpacing: '0.3px', transition: 'all 0.3s ease', opacity: 0.5, cursor: 'not-allowed', pointerEvents: 'none' }} 
           >
             <Settings size={18} className="me-2"/> Manage Groups
           </Button>
           <Button 
+            disabled
             variant="outline-secondary" 
             className="rounded-pill fw-bold d-flex align-items-center bg-transparent" 
-            style={{ padding: '10px 24px', borderColor: isDark ? '#334155' : '#cbd5e1', color: isDark ? '#94a3b8' : '#64748b', letterSpacing: '0.3px', transition: 'all 0.3s ease' }} 
-            onClick={() => navigate('/ac/schedule')}
+            style={{ padding: '10px 24px', borderColor: isDark ? '#334155' : '#cbd5e1', color: isDark ? '#94a3b8' : '#64748b', letterSpacing: '0.3px', transition: 'all 0.3s ease', opacity: 0.5, cursor: 'not-allowed', pointerEvents: 'none' }} 
           >
             <Clock size={18} className="me-2"/> Global Schedule
           </Button>
@@ -1106,16 +1261,16 @@ const ACOverview = () => {
         {units.map((unit) => (
           <Col xl={3} lg={4} md={6} key={unit.id}>
             <Card className="border-0 h-100 overflow-hidden premium-card" style={{ 
-              background: 'rgba(15, 23, 42, 0.4)', 
+              background: 'linear-gradient(135deg, rgba(16, 16, 24, 0.75) 0%, rgba(8, 8, 12, 0.9) 100%)', 
               borderRadius: '24px', 
-              border: '1px solid rgba(255,255,255,0.05)',
+              border: '1px solid rgba(249, 115, 22, 0.12)',
               backdropFilter: 'blur(20px)',
-              boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+              boxShadow: '0 15px 45px rgba(0,0,0,0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.03)',
               transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
             }}>
               
               {/* Elegant Top Border Indicator */}
-              <div style={{ height: '4px', background: unit.status === 'ON' ? 'linear-gradient(90deg, #0ea5e9, #10b981)' : '#334155', transition: 'all 0.3s ease' }}></div>
+              <div style={{ height: '4px', background: unit.status === 'ON' ? 'linear-gradient(90deg, #f97316, #f59e0b)' : '#334155', transition: 'all 0.3s ease' }}></div>
 
               <Card.Body className="p-4 d-flex flex-column position-relative">
                 {/* Settings Button */}
@@ -1125,60 +1280,106 @@ const ACOverview = () => {
                   style={{ top: '16px', right: '16px', zIndex: 10, background: 'rgba(255,255,255,0.03)', border: 'none', color: '#64748b' }}
                 >
                   <Settings size={18} />
-                </button>
-                 {/* ROOM INFO */}
+                </button>                 {/* ROOM INFO */}
                  <div className="mb-4 pe-4">
                    <div className="d-flex align-items-center justify-content-between">
                      <div className="d-flex align-items-center gap-2 mb-2">
-                       <MapPin size={12} className="text-info" />
-                       <span className="text-info fw-bold text-uppercase" style={{ fontSize: '10px', letterSpacing: '1.5px' }}>{unit.room}</span>
+                       <MapPin size={12} style={{ color: '#f97316' }} />
+                       <span className="fw-bold text-uppercase" style={{ fontSize: '10px', letterSpacing: '1.5px', color: '#f97316' }}>{unit.room}</span>
                      </div>
-                      {getMappedTelemetry(unit.name) && (
-                        <div className="d-flex align-items-center gap-1 px-2 py-1 rounded-pill" style={{ 
-                          background: getACOnlineStatus(unit.name) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          border: `1px solid ${getACOnlineStatus(unit.name) ? '#10b981' : '#ef4444'}`,
-                          boxShadow: getACOnlineStatus(unit.name) ? '0 0 10px rgba(16, 185, 129, 0.3)' : '0 0 10px rgba(239, 68, 68, 0.3)'
-                        }}>
-                          <div style={{
-                            width: '6px',
-                            height: '6px',
-                            borderRadius: '50%',
-                            backgroundColor: getACOnlineStatus(unit.name) ? '#10b981' : '#ef4444',
-                            boxShadow: getACOnlineStatus(unit.name) ? '0 0 6px #10b981' : '0 0 6px #ef4444'
-                          }}></div>
-                          <span style={{ 
-                            fontSize: '9px', 
-                            fontWeight: 'bold', 
-                            color: getACOnlineStatus(unit.name) ? '#34d399' : '#f87171',
-                            letterSpacing: '0.5px',
-                            lineHeight: 1
-                          }}>
-                            {getACOnlineStatus(unit.name) ? 'ONLINE' : 'OFFLINE'}
-                          </span>
-                        </div>
-                      )}
                    </div>
                    <h4 className="text-white fw-bold mb-1">{unit.name}</h4>
-                   <div className="text-secondary fw-medium" style={{ fontSize: '12px' }}>{unit.type}</div>
+                   <div className="text-secondary fw-medium mb-3" style={{ fontSize: '12px' }}>{unit.type}</div>
+                   
+                   {/* Detailed Status Row */}
+                   <div className="d-flex align-items-center gap-2 flex-wrap">
+                     {/* Online/Offline Status */}
+                     <span style={{ 
+                       fontSize: '9px', 
+                       fontWeight: 'bold', 
+                       letterSpacing: '0.5px',
+                       padding: '2px 8px',
+                       borderRadius: '4px',
+                       background: getACOnlineStatus(unit.name) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                       border: `1px solid ${getACOnlineStatus(unit.name) ? '#10b981' : '#ef4444'}`,
+                       color: getACOnlineStatus(unit.name) ? '#34d399' : '#f87171',
+                       textShadow: getACOnlineStatus(unit.name) ? '0 0 5px rgba(52, 211, 153, 0.4)' : 'none'
+                     }}>
+                       {getACOnlineStatus(unit.name) ? 'ONLINE' : 'OFFLINE'}
+                     </span>
+
+                     {/* Power Status */}
+                     <span style={{ 
+                       fontSize: '9px', 
+                       fontWeight: 'bold', 
+                       letterSpacing: '0.5px',
+                       padding: '2px 8px',
+                       borderRadius: '4px',
+                       background: unit.status === 'ON' ? 'rgba(249, 115, 22, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                       border: `1px solid ${unit.status === 'ON' ? '#f97316' : 'rgba(255,255,255,0.08)'}`,
+                       color: unit.status === 'ON' ? '#fdba74' : '#64748b',
+                       textShadow: unit.status === 'ON' ? '0 0 5px rgba(249, 115, 22, 0.4)' : 'none'
+                     }}>
+                       POWER: {unit.status}
+                     </span>
+
+                     {/* Control Mode (Auto/Manual) */}
+                     {getACOnlineStatus(unit.name) && (
+                       <span style={{ 
+                         fontSize: '9px', 
+                         fontWeight: 'bold', 
+                         letterSpacing: '0.5px',
+                         padding: '2px 8px',
+                         borderRadius: '4px',
+                         background: unit.operationMode === 'Auto' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                         border: `1px solid ${unit.operationMode === 'Auto' ? '#f59e0b' : 'rgba(255,255,255,0.08)'}`,
+                         color: unit.operationMode === 'Auto' ? '#fde047' : '#64748b',
+                         textShadow: unit.operationMode === 'Auto' ? '0 0 5px rgba(245, 158, 11, 0.4)' : 'none'
+                       }}>
+                         {unit.operationMode === 'Auto' ? 'AUTO' : 'MANUAL'}
+                       </span>
+                     )}
+
+                     {/* Running Mode (COOL/DRY/FAN etc. if ON) */}
+                     {getACOnlineStatus(unit.name) && unit.status === 'ON' && unit.mode && unit.mode !== '--' && (
+                       <span style={{ 
+                         fontSize: '9px', 
+                         fontWeight: 'bold', 
+                         letterSpacing: '0.5px',
+                         padding: '2px 8px',
+                         borderRadius: '4px',
+                         background: 'rgba(14, 165, 233, 0.15)',
+                         border: '1px solid #0ea5e9',
+                         color: '#38bdf8',
+                         textShadow: '0 0 5px rgba(14, 165, 233, 0.4)'
+                       }}>
+                         MODE: {unit.mode.toUpperCase()}
+                       </span>
+                     )}
+                   </div>
                  </div> 
 
                 {/* REALISTIC AC GRAPHIC */}
                 <div className="mb-4 px-2">
-                  <RealisticAC unit={unit} />
+                  <RealisticAC 
+                    unit={unit} 
+                    telemetry={getUnitTelemetry(unit.name)}
+                    mapping={getMappedTelemetry(unit.name)}
+                  />
                 </div>
 
                 {/* CONTROLS AREA */}
                 <div className="mt-auto">
-                                    {/* Room Temp & Power */}
-                  <div className="d-flex align-items-center justify-content-between p-3 rounded-4 mb-4" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.04)' }}>
+                                    {/* Room Temp & Power */}
+                  <div className="d-flex align-items-center justify-content-between p-3 rounded-4 mb-3" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.04)' }}>
                     <div className="d-flex gap-4">
                       <div>
                         <div className="text-secondary fw-bold mb-1 text-uppercase" style={{ fontSize: '10px', letterSpacing: '1px', opacity: 0.8 }}>Room Temp</div>
                         <div className="d-flex align-items-start">
-                          <span className="text-white fw-black lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1.5px', textShadow: '0 0 10px rgba(14, 165, 233, 0.4)' }}>
+                          <span className="text-white fw-black lh-1" style={{ fontSize: '2.5rem', letterSpacing: '-1.5px', textShadow: '0 0 10px rgba(249, 115, 22, 0.4)' }}>
                             {getMappedTelemetry(unit.name) && getUnitTelemetry(unit.name).temperature !== null ? getUnitTelemetry(unit.name).temperature : unit.roomTemp}
                           </span>
-                          <span className="text-info fw-bold ms-1 mt-1" style={{ fontSize: '1.2rem' }}>
+                          <span className="fw-bold ms-1 mt-1" style={{ fontSize: '1.2rem', color: '#f97316' }}>
                             {((getMappedTelemetry(unit.name) && getUnitTelemetry(unit.name).temperature !== null) || unit.roomTemp !== '--') ? '°C' : ''}
                           </span>
                         </div>
@@ -1218,97 +1419,55 @@ const ACOverview = () => {
                     </button>
                   </div>
 
-                  {/* LIVE TELEMETRY FROM TEMPLATE CONFIGURATION */}
+                  {/* PREMIUM ENERGY TELEMETRY DETAILS PANEL */}
                   {(() => {
                     const mapping = getMappedTelemetry(unit.name);
-                    if (mapping && mapping.enabled) {
-                      const getParamStyle = (key) => {
-                        const k = key.toLowerCase();
-                        if (k.includes('temp')) return { color: '#0ea5e9', icon: <Thermometer size={14} className="text-info" />, bg: 'rgba(14, 165, 233, 0.1)' };
-                        if (k.includes('humid')) return { color: '#f59e0b', icon: <Droplets size={14} className="text-warning" />, bg: 'rgba(245, 158, 11, 0.08)' };
-                        if (k.includes('volt')) return { color: '#10b981', icon: <Cpu size={14} className="text-success" />, bg: 'rgba(16, 185, 129, 0.1)' };
-                        if (k.includes('amp') || k.includes('current')) return { color: '#ec4899', icon: <Activity size={14} className="text-pink" />, bg: 'rgba(236, 72, 153, 0.1)' };
-                        return { color: '#f59e0b', icon: <Zap size={14} className="text-warning" />, bg: 'rgba(245, 158, 11, 0.08)' };
-                      };
+                    const telemetry = getUnitTelemetry(unit.name);
+                    
+                    const mappedItems = [
+                      { key: 'kwhR', label: 'Total Energy Consumed', unit: 'kWh', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Zap size={13} style={{ color: '#f97316' }} /> },
+                      { key: 'kwhY', label: 'KWH-Y (Phase Energy)', unit: 'kWh', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Zap size={13} style={{ color: '#f97316' }} /> },
+                      { key: 'kwhB', label: 'KWH-B (Phase Energy)', unit: 'kWh', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Zap size={13} style={{ color: '#f97316' }} /> },
+                      { key: 'pfR', label: 'PF-R (Power Factor)', unit: 'PF', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Activity size={13} style={{ color: '#f97316' }} /> },
+                      { key: 'pfY', label: 'PF-Y (Power Factor)', unit: 'PF', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Activity size={13} style={{ color: '#f97316' }} /> },
+                      { key: 'pfB', label: 'PF-B (Power Factor)', unit: 'PF', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Activity size={13} style={{ color: '#f97316' }} /> }
+                    ].filter(item => mapping && mapping[item.key]);
 
-                      return (
-                        <div className="p-3 rounded-4 mb-4 border border-info border-opacity-10 bg-dark bg-opacity-20">
-                          <div className="d-flex justify-content-between align-items-center mb-3">
-                            <span className="text-info fw-bold text-uppercase" style={{ fontSize: '10px', letterSpacing: '1px' }}>Mapped Live Telemetry</span>
-                            <Badge bg="transparent" className="px-2 py-0.5 rounded-pill fs-10 text-info border border-info border-opacity-25" style={{ fontSize: '9px' }}>ACTIVE</Badge>
-                          </div>
-                          <div className="row g-2">
-                            {(() => {
-                              const tele = getUnitTelemetry(unit.name);
-                              
-                              // Define the 4 target tiles with fallbacks
-                              const tiles = [
-                                {
-                                  label: mapping.currentL1 ? 'Current L1' : (mapping.avgCurrent ? 'Avg Current' : 'Ampere'),
-                                  key: mapping.currentL1 ? 'currentL1' : (mapping.avgCurrent ? 'avgCurrent' : 'ampere'),
-                                  unit: 'A',
-                                  styleKey: 'amp'
-                                },
-                                {
-                                  label: mapping.kwR ? 'kW-R' : 'kW',
-                                  key: mapping.kwR ? 'kwR' : 'kw',
-                                  unit: 'kW',
-                                  styleKey: 'kw'
-                                },
-                                {
-                                  label: mapping.voltageBR ? 'Voltage B-R' : 'Avg Voltage L-L',
-                                  key: mapping.voltageBR ? 'voltageBR' : 'avgVoltageLL',
-                                  unit: 'V',
-                                  styleKey: 'volt'
-                                },
-                                {
-                                  label: 'Voltage R-N',
-                                  key: 'voltageRN',
-                                  unit: 'V',
-                                  styleKey: 'volt'
-                                }
-                              ];
+                    if (mappedItems.length === 0) return null;
 
-                              return tiles.map((param, pIdx) => {
-                                const registerVal = mapping[param.key];
-                                const displayRegister = registerVal 
-                                  ? (registerVal.includes('::') ? registerVal.split('::')[1] : registerVal)
-                                  : 'Not Mapped';
-                                
-                                const style = getParamStyle(param.styleKey);
-                                const value = registerVal ? tele[param.key] : null;
-
-                                return (
-                                  <div key={pIdx} className="col-6">
-                                    <div 
-                                      className="p-2 rounded-3 d-flex align-items-center justify-content-between h-100 border border-white border-opacity-5 hover-border-opacity-15"
-                                      style={{ background: 'rgba(0,0,0,0.25)', minHeight: '44px' }}
-                                    >
-                                      <div className="d-flex align-items-center gap-2">
-                                        <div className="p-1 rounded-2 d-flex align-items-center justify-content-center" style={{ background: style.bg, width: '24px', height: '24px' }}>
-                                          {style.icon}
-                                        </div>
-                                        <div className="d-flex flex-column align-items-start">
-                                          <span className="text-secondary fw-bold text-uppercase" style={{ fontSize: '8px', letterSpacing: '0.3px' }}>{param.label}</span>
-                                          <span className="text-secondary opacity-30 font-monospace" style={{ fontSize: '7px' }}>({displayRegister})</span>
-                                        </div>
-                                      </div>
-                                      <div className="text-end pe-1">
-                                        <span className="text-white fw-bold font-monospace" style={{ fontSize: '11px' }}>
-                                          {value !== null && value !== undefined ? value : '--'}
-                                        </span>
-                                        <span className="text-secondary font-monospace ms-0.5" style={{ fontSize: '8px' }}>{param.unit}</span>
-                                      </div>
-                                    </div>
+                    return (
+                      <div 
+                        className="p-3 rounded-4 mb-4 border" 
+                        style={{ 
+                          background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.02) 0%, rgba(8, 10, 15, 0.65) 100%)', 
+                          borderColor: 'rgba(249, 115, 22, 0.15)',
+                          backdropFilter: 'blur(10px)',
+                          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3), inset 0 1px 0 0 rgba(255, 255, 255, 0.05)'
+                        }}
+                      >
+                        <div className="row g-3">
+                          {mappedItems.map((item) => {
+                            const value = telemetry[item.key];
+                            return (
+                              <div key={item.key} className={mappedItems.length === 1 ? "col-12" : "col-6"}>
+                                <div className="d-flex flex-column">
+                                  <span className="text-secondary fw-bold mb-2 text-uppercase d-flex align-items-center gap-2" style={{ fontSize: '11px', letterSpacing: '0.5px', opacity: 0.85 }}>
+                                    {item.icon}
+                                    {item.label}
+                                  </span>
+                                  <div className="d-flex align-items-baseline">
+                                    <span className="text-white fw-black font-monospace lh-1" style={{ fontSize: '2.2rem', letterSpacing: '-1px', textShadow: `0 0 10px ${item.glow}` }}>
+                                      {value !== null && value !== undefined ? value : '--'}
+                                    </span>
+                                    <span className="fw-bold ms-1.5 font-monospace" style={{ fontSize: '12px', color: item.color }}>{item.unit}</span>
                                   </div>
-                                );
-                              });
-                            })()}
-                          </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    }
-                    return null;
+                      </div>
+                    );
                   })()}
 
                   {/* Status Badges */}

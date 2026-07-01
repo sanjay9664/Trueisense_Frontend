@@ -193,36 +193,36 @@ const MiniMFMMeter = ({ meter, isMapped = true, isOnline, onClick }) => {
 
         <div className="mfm-metallic-bezel" style={{ padding: '12px 10px', borderRadius: '12px' }}>
           {/* Brand Header */}
-          <div className="mfm-brand-header d-flex justify-content-between align-items-center mb-2 px-1">
-            <span className="mfm-brand-logo" style={{ fontSize: '1.1rem', letterSpacing: '1px' }}>TRUEiSENSE</span>
-            <span className="mfm-model-no" style={{ fontSize: '0.6rem', padding: '1px 4px' }}>APM Series</span>
+          <div className="mfm-brand-header d-flex justify-content-between align-items-center mb-2 px-1 text-nowrap">
+            <span className="mfm-brand-logo text-nowrap" style={{ fontSize: '1.1rem', letterSpacing: '1px', whiteSpace: 'nowrap' }}>TRUEiSENSE</span>
+            <span className="mfm-model-no text-nowrap" style={{ fontSize: '0.6rem', padding: '1px 4px', whiteSpace: 'nowrap' }}>APM Series</span>
           </div>
 
           <div className="mfm-lcd-window" style={{ padding: '6px', borderWidth: '4px', borderRadius: '8px', opacity: showActive ? 1 : 0.6 }}>
-            <div className="mfm-lcd-screen white-screen" style={{ height: '185px', padding: '6px' }}>
+            <div className="mfm-lcd-screen white-screen d-flex flex-column" style={{ height: '185px', padding: '6px' }}>
               <div className="lcd-grid-overlay"></div>
 
               {/* Screen Header */}
-              <div className="d-flex justify-content-between align-items-start mb-2 border-bottom border-success border-opacity-25 pb-1">
-                <span className="text-success fw-bold opacity-75" style={{ fontSize: '0.6rem' }}>{pageData.title}</span>
-                <span className="bg-success bg-opacity-25 text-success px-1 rounded" style={{ fontSize: '0.6rem' }}>{pageData.pageCode}</span>
+              <div className="d-flex justify-content-between align-items-start mb-2 border-bottom border-success border-opacity-25 pb-1 text-nowrap">
+                <span className="text-success fw-bold opacity-75 text-nowrap" style={{ fontSize: '0.6rem' }}>{pageData.title}</span>
+                <span className="bg-success bg-opacity-25 text-success px-1 rounded text-nowrap" style={{ fontSize: '0.6rem' }}>{pageData.pageCode}</span>
               </div>
 
               {/* Display Lines */}
-              <div className="d-flex flex-column gap-1 flex-grow-1 justify-content-center">
+              <div className="d-flex flex-column gap-0.5 flex-grow-1 justify-content-center">
                 {pageData.lines.map((line, idx) => (
-                  <div key={idx} className="d-flex justify-content-between align-items-end">
-                    <span className="text-success fw-bold opacity-75" style={{ fontSize: '0.8rem', width: '30px' }}>{line.label}</span>
-                    <div className="d-flex align-items-baseline gap-1">
-                      <span className="text-success fw-bold" style={{ fontSize: '1.4rem', letterSpacing: '1px', fontFamily: 'monospace' }}>{line.value}</span>
-                      <span className="text-success opacity-75" style={{ fontSize: '0.7rem', width: '30px' }}>{line.unit}</span>
+                  <div key={idx} className="d-flex justify-content-between align-items-center text-nowrap" style={{ height: '24px' }}>
+                    <span className="text-success fw-bold opacity-75 text-nowrap" style={{ fontSize: '0.72rem', width: '32px' }}>{line.label}</span>
+                    <div className="d-flex align-items-baseline gap-1 text-nowrap">
+                      <span className="text-success fw-bold text-nowrap" style={{ fontSize: '1.2rem', letterSpacing: '0.5px', fontFamily: 'monospace' }}>{line.value}</span>
+                      <span className="text-success opacity-75 text-nowrap" style={{ fontSize: '0.65rem', width: '28px', textAlign: 'right' }}>{line.unit}</span>
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Bottom Nav Bar */}
-              <div className="d-flex justify-content-between mt-auto pt-1 border-top border-success border-opacity-25 text-success opacity-75" style={{ fontSize: '0.55rem' }}>
+              <div className="d-flex justify-content-between mt-auto pt-1 border-top border-success border-opacity-25 text-success opacity-75 text-nowrap" style={{ fontSize: '0.55rem' }}>
                 <span>&lt;Up</span>
                 <span>&gt;Down</span>
                 <span>^Menu</span>
