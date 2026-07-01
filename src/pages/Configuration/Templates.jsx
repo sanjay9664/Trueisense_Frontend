@@ -542,6 +542,8 @@ const ConfigTemplates = () => {
     voltageRN: '', voltageYN: '', voltageBR: '',
     currentL1: '', currentL2: '', currentL3: '',
     kwR: '', kwY: '', kwB: '',
+    kwhR: '', kwhY: '', kwhB: '',
+    pfR: '', pfY: '', pfB: '',
     enabled: true, autoMode: 'SCHEDULE'
   });
   const [acRules, setAcRules] = useState([initialRuleState, initialRuleState]);
@@ -579,7 +581,13 @@ const ConfigTemplates = () => {
     currentL3: null,
     kwR: null,
     kwY: null,
-    kwB: null
+    kwB: null,
+    kwhR: null,
+    kwhY: null,
+    kwhB: null,
+    pfR: null,
+    pfY: null,
+    pfB: null
   });
 
   useEffect(() => {
@@ -593,7 +601,9 @@ const ConfigTemplates = () => {
           acConfig.avgVoltageLL, acConfig.avgCurrent, acConfig.avgPowerKva,
           acConfig.voltageRN, acConfig.voltageYN, acConfig.voltageBR,
           acConfig.currentL1, acConfig.currentL2, acConfig.currentL3,
-          acConfig.kwR, acConfig.kwY, acConfig.kwB
+          acConfig.kwR, acConfig.kwY, acConfig.kwB,
+          acConfig.kwhR, acConfig.kwhY, acConfig.kwhB,
+          acConfig.pfR, acConfig.pfY, acConfig.pfB
         ];
         registers.forEach(reg => {
           if (reg && typeof reg === 'string' && reg.includes('::')) {
@@ -650,7 +660,13 @@ const ConfigTemplates = () => {
               currentL3: getRegisterValue(acConfig.currentL3) !== null ? getRegisterValue(acConfig.currentL3) : (acConfig.currentL3 ? prev.currentL3 : null),
               kwR: getRegisterValue(acConfig.kwR) !== null ? getRegisterValue(acConfig.kwR) : (acConfig.kwR ? prev.kwR : null),
               kwY: getRegisterValue(acConfig.kwY) !== null ? getRegisterValue(acConfig.kwY) : (acConfig.kwY ? prev.kwY : null),
-              kwB: getRegisterValue(acConfig.kwB) !== null ? getRegisterValue(acConfig.kwB) : (acConfig.kwB ? prev.kwB : null)
+              kwB: getRegisterValue(acConfig.kwB) !== null ? getRegisterValue(acConfig.kwB) : (acConfig.kwB ? prev.kwB : null),
+              kwhR: getRegisterValue(acConfig.kwhR) !== null ? getRegisterValue(acConfig.kwhR) : (acConfig.kwhR ? prev.kwhR : null),
+              kwhY: getRegisterValue(acConfig.kwhY) !== null ? getRegisterValue(acConfig.kwhY) : (acConfig.kwhY ? prev.kwhY : null),
+              kwhB: getRegisterValue(acConfig.kwhB) !== null ? getRegisterValue(acConfig.kwhB) : (acConfig.kwhB ? prev.kwhB : null),
+              pfR: getRegisterValue(acConfig.pfR) !== null ? getRegisterValue(acConfig.pfR) : (acConfig.pfR ? prev.pfR : null),
+              pfY: getRegisterValue(acConfig.pfY) !== null ? getRegisterValue(acConfig.pfY) : (acConfig.pfY ? prev.pfY : null),
+              pfB: getRegisterValue(acConfig.pfB) !== null ? getRegisterValue(acConfig.pfB) : (acConfig.pfB ? prev.pfB : null)
             };
           });
         }
@@ -660,8 +676,9 @@ const ConfigTemplates = () => {
     };
 
     fetchLiveTelemetry();
-    // Removed setInterval to prevent continuous 2-second API polling on the Templates page
-  }, [selectedCategory, selectedModule, acConfig.device, acConfig.temperature, acConfig.humidity, acConfig.ampere, acConfig.kw, acConfig.avgVoltageLL, acConfig.avgCurrent, acConfig.avgPowerKva, acConfig.voltageRN, acConfig.voltageYN, acConfig.voltageBR, acConfig.currentL1, acConfig.currentL2, acConfig.currentL3, acConfig.kwR, acConfig.kwY, acConfig.kwB]);
+    const interval = setInterval(fetchLiveTelemetry, 2000);
+    return () => clearInterval(interval);
+  }, [selectedCategory, selectedModule, acConfig.device, acConfig.temperature, acConfig.humidity, acConfig.ampere, acConfig.kw, acConfig.avgVoltageLL, acConfig.avgCurrent, acConfig.avgPowerKva, acConfig.voltageRN, acConfig.voltageYN, acConfig.voltageBR, acConfig.currentL1, acConfig.currentL2, acConfig.currentL3, acConfig.kwR, acConfig.kwY, acConfig.kwB, acConfig.kwhR, acConfig.kwhY, acConfig.kwhB, acConfig.pfR, acConfig.pfY, acConfig.pfB]);
 
   const [selectedUgPumpNo, setSelectedUgPumpNo] = useState(1);
   const [pressureTarget, setPressureTarget] = useState('');
@@ -3210,6 +3227,8 @@ const ConfigTemplates = () => {
           voltageRN: '', voltageYN: '', voltageBR: '',
           currentL1: '', currentL2: '', currentL3: '',
           kwR: '', kwY: '', kwB: '',
+          kwhR: '', kwhY: '', kwhB: '',
+          pfR: '', pfY: '', pfB: '',
           enabled: true, autoMode: 'SCHEDULE',
           ...savedAcConfig
         });
@@ -5800,6 +5819,8 @@ const ConfigTemplates = () => {
                                   voltageRN: '', voltageYN: '', voltageBR: '',
                                   currentL1: '', currentL2: '', currentL3: '',
                                   kwR: '', kwY: '', kwB: '',
+                                  kwhR: '', kwhY: '', kwhB: '',
+                                  pfR: '', pfY: '', pfB: '',
                                   enabled: true, autoMode: 'SCHEDULE'
                                 });
                                 const loaded = existing.mapping.rules || [
@@ -5869,6 +5890,8 @@ const ConfigTemplates = () => {
                                   voltageRN: '', voltageYN: '', voltageBR: '',
                                   currentL1: '', currentL2: '', currentL3: '',
                                   kwR: '', kwY: '', kwB: '',
+                                  kwhR: '', kwhY: '', kwhB: '',
+                                  pfR: '', pfY: '', pfB: '',
                                   enabled: true, autoMode: 'SCHEDULE'
                                 });
                                 setAcRules([initialRuleState, initialRuleState]);
@@ -5999,7 +6022,13 @@ const ConfigTemplates = () => {
                                             { label: 'Current L3', key: 'currentL3', placeholder: 'e.g. current L3' },
                                             { label: 'KW-R', key: 'kwR', placeholder: 'e.g. kw-R' },
                                             { label: 'KW-Y', key: 'kwY', placeholder: 'e.g. kw-Y' },
-                                            { label: 'KW-B', key: 'kwB', placeholder: 'e.g. kw-B' }
+                                            { label: 'KW-B', key: 'kwB', placeholder: 'e.g. kw-B' },
+                                            { label: 'KWH-R', key: 'kwhR', placeholder: 'e.g. kwh-R' },
+                                            { label: 'KWH-Y', key: 'kwhY', placeholder: 'e.g. kwh-Y' },
+                                            { label: 'KWH-B', key: 'kwhB', placeholder: 'e.g. kwh-B' },
+                                            { label: 'PF-R', key: 'pfR', placeholder: 'e.g. pf-R' },
+                                            { label: 'PF-Y', key: 'pfY', placeholder: 'e.g. pf-Y' },
+                                            { label: 'PF-B', key: 'pfB', placeholder: 'e.g. pf-B' }
                                           ].map((f, fIdx) => {
                                             const isActive = activeACRegisterTarget === f.key;
                                             const rawFields = getFieldList('field', { ...globalLocation, ...acConfig, building: acConfig.building || globalLocation.building });

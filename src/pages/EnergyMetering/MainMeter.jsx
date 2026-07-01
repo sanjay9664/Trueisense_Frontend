@@ -1049,9 +1049,9 @@ const MainMeter = () => {
 
                 <div className="mfm-metallic-bezel">
                   {/* Brand Header */}
-                  <div className="mfm-brand-header d-flex justify-content-between align-items-center mb-2 px-2">
-                    <span className="mfm-brand-logo">TRUEiSENSE</span>
-                    <span className="mfm-model-no">APM Series</span>
+                  <div className="mfm-brand-header d-flex justify-content-between align-items-center mb-2 px-2 text-nowrap">
+                    <span className="mfm-brand-logo text-nowrap" style={{ whiteSpace: 'nowrap' }}>TRUEiSENSE</span>
+                    <span className="mfm-model-no text-nowrap" style={{ whiteSpace: 'nowrap' }}>APM Series</span>
                   </div>
 
                   {/* Grid LCD Screen Window */}

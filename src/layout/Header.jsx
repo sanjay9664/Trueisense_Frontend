@@ -67,10 +67,10 @@ const Header = ({ collapsed, toggleSidebar }) => {
 
       <div className="header-right d-flex align-items-center">
         {/* Current Time Clock */}
-        <div className="d-flex align-items-center gap-2 px-3 py-1.5 rounded-4 me-3 d-none d-xl-flex" style={{ background: isDark ? 'rgba(30, 41, 59, 0.45)' : 'rgba(0,0,0,0.03)', border: '1px solid var(--scada-border)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
-          <div className="d-flex flex-column text-start">
-            <span className="text-secondary uppercase tracking-widest fw-bold" style={{ fontSize: '0.55rem', letterSpacing: '0.5px', opacity: 0.8 }}>CURRENT CLOCK</span>
-            <span className={isDark ? "text-white fw-bold font-monospace fs-7" : "text-dark fw-bold font-monospace fs-7"}>
+        <div className="d-flex align-items-center gap-2 px-3 py-1.5 rounded-4 me-3 d-none d-xl-flex text-nowrap" style={{ background: isDark ? 'rgba(30, 41, 59, 0.45)' : 'rgba(0,0,0,0.03)', border: '1px solid var(--scada-border)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
+          <div className="d-flex flex-column text-start text-nowrap" style={{ minWidth: '175px' }}>
+            <span className="text-secondary uppercase tracking-widest fw-bold text-nowrap" style={{ fontSize: '0.55rem', letterSpacing: '0.5px', opacity: 0.8 }}>CURRENT CLOCK</span>
+            <span className={`text-nowrap ${isDark ? "text-white fw-bold font-monospace fs-7" : "text-dark fw-bold font-monospace fs-7"}`}>
               {currentTime.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • {currentTime.toLocaleTimeString()}
             </span>
           </div>
