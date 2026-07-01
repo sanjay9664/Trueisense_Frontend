@@ -199,7 +199,7 @@ export const DeviceStatusProvider = ({ children }) => {
 
     handlePoll();
 
-    const interval = setInterval(handlePoll, 20000); // Poll every 20 seconds
+    const interval = setInterval(handlePoll, 300000); // Poll every 5 minutes
 
     window.addEventListener('storage-update', handlePoll);
     window.addEventListener('storage', handlePoll);

@@ -1122,6 +1122,9 @@ const EnergyGraphs = () => {
                 windowEnd: snap.windowEnd
               };
             }
+            const dName = (settings.find(s => s.sochiotFieldName === result.key)?.displayName || '').toLowerCase();
+            const isDeltaField = dName.includes('active energy') || dName.includes('reactive energy') || dName.includes('apparent energy');
+
             let valKey = 'avgValue';
             if (aggregation === 'Min' || aggregation === 'Minimum') valKey = 'minValue';
             else if (aggregation === 'Max' || aggregation === 'Maximum') valKey = 'maxValue';
@@ -1130,9 +1133,13 @@ const EnergyGraphs = () => {
             else if (aggregation === 'Count') valKey = 'countValue';
             else if (aggregation === 'None') valKey = 'avgValue';
             
+            if (isDeltaField) {
+              valKey = 'delta';
+            }
+            
             let finalValue = snap[valKey];
             if (finalValue === undefined || finalValue === null) {
-              finalValue = snap.avgValue ?? snap.minValue ?? snap.maxValue ?? null;
+              finalValue = isDeltaField ? (snap.delta ?? null) : (snap.avgValue ?? snap.minValue ?? snap.maxValue ?? null);
             }
             mergedData[timeKey][result.key] = finalValue !== null && finalValue !== undefined ? Number(Number(finalValue).toFixed(2)) : null;
           });
@@ -1228,13 +1235,21 @@ const EnergyGraphs = () => {
                   windowEnd: snap.windowEnd
                 };
               }
-              const valKey = aggregation === 'Min' || aggregation === 'Minimum' ? 'minValue' :
+              const dName = (settings.find(s => s.sochiotFieldName === result.key)?.displayName || '').toLowerCase();
+              const isDeltaField = dName.includes('active energy') || dName.includes('reactive energy') || dName.includes('apparent energy');
+
+              let valKey = aggregation === 'Min' || aggregation === 'Minimum' ? 'minValue' :
                              aggregation === 'Max' || aggregation === 'Maximum' ? 'maxValue' :
                              aggregation === 'Sum' ? 'sumValue' :
                              aggregation === 'Count' ? 'countValue' : 'avgValue';
+              
+              if (isDeltaField) {
+                valKey = 'delta';
+              }
+              
               let finalValue = snap[valKey];
               if (finalValue === undefined || finalValue === null) {
-                finalValue = snap.avgValue ?? snap.minValue ?? snap.maxValue ?? null;
+                finalValue = isDeltaField ? (snap.delta ?? null) : (snap.avgValue ?? snap.minValue ?? snap.maxValue ?? null);
               }
               mergedData[timeKey][result.key] = finalValue !== null && finalValue !== undefined ? Number(Number(finalValue).toFixed(2)) : null;
             });
