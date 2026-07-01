@@ -203,7 +203,14 @@ const RealisticAC = ({ unit, telemetry, mapping }) => {
           color: unit.status === 'ON' ? '#f59e0b' : '#475569',
           textShadow: unit.status === 'ON' ? '0 0 5px #f59e0b' : 'none'
         }}>
-          {unit.status === 'ON' ? (unit.setTemp === '--' ? '--' : `${unit.setTemp}°`) : '--'}
+          {unit.status === 'ON' ? (
+            (() => {
+              const displayTemp = (telemetry && telemetry.temperature !== null) 
+                ? telemetry.temperature 
+                : (unit.roomTemp !== undefined && unit.roomTemp !== '--' ? unit.roomTemp : '--');
+              return displayTemp === '--' ? '--' : `${displayTemp}°`;
+            })()
+          ) : '--'}
         </span>
       </div>
       
@@ -905,12 +912,11 @@ const ACOverview = () => {
                 expectedStatus = acConfig.enabled ? 'ON' : 'OFF';
               }
               
-              // 2. Set Temperature value based on whether register is mapped.
-              // If mapped, we show 30 (the live template config value)
-              const expectedTemp = acConfig.temperature ? 30 : unit.setTemp;
+              // 2. Keep dynamic state values updated by telemetry instead of forcing defaults
+              const expectedTemp = unit.setTemp;
               
-              // 3. Set Room Temperature value (if mapped)
-              const expectedRoomTemp = acConfig.temperature ? 30 : unit.roomTemp;
+              // 3. Keep dynamic state values updated by telemetry instead of forcing defaults
+              const expectedRoomTemp = unit.roomTemp;
               
               // 4. Set Active Auto Mode options based on template autoMode
               const expectedAutoOptions = acConfig.autoMode ? [acConfig.autoMode] : [];
@@ -927,7 +933,7 @@ const ACOverview = () => {
                 return {
                   ...unit,
                   status: expectedStatus,
-                  setTemp: expectedTemp === '--' ? 30 : expectedTemp, // display temperature
+                  setTemp: expectedTemp === '--' ? 24 : expectedTemp, // display temperature
                   roomTemp: expectedRoomTemp,
                   activeAutoOptions: expectedAutoOptions,
                   operationMode: expectedOpMode,
@@ -1349,11 +1355,11 @@ const ACOverview = () => {
               <div style={{ height: '4px', background: unit.status === 'ON' ? 'linear-gradient(90deg, #f97316, #f59e0b)' : '#334155', transition: 'all 0.3s ease' }}></div>
 
               <Card.Body className="p-4 d-flex flex-column position-relative">
-                {/* Settings Button */}
+                {/* Settings Button - Disabled / Hidden for now */}
                 <button 
                   onClick={() => openSettings(unit)}
                   className="position-absolute btn p-2 rounded-circle hover-glow" 
-                  style={{ top: '16px', right: '16px', zIndex: 10, background: 'rgba(255,255,255,0.03)', border: 'none', color: '#64748b' }}
+                  style={{ top: '16px', right: '16px', zIndex: 10, background: 'rgba(255,255,255,0.03)', border: 'none', color: '#64748b', display: 'none' }}
                 >
                   <Settings size={18} />
                 </button>                 {/* ROOM INFO */}
