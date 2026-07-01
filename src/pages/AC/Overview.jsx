@@ -12,6 +12,24 @@ const INITIAL_ACS = [
   { id: 2, name: 'Lobby AC', type: '2.0 Ton Cassette AC', room: 'Lobby', status: 'ON', mode: '--', setTemp: '--', roomTemp: 25.0, fanSpeed: '--', powerUsage: 2.1, scheduleStart: '', scheduleEnd: '', operationMode: 'Auto', activeAutoOptions: [] },
   { id: 3, name: 'Main Hall AC', type: '2.0 Ton Split AC', room: 'Hall', status: 'OFF', mode: '--', setTemp: '--', roomTemp: 26.5, fanSpeed: '--', powerUsage: 0.0, scheduleStart: '', scheduleEnd: '', operationMode: 'Manual', activeAutoOptions: [] },
   { id: 4, name: 'Server Room AC', type: '2.0 Ton Cassette AC', room: 'Server Room', status: 'ON', mode: '--', setTemp: '--', roomTemp: 18.5, fanSpeed: '--', powerUsage: 2.5, scheduleStart: '', scheduleEnd: '', operationMode: 'Auto', activeAutoOptions: [] },
+  { id: 5, name: 'User AC', type: '1.5 Ton Split AC', room: 'User Office', status: 'OFF', mode: '--', setTemp: '--', roomTemp: 24.0, fanSpeed: '--', powerUsage: 0.0, scheduleStart: '', scheduleEnd: '', operationMode: 'Manual', activeAutoOptions: [] },
+  { id: 6, name: 'HO AC', type: '2.0 Ton Split AC', room: 'HO Office', status: 'OFF', mode: '--', setTemp: '--', roomTemp: 24.0, fanSpeed: '--', powerUsage: 0.0, scheduleStart: '', scheduleEnd: '', operationMode: 'Manual', activeAutoOptions: [] },
+  ...Array.from({ length: 44 }, (_, i) => ({
+    id: i + 7,
+    name: `AC_${i + 7}`,
+    type: '1.5 Ton Split AC',
+    room: `Zone ${i + 7}`,
+    status: 'OFF',
+    mode: '--',
+    setTemp: '--',
+    roomTemp: 24.0,
+    fanSpeed: '--',
+    powerUsage: 0.0,
+    scheduleStart: '',
+    scheduleEnd: '',
+    operationMode: 'Manual',
+    activeAutoOptions: []
+  }))
 ];
 
 const RealisticAC = ({ unit, telemetry, mapping }) => {
@@ -463,7 +481,43 @@ const ACOverview = () => {
   };
   const [units, setUnits] = useState(() => {
     const saved = localStorage.getItem('bms_ac_units');
-    return saved ? JSON.parse(saved) : INITIAL_ACS;
+    let loaded = saved ? JSON.parse(saved) : INITIAL_ACS;
+    const names = loaded.map(u => u.name.toUpperCase());
+    let updated = false;
+    if (!names.includes('USER AC')) {
+      loaded.push({ id: 5, name: 'User AC', type: '1.5 Ton Split AC', room: 'User Office', status: 'OFF', mode: '--', setTemp: '--', roomTemp: 24.0, fanSpeed: '--', powerUsage: 0.0, scheduleStart: '', scheduleEnd: '', operationMode: 'Manual', activeAutoOptions: [] });
+      updated = true;
+    }
+    if (!names.includes('HO AC')) {
+      loaded.push({ id: 6, name: 'HO AC', type: '2.0 Ton Split AC', room: 'HO Office', status: 'OFF', mode: '--', setTemp: '--', roomTemp: 24.0, fanSpeed: '--', powerUsage: 0.0, scheduleStart: '', scheduleEnd: '', operationMode: 'Manual', activeAutoOptions: [] });
+      updated = true;
+    }
+    for (let i = 7; i <= 50; i++) {
+      const name = `AC_${i}`;
+      if (!names.includes(name.toUpperCase())) {
+        loaded.push({
+          id: i,
+          name: name,
+          type: '1.5 Ton Split AC',
+          room: `Zone ${i}`,
+          status: 'OFF',
+          mode: '--',
+          setTemp: '--',
+          roomTemp: 24.0,
+          fanSpeed: '--',
+          powerUsage: 0.0,
+          scheduleStart: '',
+          scheduleEnd: '',
+          operationMode: 'Manual',
+          activeAutoOptions: []
+        });
+        updated = true;
+      }
+    }
+    if (updated || !saved) {
+      localStorage.setItem('bms_ac_units', JSON.stringify(loaded));
+    }
+    return loaded;
   });
   const [currentTime, setCurrentTime] = useState(new Date());
   
@@ -525,6 +579,14 @@ const ACOverview = () => {
   useEffect(() => {
     templatesRef.current = templates;
   }, [templates]);
+
+  const mappedUnits = units.filter(unit => 
+    templates.some(t => 
+      t.category === 'AC' && 
+      t.module === 'Overview' && 
+      t.mapping?.acConfig?.acUnit === unit.name
+    )
+  );
 
   // Load templates on mount & API fetch sync
   useEffect(() => {
@@ -1337,7 +1399,8 @@ const ACOverview = () => {
 
       <Row className="g-4 mb-5">
         {/* AC UNIT CARDS */}
-        {units.map((unit) => (
+        {mappedUnits.length > 0 ? (
+          mappedUnits.map((unit) => (
           <Col xl={3} lg={4} md={6} sm={12} xs={12} key={unit.id}>
             <Card className="border-0 h-100 overflow-hidden premium-card" style={{ 
               background: 'linear-gradient(135deg, rgba(16, 16, 24, 0.75) 0%, rgba(8, 8, 12, 0.9) 100%)', 
@@ -1632,7 +1695,16 @@ const ACOverview = () => {
               </Card.Body>
             </Card>
           </Col>
-        ))}
+          ))
+        ) : (
+          <Col xs={12}>
+            <div className="text-center p-5 rounded-4 bg-dark bg-opacity-30 border border-slate-700 border-opacity-10 my-4">
+              <Wind size={48} className="text-warning mb-3 opacity-60 mx-auto" />
+              <h5 className="text-white fw-bold">No Mapped AC Units</h5>
+              <p className="text-secondary fs-12 mb-0">Please map AC configuration templates on the Configuration page to monitor them here.</p>
+            </div>
+          </Col>
+        )}
       </Row>
 
       {/* AC INDIVIDUAL SETTINGS MODAL */}
@@ -1753,7 +1825,7 @@ const ACOverview = () => {
                 
                 <Form.Label className="text-secondary fs-12 fw-bold tracking-widest text-uppercase mb-3">Assign Units to Group</Form.Label>
                 <div style={{ maxHeight: '300px', overflowY: 'auto' }} className="mb-4 pe-2">
-                  {units.map(u => {
+                  {mappedUnits.map(u => {
                     const isManual = u.operationMode === 'Manual';
                     const isSelected = selectedACsForGroup.includes(u.id);
                     return (
@@ -1897,7 +1969,7 @@ const ACOverview = () => {
                   {acGroups.map(g => <option key={g.id} value={g.id}>{g.name} ({g.acIds.length} Units)</option>)}
                 </optgroup>}
                 <optgroup label="Individual Units">
-                  {units.map(u => <option key={u.id} value={u.id}>{u.name} - {u.room}</option>)}
+                  {mappedUnits.map(u => <option key={u.id} value={u.id}>{u.name} - {u.room}</option>)}
                 </optgroup>
               </Form.Select>
             </Form.Group>

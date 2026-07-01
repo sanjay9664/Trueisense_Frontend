@@ -104,6 +104,19 @@ const ConfigTemplates = () => {
       if (savedUnits) {
         const parsed = JSON.parse(savedUnits);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          const names = parsed.map(u => u.name.toUpperCase());
+          if (!names.includes('USER AC')) {
+            parsed.push({ name: 'User AC', id: 'AC-USER-01' });
+          }
+          if (!names.includes('HO AC')) {
+            parsed.push({ name: 'HO AC', id: 'AC-HO-01' });
+          }
+          for (let i = 7; i <= 50; i++) {
+            const name = `AC_${i}`;
+            if (!names.includes(name.toUpperCase())) {
+              parsed.push({ name: name, id: `AC-UNIT-${i.toString().padStart(2, '0')}` });
+            }
+          }
           return parsed.map((unit, idx) => ({
             name: unit.name,
             id: unit.id || `AC-${unit.name.toUpperCase().replace(/\s+/g, '-')}-${idx}`
@@ -111,12 +124,19 @@ const ConfigTemplates = () => {
         }
       }
     } catch (e) {}
-    return [
+    
+    const defaults = [
       { name: 'Master AC', id: 'AC-MAIN-01' },
       { name: 'Lobby AC', id: 'AC-LOBBY-01' },
       { name: 'Main Hall AC', id: 'AC-HALL-01' },
-      { name: 'Server Room AC', id: 'AC-SERVER-01' }
+      { name: 'Server Room AC', id: 'AC-SERVER-01' },
+      { name: 'User AC', id: 'AC-USER-01' },
+      { name: 'HO AC', id: 'AC-HO-01' }
     ];
+    for (let i = 7; i <= 50; i++) {
+      defaults.push({ name: `AC_${i}`, id: `AC-UNIT-${i.toString().padStart(2, '0')}` });
+    }
+    return defaults;
   });
 
   useEffect(() => {
@@ -126,6 +146,19 @@ const ConfigTemplates = () => {
         if (savedUnits) {
           const parsed = JSON.parse(savedUnits);
           if (Array.isArray(parsed) && parsed.length > 0) {
+            const names = parsed.map(u => u.name.toUpperCase());
+            if (!names.includes('USER AC')) {
+              parsed.push({ name: 'User AC', id: 'AC-USER-01' });
+            }
+            if (!names.includes('HO AC')) {
+              parsed.push({ name: 'HO AC', id: 'AC-HO-01' });
+            }
+            for (let i = 7; i <= 50; i++) {
+              const name = `AC_${i}`;
+              if (!names.includes(name.toUpperCase())) {
+                parsed.push({ name: name, id: `AC-UNIT-${i.toString().padStart(2, '0')}` });
+              }
+            }
             setAcUnitsState(parsed.map((unit, idx) => ({
               name: unit.name,
               id: unit.id || `AC-${unit.name.toUpperCase().replace(/\s+/g, '-')}-${idx}`
@@ -401,8 +434,10 @@ const ConfigTemplates = () => {
     try {
       let activeModuleId = targetModuleId;
 
-      // If the targetModuleId is empty or is actually the device ID (not a rule module ID), resolve it dynamically!
-      if (resolvedHostDevice) {
+      const cachedHostModules = resolvedHostDevice && deviceDetails[resolvedHostDevice]?.modules;
+      const isModuleValid = cachedHostModules && cachedHostModules[targetModuleId];
+
+      if (resolvedHostDevice && (!targetModuleId || !isModuleValid || String(targetModuleId) === String(resolvedHostDevice))) {
         let hostModules = deviceDetails[resolvedHostDevice]?.modules;
         if (!hostModules) {
           console.log('[fetchAndOpenRuleEngineModal] Fetching host device modules for:', resolvedHostDevice);
@@ -535,8 +570,8 @@ const ConfigTemplates = () => {
             if (!copy[ruleHostDevice].modules) {
               copy[ruleHostDevice].modules = {};
             }
-            copy[ruleHostDevice].modules[targetModuleId] = {
-              id: targetModuleId,
+            copy[ruleHostDevice].modules[activeModuleId] = {
+              id: activeModuleId,
               name: moduleData.moduleName || moduleData.name || defaultConfig.ruleName || `RULE_${ruleIndex + 1}`,
               parsedRule: latestParsedRule,
               rawModule: {
@@ -548,11 +583,11 @@ const ConfigTemplates = () => {
           return copy;
         });
       } else {
-        setRuleEngineConfig({ ...defaultConfig, moduleId: targetModuleId });
+        setRuleEngineConfig({ ...defaultConfig, moduleId: activeModuleId });
       }
     } catch (e) {
       console.error('[fetchAndOpenRuleEngineModal] Error:', e);
-      setRuleEngineConfig({ ...defaultConfig, moduleId: targetModuleId });
+      setRuleEngineConfig({ ...defaultConfig, moduleId: activeModuleId });
     } finally {
       setIsLoadingRuleDetails(false);
     }
@@ -648,7 +683,8 @@ const ConfigTemplates = () => {
     kwR: '', kwY: '', kwB: '',
     kwhR: '', kwhY: '', kwhB: '',
     pfR: '', pfY: '', pfB: '',
-    enabled: true, autoMode: 'SCHEDULE'
+    enabled: true, autoMode: 'SCHEDULE',
+    ruleDevice: ''
   });
   const [acRules, setAcRules] = useState([initialRuleState, initialRuleState]);
   const acRule1Config = acRules[0] || initialRuleState;
@@ -1812,9 +1848,11 @@ const ConfigTemplates = () => {
 
     // 4. AC AUTO-FILL
     const activeAcDevice = acConfig.device;
-    if (activeAcDevice) {
-      // Find the rule host device under the active location/building
-      let ruleHostDevice = activeAcDevice;
+    
+    // Decoupled Rule Host Resolution
+    let ruleHostDevice = acConfig.ruleDevice;
+    if (!ruleHostDevice && activeAcDevice) {
+      ruleHostDevice = activeAcDevice;
       let locName = acConfig.building || globalLocation.building;
       if (locName) {
         const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
@@ -1831,39 +1869,30 @@ const ConfigTemplates = () => {
           if (rd) ruleHostDevice = rd.id;
         }
       }
+    }
 
-      // If ruleHostDevice details not loaded, fetch it in background
-      if (ruleHostDevice && !deviceDetails[ruleHostDevice]) {
-        fetchDeviceDetails(ruleHostDevice);
-      }
+    // Background fetch for rule controller or target AC device details
+    if (activeAcDevice && !deviceDetails[activeAcDevice]) {
+      fetchDeviceDetails(activeAcDevice);
+    }
+    if (ruleHostDevice && !deviceDetails[ruleHostDevice]) {
+      fetchDeviceDetails(ruleHostDevice);
+    }
 
-      const devInfo = deviceDetails[activeAcDevice];
-      const ruleDevInfo = deviceDetails[ruleHostDevice];
+    const devInfo = activeAcDevice ? deviceDetails[activeAcDevice] : null;
+    const ruleDevInfo = ruleHostDevice ? deviceDetails[ruleHostDevice] : null;
 
-      if (devInfo && devInfo.modules) {
-        const isNewAc = lastAutofilledAc.current !== activeAcDevice;
-        
-        // Gather all fields across all modules of this device (for temperature/humidity registers)
+    // Decoupled Block A: Telemetry Registers Auto-fill
+    if (devInfo && devInfo.modules) {
+      const isNewAc = lastAutofilledAc.current !== activeAcDevice;
+      if (isNewAc) {
+        // Gather all fields across all modules of this device
         const acAllFields = [];
         Object.entries(devInfo.modules).forEach(([mId, m]) => {
           (m.fields || []).forEach(f => {
             acAllFields.push({ ...f, fullId: `${mId}::${f.id}`, rawId: f.id });
           });
         });
-
-        // Gather all rule modules of the rule host device
-        let ruleModules = [];
-        if (ruleDevInfo && ruleDevInfo.modules) {
-          const allRuleModules = Object.values(ruleDevInfo.modules);
-          ruleModules = allRuleModules.filter(m => 
-            m.name && (m.name.toUpperCase().startsWith('RULE_') || m.name.toUpperCase().includes('RULE'))
-          );
-          ruleModules.sort((a, b) => {
-            const numA = parseInt(a.name.replace(/\D/g, ''), 10) || 0;
-            const numB = parseInt(b.name.replace(/\D/g, ''), 10) || 0;
-            return numA - numB;
-          });
-        }
 
         const findMatchingFieldAc = (fieldsList, searchKey) => {
           if (!fieldsList || fieldsList.length === 0) return '';
@@ -1935,7 +1964,7 @@ const ConfigTemplates = () => {
           let changed = false;
           
           keys.forEach(k => {
-            if (isNewAc || !prev[k]) {
+            if (!prev[k]) {
               const match = findMatchingFieldAc(acAllFields, k);
               if (match) {
                 updated[k] = match;
@@ -1947,58 +1976,71 @@ const ConfigTemplates = () => {
           return changed ? updated : prev;
         });
 
-        const ruleHostDetailsLoaded = ruleDevInfo && ruleDevInfo.modules && Object.keys(ruleDevInfo.modules).length > 0;
-        const shouldLoadRules = isNewAc || (ruleHostDetailsLoaded && lastLoadedAcDeviceRules.current !== activeAcDevice);
+        lastAutofilledAc.current = activeAcDevice;
+      }
+    }
 
-        if (shouldLoadRules) {
-          if (isNewAc) {
-            lastAutofilledAc.current = activeAcDevice;
-          }
-          if (ruleHostDetailsLoaded) {
-            lastLoadedAcDeviceRules.current = activeAcDevice;
-          }
-          
-          // Auto-fetch and auto-fill rules associated with this device ID
+    // Decoupled Block B: Rule Modules Alignment
+    if (ruleDevInfo && ruleDevInfo.modules) {
+      const isNewRuleHost = lastLoadedAcDeviceRules.current !== ruleHostDevice;
+      const ruleHostDetailsLoaded = Object.keys(ruleDevInfo.modules).length > 0;
+      const shouldLoadRules = isNewRuleHost && ruleHostDetailsLoaded;
+
+      if (shouldLoadRules) {
+        // Gather all rule modules of the rule host device
+        const allRuleModules = Object.values(ruleDevInfo.modules);
+        const ruleModules = allRuleModules.filter(m => 
+          m.name && (m.name.toUpperCase().startsWith('RULE_') || m.name.toUpperCase().includes('RULE'))
+        );
+        ruleModules.sort((a, b) => {
+          const numA = parseInt(a.name.replace(/\D/g, ''), 10) || 0;
+          const numB = parseInt(b.name.replace(/\D/g, ''), 10) || 0;
+          return numA - numB;
+        });
+
+        let rulesToLoad = acRules;
+        if (!rulesToLoad || rulesToLoad.length === 0 || (rulesToLoad.length === 2 && rulesToLoad[0] === initialRuleState && rulesToLoad[1] === initialRuleState)) {
           const existingWithRules = savedTemplates.find(t => 
-            (t.mapping?.acConfig?.device === activeAcDevice || t.mapping?.deviceId === activeAcDevice) && 
+            (t.mapping?.acConfig?.ruleDevice === ruleHostDevice || t.mapping?.acConfig?.device === ruleHostDevice || t.mapping?.deviceId === ruleHostDevice) && 
             (t.mapping?.rules || t.mapping?.rule1Config || t.mapping?.rule2Config || t.mapping?.ruleEngineConfig)
           );
-          
-          let rulesToLoad = [];
           if (existingWithRules) {
             rulesToLoad = existingWithRules.mapping.rules || [
               existingWithRules.mapping.rule1Config || existingWithRules.mapping.ruleEngineConfig || initialRuleState,
               existingWithRules.mapping.rule2Config || initialRuleState
             ];
           }
+        }
 
-          if (ruleModules.length > 0) {
-            const alignedRules = ruleModules.map((m, idx) => {
-              const hasSochiotData = m.parsedRule && (m.parsedRule.condition.type !== 'NA' || m.parsedRule.condition.modbus || m.parsedRule.consequence.modbus);
-              const existingRule = hasSochiotData ? m.parsedRule : (rulesToLoad[idx] || m.parsedRule || initialRuleState);
-              return {
-                ...existingRule,
-                moduleId: m.id,
-                ruleName: m.name
-              };
-            });
-            setAcRules(alignedRules);
+        if (ruleModules.length > 0) {
+          const alignedRules = ruleModules.map((m, idx) => {
+            const hasSochiotData = m.parsedRule && (m.parsedRule.condition.type !== 'NA' || m.parsedRule.condition.modbus || m.parsedRule.consequence.modbus);
+            const existingRule = hasSochiotData ? m.parsedRule : (rulesToLoad[idx] || m.parsedRule || initialRuleState);
+            return {
+              ...existingRule,
+              moduleId: m.id,
+              ruleName: m.name
+            };
+          });
+          setAcRules(alignedRules);
+        } else {
+          if (rulesToLoad.length > 0) {
+            setAcRules(rulesToLoad);
           } else {
-            if (rulesToLoad.length > 0) {
-              setAcRules(rulesToLoad);
-            } else {
-              setAcRules([initialRuleState, initialRuleState]);
-            }
+            setAcRules([initialRuleState, initialRuleState]);
           }
         }
+
+        lastLoadedAcDeviceRules.current = ruleHostDevice;
       }
     }
   }, [
     deviceDetails,
+    locationDetails,
     emChangeConfig.device, emWarningConfig.device, emReadConfig.device, emVoltageConfig.device,
     elecVoltageConfig.device, elecVoltageConfig.module,
     dgPowerConfig.device, dgEngineConfig.device, dgFuelConfig.device, dgFaultConfig.device,
-    acConfig.device
+    acConfig.device, acConfig.ruleDevice
   ]);
 
   const getParameterSuggestion = (fieldName, displayName) => {
@@ -2074,6 +2116,45 @@ const ConfigTemplates = () => {
   };
 
   const findRuleHostDevice = () => {
+    if (selectedCategory === 'AC' && acConfig.ruleDevice) {
+      return acConfig.ruleDevice;
+    }
+    // 1. Resolve current active building or subzone location name based on active config context
+    let locName = null;
+    if (selectedCategory === 'AC') {
+      locName = acConfig.building || globalLocation.building;
+      if (locName) {
+        const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
+        const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+        if (selectedSZ && selectedSZ.type === 'location') {
+          locName = acConfig.subZone || globalLocation.subZone;
+        }
+      }
+    } else if (selectedCategory === 'VRV' || selectedCategory === 'AQI Sensor') {
+      locName = vrvConfig.building || globalLocation.building;
+    } else if (selectedCategory === 'Energy Meter') {
+      locName = emConfig.building || globalLocation.building;
+    } else if (selectedCategory === 'DG Set') {
+      locName = dgConfig.building || globalLocation.building;
+    } else if (selectedCategory === 'Water Tank') {
+      locName = wtConfig.building || globalLocation.building;
+    } else {
+      locName = globalLocation.building;
+    }
+
+    // 2. Search first within the active location context device list
+    if (locName && locationDetails[locName]) {
+      const loc = locationDetails[locName];
+      if (loc.deviceList) {
+        const dev = loc.deviceList.find(d => 
+          (d.label && d.label.toUpperCase().includes('RULE')) || 
+          (d.id && String(d.id).toUpperCase().includes('RULE'))
+        );
+        if (dev) return dev.id;
+      }
+    }
+
+    // 3. Fallback: Search other locations if active location doesn't have a rule host device
     let foundId = null;
     Object.values(locationDetails).forEach(loc => {
       if (loc.deviceList) {
@@ -2081,7 +2162,7 @@ const ConfigTemplates = () => {
           (d.label && d.label.toUpperCase().includes('RULE')) || 
           (d.id && String(d.id).toUpperCase().includes('RULE'))
         );
-        if (dev) foundId = dev.id;
+        if (dev && !foundId) foundId = dev.id;
       }
     });
     return foundId;
@@ -2136,7 +2217,28 @@ const ConfigTemplates = () => {
           let parsedRule = null;
 
           if (isRuleEngine) {
-            // Skipped background settings pre-fetch to speed up load time
+            // Pre-fetch settings for this rule engine module to make opening/populating instant and accurate
+            try {
+              const res = await fetch(`${CONFIG_API_URL}/module/${m.id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (res.ok) {
+                const fetched = await res.json();
+                const moduleData = fetched.data || fetched;
+                const rawMappingList = moduleData.moduleFieldMappingVOS || moduleData.moduleFieldMappingVOList;
+                if (rawMappingList && rawMappingList.length > 0) {
+                  settingFields = rawMappingList.map(sf => ({
+                    ...(sf.settingFieldVO || {}),
+                    moduleFieldMappingId: sf.moduleFieldMappingId,
+                    currentValue: sf.currentValue
+                  }));
+                } else {
+                  settingFields = moduleData.settingFieldVOList || moduleData.settingFieldList || moduleData.settingFields || [];
+                }
+              }
+            } catch (err) {
+              console.error('[fetchDeviceDetails] Error pre-fetching settings for module:', m.id, err);
+            }
 
             // Fallback to template settingFields if fetch failed or returned empty
             if (settingFields.length === 0) {
@@ -3580,6 +3682,116 @@ const ConfigTemplates = () => {
   }, [globalLocation, vrvConfig.device, vrvConfig.building, selectedCategory, selectedModule]);
 
   const handleSave = async () => {
+    const syncRulesToSochiot = async (rulesList) => {
+      const token = localStorage.getItem('sochiot_token');
+      if (!token) return;
+      
+      const activeAcDevice = acConfig.device;
+      let ruleHostDevice = activeAcDevice;
+      let locName = acConfig.building || globalLocation.building;
+      if (locName) {
+        const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
+        const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+        if (selectedSZ && selectedSZ.type === 'location') {
+          locName = acConfig.subZone || globalLocation.subZone;
+        }
+        const locInfo = locationDetails[locName];
+        if (locInfo && locInfo.deviceList) {
+          const rd = locInfo.deviceList.find(d => 
+            (d.label && d.label.toUpperCase().includes('RULE')) || 
+            (d.id && String(d.id).toUpperCase().includes('RULE'))
+          );
+          if (rd) ruleHostDevice = rd.id;
+        }
+      }
+
+      await Promise.all((rulesList || []).map(async (rule, ruleIndex) => {
+        const targetModuleId = rule.moduleId;
+        if (!targetModuleId) return;
+
+        let rawModule = null;
+        let targetRuleModuleName = rule.ruleName || '';
+
+        const hostKey = ruleHostDevice || 'rule_engine';
+        if (deviceDetails[hostKey]?.modules?.[targetModuleId]) {
+          const cachedModule = deviceDetails[hostKey].modules[targetModuleId];
+          rawModule = cachedModule.rawModule;
+          targetRuleModuleName = cachedModule.name || cachedModule.moduleName;
+        }
+
+        if (!rawModule) {
+          let ruleModules = [];
+          const fallbackHostKey = ruleHostDevice || 'rule_engine';
+          if (deviceDetails[fallbackHostKey]?.modules) {
+            ruleModules = Object.values(deviceDetails[fallbackHostKey].modules).filter(m =>
+              m.name && (m.name.toUpperCase().startsWith('RULE_') || m.name.toUpperCase().includes('RULE'))
+            );
+            ruleModules.sort((a, b) => {
+              const numA = parseInt(a.name.replace(/\D/g, ''), 10) || 0;
+              const numB = parseInt(b.name.replace(/\D/g, ''), 10) || 0;
+              return numA - numB;
+            });
+          }
+          const targetRuleModule = ruleModules[ruleIndex] || ruleModules.find(m => m.id === targetModuleId);
+          if (targetRuleModule) {
+            rawModule = targetRuleModule.rawModule;
+            targetRuleModuleName = targetRuleModule.name || targetRuleModule.moduleName;
+          }
+        }
+
+        if (!rawModule) return;
+
+        const fieldValueMap = {
+          'condition_date_time': rule.condition.timeDate || '',
+          'condition_date_time_repeat_days': (rule.condition.repeatDays || []).join('|'),
+          'consequence_value': rule.consequence.value || '',
+          'condition_type': rule.condition.type || '',
+          'condition_modbus': rule.condition.modbus || '',
+          'comparison_type': rule.condition.comparisonType || '',
+          'comparison_value': rule.condition.comparisonValue || '',
+          'consequence_type': rule.consequence.type || '',
+          'consequence_modbus': rule.consequence.modbus || ''
+        };
+
+        const settingFields = rawModule.settingFieldsList || rawModule.settingFieldVOList || rawModule.settingFieldList || [];
+        const fieldCOS = settingFields.map(f => {
+          let val = fieldValueMap.hasOwnProperty(f.fieldName)
+            ? fieldValueMap[f.fieldName]
+            : (f.currentValue !== undefined && f.currentValue !== null && f.currentValue !== ''
+                ? f.currentValue
+                : (f.value !== undefined && f.value !== null && f.value !== '' ? f.value : (f.defaultValue || '')));
+
+          if (f.fieldName === 'condition_date_time_repeat_days' && (!val || val === '')) {
+            val = f.defaultValue || 'MON';
+          }
+
+          return {
+            id: f.moduleFieldMappingId || f.id,
+            currentValue: val
+          };
+        });
+
+        const putPayload = {
+          name: rawModule.name || rawModule.moduleName || targetRuleModuleName,
+          id: targetModuleId,
+          fieldCOS: fieldCOS
+        };
+
+        try {
+          await fetch(`${CONFIG_API_URL}/module/${targetModuleId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(putPayload)
+          });
+        } catch (err) {
+          console.error('[Sync Rules] Error putting module rule:', targetModuleId, err);
+        }
+      }));
+    };
+
     let mapping = {};
     if (selectedModule === 'AG Tank') {
       mapping = {
@@ -3701,6 +3913,15 @@ const ConfigTemplates = () => {
     const uniqueName = templateName || `${autoName} (#${String(savedTemplates.length + 1).padStart(2, '0')})`;
 
     try {
+      // Sync rules to Sochiot first
+      if (selectedCategory === 'AC') {
+        await syncRulesToSochiot(acRules);
+      } else if (selectedModule === 'AG Tank') {
+        await syncRulesToSochiot(agRules);
+      } else if (selectedModule === 'UG Pump') {
+        await syncRulesToSochiot(ugRules);
+      }
+
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       const tenantId = userData?.tenantId;
 
@@ -3809,7 +4030,7 @@ const ConfigTemplates = () => {
     setEnergyMeteringTarget('');
     setSubMeterCategory('');
     setVrvConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', temperature: '', humidity: '', co2: '', tvoc: '', aqi: '', targetTemp: '', enabled: true });
-    setAcConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '', temperature: '', humidity: '', enabled: true, autoMode: 'SCHEDULE' });
+    setAcConfig({ organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '', temperature: '', humidity: '', enabled: true, autoMode: 'SCHEDULE', ruleDevice: '' });
     setUgTankLevelConfig(createDefaultConfig());
     setUgTankRange({ name: '', id: '' });
     setTemplateName('');
@@ -3919,7 +4140,30 @@ const ConfigTemplates = () => {
       setEnergyMeteringTarget(normalizeMeterName(template.mapping.energyMeteringTarget || ''));
       setSubMeterCategory(template.mapping.subMeterCategory || '');
       setVrvConfig(template.mapping.vrvConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', vrvZone: '', temperature: '', humidity: '', co2: '', tvoc: '', aqi: '', targetTemp: '', enabled: true });
-      setAcConfig(template.mapping.acConfig || { organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '', temperature: '', humidity: '', enabled: true });
+      setAcConfig(template.mapping.acConfig ? {
+        organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '',
+        temperature: '', humidity: '', ampere: '', kw: '', 
+        avgVoltageLL: '', avgCurrent: '', avgPowerKva: '',
+        voltageRN: '', voltageYN: '', voltageBR: '',
+        currentL1: '', currentL2: '', currentL3: '',
+        kwR: '', kwY: '', kwB: '',
+        kwhR: '', kwhY: '', kwhB: '',
+        pfR: '', pfY: '', pfB: '',
+        enabled: true, autoMode: 'SCHEDULE',
+        ruleDevice: '',
+        ...template.mapping.acConfig
+      } : {
+        organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: '',
+        temperature: '', humidity: '', ampere: '', kw: '', 
+        avgVoltageLL: '', avgCurrent: '', avgPowerKva: '',
+        voltageRN: '', voltageYN: '', voltageBR: '',
+        currentL1: '', currentL2: '', currentL3: '',
+        kwR: '', kwY: '', kwB: '',
+        kwhR: '', kwhY: '', kwhB: '',
+        pfR: '', pfY: '', pfB: '',
+        enabled: true, autoMode: 'SCHEDULE',
+        ruleDevice: ''
+      });
       setUgConfig(template.mapping.ugConfig || {
         integration: { 'LEVEL MONITORING': true, 'PUMP STATUS': true, 'AUTO LOGIC': true, 'MANUAL CONTROL': true, 'START COMMAND': true, 'STOP COMMAND': true, 'PRESSURE SENSOR': true },
         electrical: { 'PHASE VOLTAGE': true, 'PHASE CURRENT': true, 'POWER FACTOR': true, 'FREQUENCY': true, 'KW LOAD': true, 'KVAH UNIT': true },
@@ -3941,7 +4185,54 @@ const ConfigTemplates = () => {
       } else if (template.module === 'UG Pump') {
         setUgRules(loadedRules);
       } else if (template.category === 'AC') {
-        setAcRules(loadedRules);
+        let ruleHostDevice = template.mapping.acConfig?.device;
+        if (ruleHostDevice) {
+          let locName = template.mapping.acConfig?.building || template.mapping.globalHierarchy?.building;
+          if (locName) {
+            const szOptions = getFieldList('subZone', { ...template.mapping.globalHierarchy, ...template.mapping.acConfig });
+            const selectedSZ = szOptions.find(o => o.id === (template.mapping.acConfig?.subZone || template.mapping.globalHierarchy?.subZone));
+            if (selectedSZ && selectedSZ.type === 'location') {
+              locName = template.mapping.acConfig?.subZone || template.mapping.globalHierarchy?.subZone;
+            }
+            const locInfo = locationDetails[locName];
+            if (locInfo && locInfo.deviceList) {
+              const rd = locInfo.deviceList.find(d => 
+                (d.label && d.label.toUpperCase().includes('RULE')) || 
+                (d.id && String(d.id).toUpperCase().includes('RULE'))
+              );
+              if (rd) ruleHostDevice = rd.id;
+            }
+          }
+        }
+
+        if (ruleHostDevice && deviceDetails[ruleHostDevice]?.modules) {
+          const ruleModules = Object.values(deviceDetails[ruleHostDevice].modules).filter(m => 
+            m.name && (m.name.toUpperCase().startsWith('RULE_') || m.name.toUpperCase().includes('RULE'))
+          );
+          ruleModules.sort((a, b) => {
+            const numA = parseInt(a.name.replace(/\D/g, ''), 10) || 0;
+            const numB = parseInt(b.name.replace(/\D/g, ''), 10) || 0;
+            return numA - numB;
+          });
+
+          if (ruleModules.length > 0) {
+            const aligned = ruleModules.map((m, idx) => {
+              const hasSochiotData = m.parsedRule && (m.parsedRule.condition.type !== 'NA' || m.parsedRule.condition.modbus || m.parsedRule.consequence.modbus);
+              const existingRule = hasSochiotData ? m.parsedRule : (loadedRules[idx] || m.parsedRule || initialRuleState);
+              return {
+                ...existingRule,
+                moduleId: m.id,
+                ruleName: m.name
+              };
+            });
+            setAcRules(aligned);
+            lastLoadedAcDeviceRules.current = template.mapping.acConfig.device;
+          } else {
+            setAcRules(loadedRules);
+          }
+        } else {
+          setAcRules(loadedRules);
+        }
       }
       setRuleEngineConfig(template.mapping.ruleEngineConfig || r1);
 
@@ -4016,6 +4307,7 @@ const ConfigTemplates = () => {
       if (template.mapping.acConfig?.device) {
         lastAutofilledAc.current = template.mapping.acConfig.device;
       }
+      lastLoadedAcDeviceRules.current = '';
     }
     setEditingTemplateId(template.id);
     setViewMode('FORM');
@@ -5882,6 +6174,8 @@ const ConfigTemplates = () => {
                             value={acConfig.acUnit || ''}
                             onChange={(e) => {
                               const targetVal = e.target.value;
+                              lastLoadedAcDeviceRules.current = '';
+                              lastAutofilledAc.current = '';
                               setAcConfig(prev => ({ ...prev, acUnit: targetVal }));
                               setTemplateName(targetVal);
                               
@@ -5893,7 +6187,7 @@ const ConfigTemplates = () => {
                               );
                               if (existing) {
                                 setEditingTemplateId(existing.id);
-                                setAcConfig(existing.mapping.acConfig || {
+                                setAcConfig(existing.mapping.acConfig ? {
                                   organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: targetVal,
                                   temperature: '', humidity: '', ampere: '', kw: '',
                                   avgVoltageLL: '', avgCurrent: '', avgPowerKva: '',
@@ -5902,7 +6196,20 @@ const ConfigTemplates = () => {
                                   kwR: '', kwY: '', kwB: '',
                                   kwhR: '', kwhY: '', kwhB: '',
                                   pfR: '', pfY: '', pfB: '',
-                                  enabled: true, autoMode: 'SCHEDULE'
+                                  enabled: true, autoMode: 'SCHEDULE',
+                                  ruleDevice: '',
+                                  ...existing.mapping.acConfig
+                                } : {
+                                  organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '', acUnit: targetVal,
+                                  temperature: '', humidity: '', ampere: '', kw: '',
+                                  avgVoltageLL: '', avgCurrent: '', avgPowerKva: '',
+                                  voltageRN: '', voltageYN: '', voltageBR: '',
+                                  currentL1: '', currentL2: '', currentL3: '',
+                                  kwR: '', kwY: '', kwB: '',
+                                  kwhR: '', kwhY: '', kwhB: '',
+                                  pfR: '', pfY: '', pfB: '',
+                                  enabled: true, autoMode: 'SCHEDULE',
+                                  ruleDevice: ''
                                 });
                                 const loaded = existing.mapping.rules || [
                                   existing.mapping.rule1Config || existing.mapping.ruleEngineConfig || initialRuleState,
@@ -5910,8 +6217,8 @@ const ConfigTemplates = () => {
                                 ];
                                 
                                 const activeAcDevice = existing.mapping.acConfig?.device;
-                                let ruleHostDevice = activeAcDevice;
-                                if (activeAcDevice) {
+                                let ruleHostDevice = existing.mapping.acConfig?.ruleDevice || activeAcDevice;
+                                if (!existing.mapping.acConfig?.ruleDevice && activeAcDevice) {
                                   let locName = existing.mapping.acConfig?.building || globalLocation.building;
                                   if (locName) {
                                     const szOptions = getFieldList('subZone', { ...globalLocation, ...existing.mapping.acConfig });
@@ -5958,12 +6265,15 @@ const ConfigTemplates = () => {
                                     };
                                   });
                                   setAcRules(aligned);
+                                  lastLoadedAcDeviceRules.current = activeAcDevice;
                                 } else {
                                   setAcRules(loaded);
                                 }
                                 if (existing.mapping.globalHierarchy) setGlobalLocation(existing.mapping.globalHierarchy);
                               } else {
                                 setEditingTemplateId(null);
+                                lastLoadedAcDeviceRules.current = '';
+                                lastAutofilledAc.current = '';
                                 setAcConfig({
                                   organization: '', client: '', zone: '', subZone: '', building: '', device: '', module: '',
                                   acUnit: targetVal, temperature: '', humidity: '', ampere: '', kw: '',
@@ -5973,7 +6283,8 @@ const ConfigTemplates = () => {
                                   kwR: '', kwY: '', kwB: '',
                                   kwhR: '', kwhY: '', kwhB: '',
                                   pfR: '', pfY: '', pfB: '',
-                                  enabled: true, autoMode: 'SCHEDULE'
+                                  enabled: true, autoMode: 'SCHEDULE',
+                                  ruleDevice: ''
                                 });
                                 setAcRules([initialRuleState, initialRuleState]);
                               }
@@ -6226,6 +6537,50 @@ const ConfigTemplates = () => {
                                     ))}
                                   </div>
                                 </div>
+
+                                <div className="mt-4 pt-3 border-top border-white border-opacity-5">
+                                  <Row className="align-items-center">
+                                    <Col sm={4}>
+                                      <Form.Label className="fs-10 text-info fw-black uppercase tracking-widest opacity-70 mb-0">Rule Controller Device Selection</Form.Label>
+                                    </Col>
+                                    <Col sm={8}>
+                                      <Form.Select
+                                        className="premium-input px-3 py-1 fs-11 fw-bold border-info border-opacity-20 shadow-inner"
+                                        style={{ height: '35px' }}
+                                        value={acConfig.ruleDevice || ''}
+                                        onChange={(e) => {
+                                          const ruleDevId = e.target.value;
+                                          setAcConfig(prev => ({ ...prev, ruleDevice: ruleDevId }));
+                                          lastLoadedAcDeviceRules.current = '';
+                                          if (ruleDevId) {
+                                            fetchDeviceDetails(ruleDevId);
+                                          }
+                                        }}
+                                      >
+                                        <option value="">SELECT RULE DEVICE</option>
+                                        {(() => {
+                                          const allDevices = [];
+                                          Object.entries(locationDetails).forEach(([locName, locInfo]) => {
+                                            if (locInfo && locInfo.deviceList) {
+                                              locInfo.deviceList.forEach(d => {
+                                                if (!allDevices.some(ad => ad.id === d.id)) {
+                                                  allDevices.push({
+                                                    id: d.id,
+                                                    label: `${locName} / ${d.label || d.id}`
+                                                  });
+                                                }
+                                              });
+                                            }
+                                          });
+                                          allDevices.sort((a, b) => a.label.localeCompare(b.label));
+                                          return allDevices.map(d => (
+                                            <option key={d.id} value={d.id}>{d.label}</option>
+                                          ));
+                                        })()}
+                                      </Form.Select>
+                                    </Col>
+                                  </Row>
+                                </div>
                                 
                                 <div className="mt-4 pt-3 border-top border-white border-opacity-5 d-flex justify-content-between align-items-center">
                                   <div className="d-flex gap-2 flex-wrap align-items-center">
@@ -6235,15 +6590,15 @@ const ConfigTemplates = () => {
                                         variant="outline-info"
                                         size="sm"
                                         className="fw-black fs-11 px-3 py-1 rounded-pill d-flex align-items-center gap-1 shadow-glow mb-1"
-                                        disabled={!acConfig.enabled || !acConfig.device}
+                                        disabled={!acConfig.enabled || !(acConfig.ruleDevice || findRuleHostDevice())}
                                         onClick={() => {
-                                          handleSendRule({ ...rule, moduleId: rule.moduleId || acConfig.device });
+                                          handleSendRule({ ...rule, moduleId: rule.moduleId || acConfig.ruleDevice || findRuleHostDevice() });
                                         }}
                                       >
                                         <Zap size={12} /> Send {rule.ruleName || `Rule ${idx + 1}`}
                                       </Button>
                                     ))}
-                                    {acConfig.enabled && acConfig.device && (
+                                    {acConfig.enabled && (acConfig.ruleDevice || findRuleHostDevice()) && (
                                       <Button
                                         variant="outline-success"
                                         size="sm"
@@ -6256,7 +6611,7 @@ const ConfigTemplates = () => {
                                       </Button>
                                     )}
                                   </div>
-                                  {(!acConfig.enabled || !acConfig.device) ? (
+                                  {(!acConfig.enabled || !(acConfig.ruleDevice || findRuleHostDevice())) ? (
                                     <div className="text-info fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-2 opacity-50">
                                       <Zap size={14} />
                                       RULE ENGINE NOT MAPPED
@@ -6272,25 +6627,27 @@ const ConfigTemplates = () => {
 
                                               const target = `RULE_${idx}`;
                                               const config = rule;
-                                              const targetModuleId = rule.moduleId || acConfig.device;
+                                              const targetModuleId = rule.moduleId || acConfig.ruleDevice || findRuleHostDevice();
                                               const ruleIndex = idx;
                                               
                                               // Find the rule host device to update its cache
-                                              let ruleHostDevice = acConfig.device;
-                                              let locName = acConfig.building || globalLocation.building;
-                                              if (locName) {
-                                                const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
-                                                const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
-                                                if (selectedSZ && selectedSZ.type === 'location') {
-                                                  locName = acConfig.subZone || globalLocation.subZone;
-                                                }
-                                                const locInfo = locationDetails[locName];
-                                                if (locInfo && locInfo.deviceList) {
-                                                  const rd = locInfo.deviceList.find(d => 
-                                                    (d.label && d.label.toUpperCase().includes('RULE')) || 
-                                                    (d.id && String(d.id).toUpperCase().includes('RULE'))
-                                                  );
-                                                  if (rd) ruleHostDevice = rd.id;
+                                              let ruleHostDevice = acConfig.ruleDevice || acConfig.device;
+                                              if (!acConfig.ruleDevice) {
+                                                let locName = acConfig.building || globalLocation.building;
+                                                if (locName) {
+                                                  const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
+                                                  const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+                                                  if (selectedSZ && selectedSZ.type === 'location') {
+                                                    locName = acConfig.subZone || globalLocation.subZone;
+                                                  }
+                                                  const locInfo = locationDetails[locName];
+                                                  if (locInfo && locInfo.deviceList) {
+                                                    const rd = locInfo.deviceList.find(d => 
+                                                      (d.label && d.label.toUpperCase().includes('RULE')) || 
+                                                      (d.id && String(d.id).toUpperCase().includes('RULE'))
+                                                    );
+                                                    if (rd) ruleHostDevice = rd.id;
+                                                  }
                                                 }
                                               }
 
