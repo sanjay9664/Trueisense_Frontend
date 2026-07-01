@@ -96,6 +96,53 @@ const ConfigTemplates = () => {
   const [isSendingRules, setIsSendingRules] = useState(false);
   const [isLoadingRuleDetails, setIsLoadingRuleDetails] = useState(false);
   const [currentRuleHostDevice, setCurrentRuleHostDevice] = useState(null);
+  const fetchingDevicesRef = useRef(new Set());
+
+  const [acUnitsState, setAcUnitsState] = useState(() => {
+    try {
+      const savedUnits = localStorage.getItem('bms_ac_units');
+      if (savedUnits) {
+        const parsed = JSON.parse(savedUnits);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((unit, idx) => ({
+            name: unit.name,
+            id: unit.id || `AC-${unit.name.toUpperCase().replace(/\s+/g, '-')}-${idx}`
+          }));
+        }
+      }
+    } catch (e) {}
+    return [
+      { name: 'Master AC', id: 'AC-MAIN-01' },
+      { name: 'Lobby AC', id: 'AC-LOBBY-01' },
+      { name: 'Main Hall AC', id: 'AC-HALL-01' },
+      { name: 'Server Room AC', id: 'AC-SERVER-01' }
+    ];
+  });
+
+  useEffect(() => {
+    const handleStorageSync = () => {
+      try {
+        const savedUnits = localStorage.getItem('bms_ac_units');
+        if (savedUnits) {
+          const parsed = JSON.parse(savedUnits);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setAcUnitsState(parsed.map((unit, idx) => ({
+              name: unit.name,
+              id: unit.id || `AC-${unit.name.toUpperCase().replace(/\s+/g, '-')}-${idx}`
+            })));
+            return;
+          }
+        }
+      } catch (e) {}
+    };
+    window.addEventListener('storage', handleStorageSync);
+    window.addEventListener('storage-update', handleStorageSync);
+    return () => {
+      window.removeEventListener('storage', handleStorageSync);
+      window.removeEventListener('storage-update', handleStorageSync);
+    };
+  }, []);
+
 
   const handleSendRule = async (config) => {
     if (!config || !config.moduleId) {
@@ -352,12 +399,69 @@ const ConfigTemplates = () => {
 
     const token = localStorage.getItem('sochiot_token');
     try {
+      let activeModuleId = targetModuleId;
 
-      console.log('[fetchAndOpenRuleEngineModal] Fetching rule module details for:', targetModuleId);
+      // If the targetModuleId is empty or is actually the device ID (not a rule module ID), resolve it dynamically!
+      if (resolvedHostDevice) {
+        let hostModules = deviceDetails[resolvedHostDevice]?.modules;
+        if (!hostModules) {
+          console.log('[fetchAndOpenRuleEngineModal] Fetching host device modules for:', resolvedHostDevice);
+          const devDetails = await getSochiotDeviceDetails(resolvedHostDevice);
+          let moduleSource = [];
+          if (devDetails) {
+            if (devDetails.uuid) {
+              try {
+                const instModules = await getSochiotDeviceModules(devDetails.uuid);
+                moduleSource = instModules || (instModules && instModules.data) || [];
+              } catch (e) {
+                console.error(e);
+              }
+            }
+            if (moduleSource.length === 0) {
+              moduleSource = devDetails.modules || devDetails.deviceTemplateVO?.moduleTemplates || [];
+            }
+            
+            const tempModules = {};
+            moduleSource.forEach(m => {
+              tempModules[m.id] = { id: m.id, name: m.name || m.moduleName, moduleNumber: m.moduleNumber, rawModule: m };
+            });
+            setDeviceDetails(prev => ({
+              ...prev,
+              [resolvedHostDevice]: { ...devDetails, modules: tempModules }
+            }));
+            hostModules = tempModules;
+          }
+        }
 
-      console.log('[fetchAndOpenRuleEngineModal] Fetching settings for rule module:', targetModuleId);
+        if (hostModules) {
+          const ruleModules = Object.values(hostModules).filter(m => {
+            const mName = String(m.name || m.moduleName || m.rawModule?.name || m.rawModule?.moduleName || '').toUpperCase();
+            const mType = String(m.rawModule?.moduleTypeVO?.name || m.moduleTypeVO?.name || '').toUpperCase();
+            return mName.includes('RULE') || mType === 'RULE_ENGINE';
+          });
+          
+          ruleModules.sort((a, b) => {
+            const rawA = a.moduleNumber !== undefined ? Number(a.moduleNumber) : (a.rawModule?.moduleNumber !== undefined ? Number(a.rawModule.moduleNumber) : null);
+            const rawB = b.moduleNumber !== undefined ? Number(b.moduleNumber) : (b.rawModule?.moduleNumber !== undefined ? Number(b.rawModule.moduleNumber) : null);
+            
+            if (rawA !== null && rawB !== null && !isNaN(rawA) && !isNaN(rawB)) {
+              return rawA - rawB;
+            }
+            
+            const numA = parseInt(String(a.name || a.moduleName || '').replace(/\D/g, ''), 10) || 0;
+            const numB = parseInt(String(b.name || b.moduleName || '').replace(/\D/g, ''), 10) || 0;
+            return numA - numB;
+          });
 
-      const res = await fetch(`${CONFIG_API_URL}/module/${targetModuleId}`, {
+          if (ruleModules[ruleIndex]) {
+            activeModuleId = ruleModules[ruleIndex].id;
+          }
+        }
+      }
+
+      console.log('[fetchAndOpenRuleEngineModal] Fetching settings for rule module ID:', activeModuleId);
+
+      const res = await fetch(`${CONFIG_API_URL}/module/${activeModuleId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -376,8 +480,8 @@ const ConfigTemplates = () => {
           }));
         }
         
-        if (settingFields.length === 0 && ruleHostDevice && deviceDetails[ruleHostDevice]) {
-          const cachedModule = deviceDetails[ruleHostDevice].modules?.[targetModuleId];
+        if (settingFields.length === 0 && resolvedHostDevice && deviceDetails[resolvedHostDevice]) {
+          const cachedModule = deviceDetails[resolvedHostDevice].modules?.[activeModuleId];
           if (cachedModule && cachedModule.rawModule?.settingFieldsList) {
             settingFields = cachedModule.rawModule.settingFieldsList;
           }
@@ -394,7 +498,7 @@ const ConfigTemplates = () => {
 
         const repeatDaysRaw = getSettingVal("condition_date_time_repeat_days") || "";
         const repeatDays = typeof repeatDaysRaw === 'string'
-          ? (repeatDaysRaw ? repeatDaysRaw.split(',') : [])
+          ? (repeatDaysRaw ? (repeatDaysRaw.includes('|') ? repeatDaysRaw.split('|') : repeatDaysRaw.split(',')) : [])
           : (Array.isArray(repeatDaysRaw) ? repeatDaysRaw : []);
 
 
@@ -403,7 +507,7 @@ const ConfigTemplates = () => {
         const isSched = condType === 'DATE_TIME_REPEAT' || condType === 'DATE_TIME_ONCE' || !!getSettingVal("condition_date_time");
 
         const latestParsedRule = {
-          moduleId: targetModuleId,
+          moduleId: activeModuleId,
           ruleName: moduleData.moduleName || moduleData.name || defaultConfig.ruleName || `RULE_${ruleIndex + 1}`,
           condition: {
             isScheduleEnabled: isSched,
@@ -753,12 +857,7 @@ const ConfigTemplates = () => {
     return list;
   }, []);
 
-  const acUnitsList = useMemo(() => [
-    { name: 'Master AC', id: 'AC-MAIN-01' },
-    { name: 'Lobby AC', id: 'AC-LOBBY-01' },
-    { name: 'Main Hall AC', id: 'AC-HALL-01' },
-    { name: 'Server Room AC', id: 'AC-SERVER-01' }
-  ], []);
+  const acUnitsList = acUnitsState;
 
 
   const isHierarchyUnlocked = useMemo(() => {
@@ -1989,9 +2088,12 @@ const ConfigTemplates = () => {
   };
 
   const fetchDeviceDetails = async (deviceId) => {
-    console.log('Fetching details for device:', deviceId);
     if (!deviceId) return null;
     if (deviceDetails[deviceId]) return deviceDetails[deviceId].modules;
+    if (fetchingDevicesRef.current.has(deviceId)) return null;
+
+    fetchingDevicesRef.current.add(deviceId);
+    console.log('Fetching details for device:', deviceId);
     try {
       const data = await getSochiotDeviceDetails(deviceId);
       if (data) {
@@ -2049,36 +2151,7 @@ const ConfigTemplates = () => {
           let parsedRule = null;
 
           if (isRuleEngine) {
-            // Fetch real-time settings for this exact rule module if not already returned
-            if (settingFields.length === 0) {
-              try {
-                console.log('[fetchDeviceDetails] Fetching settings for rule module:', m.id);
-                const moduleRes = await fetch(`${CONFIG_API_URL}/module/${m.id}`, {
-                  headers: {
-                    'Authorization': `Bearer ${token}`
-                  }
-                });
-                if (moduleRes.ok) {
-                  const fetched = await moduleRes.json();
-                  const moduleData = fetched.data || fetched;
-                  settingFields = moduleData.settingFieldVOList || moduleData.settingFieldList || moduleData.settingFields || [];
-
-
-                  const rawModuleMappingList = moduleData.moduleFieldMappingVOS || moduleData.moduleFieldMappingVOList;
-                  if (rawModuleMappingList && rawModuleMappingList.length > 0) {
-                    settingFields = rawModuleMappingList.map(sf => ({
-                      ...(sf.settingFieldVO || {}),
-                      moduleFieldMappingId: sf.moduleFieldMappingId,
-                      currentValue: sf.currentValue
-                    }));
-                  }
-
-                }
-              } catch (err) {
-                console.error('[fetchDeviceDetails] Error fetching settings for rule module:', m.id, err);
-              }
-            }
-
+            // Skipped background settings pre-fetch to speed up load time
 
             // Fallback to template settingFields if fetch failed or returned empty
             if (settingFields.length === 0) {
@@ -2128,7 +2201,13 @@ const ConfigTemplates = () => {
 
             const repeatDaysRaw = getSettingVal("condition_date_time_repeat_days") || "";
             const repeatDays = typeof repeatDaysRaw === 'string'
-              ? (repeatDaysRaw ? repeatDaysRaw.split(',') : [])
+              ? (repeatDaysRaw 
+                  ? (repeatDaysRaw.includes('##&&##') 
+                      ? repeatDaysRaw.split('##&&##') 
+                      : (repeatDaysRaw.includes('|') 
+                          ? repeatDaysRaw.split('|') 
+                          : repeatDaysRaw.split(','))) 
+                  : [])
               : (Array.isArray(repeatDaysRaw) ? repeatDaysRaw : []);
 
             const condType = getSettingVal("condition_type") || "NA";
@@ -2174,6 +2253,8 @@ const ConfigTemplates = () => {
       }
     } catch (error) {
       console.error('Error fetching device details:', error);
+    } finally {
+      fetchingDevicesRef.current.delete(deviceId);
     }
     return null;
   };
@@ -6228,9 +6309,6 @@ const ConfigTemplates = () => {
                                                 }
                                               }
 
-                                              fetchAndOpenRuleEngineModal(`RULE_${idx}`, rule, targetModuleId, ruleHostDevice, idx);
-
-                                              
                                               fetchAndOpenRuleEngineModal(target, config, targetModuleId, ruleHostDevice, ruleIndex);
 
                                             }}

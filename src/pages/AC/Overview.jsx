@@ -793,6 +793,56 @@ const ACOverview = () => {
               pfB: nextPfb !== null ? nextPfb : (prevUnit.pfB !== undefined ? prevUnit.pfB : null)
             };
           });
+
+          // Unify the units state update based on the newly calculated telemetry
+          setUnits(prevUnits => {
+            let changed = false;
+            const nextUnits = prevUnits.map(unit => {
+              const match = acTemplates.find(t => t.mapping.acConfig.acUnit === unit.name);
+              if (match) {
+                const acConfig = match.mapping.acConfig;
+                const unitTelemetry = nextTelemetry[unit.name];
+                if (unitTelemetry) {
+                  const liveKw = unitTelemetry.kw !== null ? Number(unitTelemetry.kw) : 0;
+                  const liveAmp = unitTelemetry.ampere !== null ? Number(unitTelemetry.ampere) : 0;
+                  const liveL1 = unitTelemetry.currentL1 !== null ? Number(unitTelemetry.currentL1) : 0;
+                  const liveAvgC = unitTelemetry.avgCurrent !== null ? Number(unitTelemetry.avgCurrent) : 0;
+                  const liveKwr = unitTelemetry.kwR !== null ? Number(unitTelemetry.kwR) : 0;
+                  const liveKwy = unitTelemetry.kwY !== null ? Number(unitTelemetry.kwY) : 0;
+                  const liveKwb = unitTelemetry.kwB !== null ? Number(unitTelemetry.kwB) : 0;
+                  
+                  const totalActivePower = liveKw || liveKwr || liveKwy || liveKwb;
+                  const totalActiveCurrent = liveAmp || liveL1 || liveAvgC;
+
+                  const isPowerMapped = acConfig.kw || acConfig.kwR || acConfig.kwY || acConfig.kwB;
+                  const isCurrentMapped = acConfig.ampere || acConfig.currentL1 || acConfig.avgCurrent;
+
+                  let expectedStatus = unit.status;
+                  if (isPowerMapped || isCurrentMapped) {
+                    const hasPower = (isPowerMapped && totalActivePower > 0.05) || (isCurrentMapped && totalActiveCurrent > 0.2);
+                    expectedStatus = hasPower ? 'ON' : 'OFF';
+                  }
+
+                  const expectedRoomTemp = unitTelemetry.temperature !== null ? unitTelemetry.temperature : unit.roomTemp;
+                  const expectedHumidity = unitTelemetry.humidity !== null ? unitTelemetry.humidity : unit.humidity;
+
+                  if (unit.status !== expectedStatus || unit.roomTemp !== expectedRoomTemp || unit.humidity !== expectedHumidity) {
+                    changed = true;
+                    return {
+                      ...unit,
+                      status: expectedStatus,
+                      roomTemp: expectedRoomTemp,
+                      humidity: expectedHumidity,
+                      powerUsage: expectedStatus === 'ON' ? (totalActivePower || 1.5) : 0
+                    };
+                  }
+                }
+              }
+              return unit;
+            });
+            return changed ? nextUnits : prevUnits;
+          });
+
           return nextTelemetry;
         });
       } catch (err) {
@@ -829,8 +879,31 @@ const ACOverview = () => {
             if (match && match.mapping?.acConfig) {
               const acConfig = match.mapping.acConfig;
               
-              // 1. Set ON/OFF status based on acConfig.enabled
-              const expectedStatus = acConfig.enabled ? 'ON' : 'OFF';
+              // 1. Set ON/OFF status based on live telemetry readings if mapped
+              let expectedStatus = unit.status;
+              const telemetry = liveTelemetry[unit.name];
+              if (telemetry) {
+                const liveKw = telemetry.kw !== null ? Number(telemetry.kw) : 0;
+                const liveAmp = telemetry.ampere !== null ? Number(telemetry.ampere) : 0;
+                const liveL1 = telemetry.currentL1 !== null ? Number(telemetry.currentL1) : 0;
+                const liveAvgC = telemetry.avgCurrent !== null ? Number(telemetry.avgCurrent) : 0;
+                const liveKwr = telemetry.kwR !== null ? Number(telemetry.kwR) : 0;
+                const liveKwy = telemetry.kwY !== null ? Number(telemetry.kwY) : 0;
+                const liveKwb = telemetry.kwB !== null ? Number(telemetry.kwB) : 0;
+                
+                const totalActivePower = liveKw || liveKwr || liveKwy || liveKwb;
+                const totalActiveCurrent = liveAmp || liveL1 || liveAvgC;
+
+                const isPowerMapped = acConfig.kw || acConfig.kwR || acConfig.kwY || acConfig.kwB;
+                const isCurrentMapped = acConfig.ampere || acConfig.currentL1 || acConfig.avgCurrent;
+
+                if (isPowerMapped || isCurrentMapped) {
+                  const hasPower = (isPowerMapped && totalActivePower > 0.05) || (isCurrentMapped && totalActiveCurrent > 0.2);
+                  expectedStatus = hasPower ? 'ON' : 'OFF';
+                }
+              } else {
+                expectedStatus = acConfig.enabled ? 'ON' : 'OFF';
+              }
               
               // 2. Set Temperature value based on whether register is mapped.
               // If mapped, we show 30 (the live template config value)
@@ -1263,10 +1336,13 @@ const ACOverview = () => {
             <Card className="border-0 h-100 overflow-hidden premium-card" style={{ 
               background: 'linear-gradient(135deg, rgba(16, 16, 24, 0.75) 0%, rgba(8, 8, 12, 0.9) 100%)', 
               borderRadius: '24px', 
-              border: '1px solid rgba(249, 115, 22, 0.12)',
+              border: unit.status === 'ON' ? '1px solid rgba(249, 115, 22, 0.25)' : '1px solid rgba(255, 255, 255, 0.06)',
               backdropFilter: 'blur(20px)',
-              boxShadow: '0 15px 45px rgba(0,0,0,0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.03)',
-              transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+              boxShadow: unit.status === 'ON' 
+                ? '0 15px 45px rgba(249, 115, 22, 0.12), inset 0 1px 0 0 rgba(255, 255, 255, 0.05)' 
+                : '0 15px 45px rgba(0,0,0,0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.02)',
+              transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+              opacity: unit.status === 'ON' ? 1 : 0.8
             }}>
               
               {/* Elegant Top Border Indicator */}
@@ -1284,8 +1360,8 @@ const ACOverview = () => {
                  <div className="mb-4 pe-4">
                    <div className="d-flex align-items-center justify-content-between">
                      <div className="d-flex align-items-center gap-2 mb-2">
-                       <MapPin size={12} style={{ color: '#f97316' }} />
-                       <span className="fw-bold text-uppercase" style={{ fontSize: '10px', letterSpacing: '1.5px', color: '#f97316' }}>{unit.room}</span>
+                       <MapPin size={12} style={{ color: unit.status === 'ON' ? '#f97316' : '#64748b', transition: 'all 0.3s ease' }} />
+                       <span className="fw-bold text-uppercase" style={{ fontSize: '10px', letterSpacing: '1.5px', color: unit.status === 'ON' ? '#f97316' : '#64748b', transition: 'all 0.3s ease' }}>{unit.room}</span>
                      </div>
                    </div>
                    <h4 className="text-white fw-bold mb-1">{unit.name}</h4>

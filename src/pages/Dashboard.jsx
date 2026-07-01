@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Activity } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 const Dashboard = () => {
+  const { isDark } = useTheme();
   const [time, setTime] = useState(new Date());
   const [selectedRole, setSelectedRole] = useState(() => {
     const rawRole = (localStorage.getItem('userRole') || 'Zone Manager').replace(/_/g, ' ').toLowerCase();
@@ -53,7 +55,9 @@ const Dashboard = () => {
       <div style={{
         position: 'absolute',
         top: 0, left: 0, right: 0, bottom: 0,
-        background: 'linear-gradient(rgba(249, 115, 22, 0.01) 1px, transparent 1px), linear-gradient(90deg, rgba(249, 115, 22, 0.01) 1px, transparent 1px)',
+        background: isDark
+          ? 'linear-gradient(rgba(249, 115, 22, 0.01) 1px, transparent 1px), linear-gradient(90deg, rgba(249, 115, 22, 0.01) 1px, transparent 1px)'
+          : 'linear-gradient(rgba(249, 115, 22, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(249, 115, 22, 0.03) 1px, transparent 1px)',
         backgroundSize: '40px 40px',
         animation: 'gridPan 40s linear infinite',
         opacity: 0.7,
@@ -67,7 +71,9 @@ const Dashboard = () => {
         top: '50%', left: '50%',
         transform: 'translate(-50%, -50%)',
         width: '600px', height: '600px',
-        background: 'radial-gradient(circle, rgba(249, 115, 22, 0.08) 0%, transparent 70%)',
+        background: isDark
+          ? 'radial-gradient(circle, rgba(249, 115, 22, 0.08) 0%, transparent 70%)'
+          : 'radial-gradient(circle, rgba(249, 115, 22, 0.05) 0%, transparent 70%)',
         zIndex: 1,
         pointerEvents: 'none'
       }}></div>
@@ -81,7 +87,7 @@ const Dashboard = () => {
           <div style={{
             position: 'absolute',
             top: 0, left: 0, right: 0, bottom: 0,
-            border: '2px dashed rgba(249, 115, 22, 0.25)',
+            border: isDark ? '2px dashed rgba(249, 115, 22, 0.25)' : '2px dashed rgba(249, 115, 22, 0.35)',
             borderRadius: '50%',
             animation: 'orbit 25s linear infinite'
           }}></div>
@@ -90,7 +96,7 @@ const Dashboard = () => {
           <div style={{
             position: 'absolute',
             top: '15px', left: '15px', right: '15px', bottom: '15px',
-            border: '1.5px solid rgba(255, 255, 255, 0.05)',
+            border: isDark ? '1.5px solid rgba(255, 255, 255, 0.05)' : '1.5px solid rgba(0, 0, 0, 0.04)',
             borderTopColor: '#f97316',
             borderRadius: '50%',
             animation: 'orbit 8s linear infinite reverse'
@@ -100,10 +106,14 @@ const Dashboard = () => {
           <div className="d-flex align-items-center justify-content-center" style={{
             position: 'absolute',
             top: '30px', left: '30px', right: '30px', bottom: '30px',
-            background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(8, 8, 12, 0.8) 100%)',
+            background: isDark
+              ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(8, 8, 12, 0.8) 100%)'
+              : 'linear-gradient(135deg, rgba(249, 115, 22, 0.05) 0%, rgba(255, 255, 255, 0.95) 100%)',
             borderRadius: '50%',
             border: '1px solid rgba(249, 115, 22, 0.3)',
-            boxShadow: '0 0 25px rgba(249, 115, 22, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.1)',
+            boxShadow: isDark
+              ? '0 0 25px rgba(249, 115, 22, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.1)'
+              : '0 8px 25px rgba(249, 115, 22, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.8)',
             animation: 'pulseGlow 4s ease-in-out infinite'
           }}>
             <Activity size={32} className="text-warning" style={{ filter: 'drop-shadow(0 0 8px #f97316)', color: '#f97316' }} />
@@ -114,7 +124,7 @@ const Dashboard = () => {
         <div style={{ marginBottom: '24px' }}>
           <h2 style={{
             fontSize: '14px',
-            color: '#a1a1aa',
+            color: isDark ? '#a1a1aa' : '#475569',
             textTransform: 'uppercase',
             letterSpacing: '5px',
             fontWeight: 800,
@@ -123,15 +133,8 @@ const Dashboard = () => {
           }}>
             Welcome to
           </h2>
-          <h1 style={{
-            fontSize: 'clamp(2.8rem, 5vw, 4.5rem)',
-            fontWeight: 900,
-            letterSpacing: '2px',
-            background: 'linear-gradient(90deg, #ff7a00 0%, #ff5100 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            filter: 'drop-shadow(0 4px 12px rgba(255, 122, 0, 0.25))',
-            animation: 'textReveal 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          <h1 className="gradient-brand-title animate-text-reveal" style={{
+            filter: isDark ? 'drop-shadow(0 4px 12px rgba(255, 122, 0, 0.25))' : 'drop-shadow(0 4px 8px rgba(255, 122, 0, 0.15))',
             margin: '8px 0 16px 0'
           }}>
             TRUEiSENSE
@@ -151,7 +154,7 @@ const Dashboard = () => {
           letterSpacing: '3px',
           textTransform: 'uppercase',
           fontWeight: 700,
-          color: '#71717a',
+          color: isDark ? '#71717a' : '#4b5563',
           marginBottom: '48px',
           animation: 'slideUpFade 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards'
         }}>
@@ -160,11 +163,17 @@ const Dashboard = () => {
 
         {/* Dynamic Session Information Panel */}
         <div style={{
-          background: 'linear-gradient(135deg, rgba(16, 16, 24, 0.6) 0%, rgba(8, 8, 12, 0.85) 100%)',
-          border: '1px solid rgba(249, 115, 22, 0.15)',
+          background: isDark
+            ? 'linear-gradient(135deg, rgba(16, 16, 24, 0.6) 0%, rgba(8, 8, 12, 0.85) 100%)'
+            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(248, 250, 252, 0.95) 100%)',
+          border: isDark
+            ? '1px solid rgba(249, 115, 22, 0.15)'
+            : '1px solid rgba(249, 115, 22, 0.22)',
           borderRadius: '16px',
           padding: '20px 32px',
-          boxShadow: '0 15px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)',
+          boxShadow: isDark
+            ? '0 15px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)'
+            : '0 10px 30px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.95)',
           display: 'inline-flex',
           flexDirection: 'column',
           gap: '12px',
@@ -185,20 +194,25 @@ const Dashboard = () => {
             </span>
           </div>
 
-          <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.05)' }}></div>
+          <div style={{ width: '100%', height: '1px', background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}></div>
 
           {/* User Details */}
-          <div className="d-flex flex-wrap align-items-center justify-content-center gap-4 text-secondary" style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.5px' }}>
+          <div className="d-flex flex-wrap align-items-center justify-content-center gap-4 text-secondary" style={{ 
+            fontSize: '11px', 
+            fontWeight: 600, 
+            letterSpacing: '0.5px',
+            color: isDark ? '#a1a1aa' : '#4b5563'
+          }}>
             <span>
-              Session: <strong className="text-white">Active</strong>
+              Session: <strong style={{ color: isDark ? '#ffffff' : '#0f172a' }}>Active</strong>
             </span>
-            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }}></span>
+            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' }}></span>
             <span>
-              Role: <strong className="text-warning">{selectedRole}</strong>
+              Role: <strong style={{ color: '#f97316' }}>{selectedRole}</strong>
             </span>
-            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }}></span>
+            <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' }}></span>
             <span>
-              Time: <strong className="text-white">{time.toLocaleTimeString()}</strong>
+              Time: <strong style={{ color: isDark ? '#ffffff' : '#0f172a' }}>{time.toLocaleTimeString()}</strong>
             </span>
           </div>
         </div>
@@ -206,6 +220,22 @@ const Dashboard = () => {
 
       {/* Inject Keyframes */}
       <style dangerouslySetInnerHTML={{__html: `
+        .gradient-brand-title {
+          font-size: clamp(3.2rem, 6vw, 4.8rem);
+          font-weight: 950;
+          letter-spacing: 3px;
+          background: linear-gradient(90deg, #ff8a00 0%, #ff4b00 100%) !important;
+          -webkit-background-clip: text !important;
+          background-clip: text !important;
+          -webkit-text-fill-color: transparent !important;
+          color: transparent !important;
+          display: inline-block;
+        }
+
+        .animate-text-reveal {
+          animation: textReveal 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
         @keyframes pulseGlow {
           0% { transform: scale(0.98); opacity: 0.85; filter: drop-shadow(0 0 15px rgba(249, 115, 22, 0.2)); }
           50% { transform: scale(1.02); opacity: 1; filter: drop-shadow(0 0 35px rgba(249, 115, 22, 0.55)); }
