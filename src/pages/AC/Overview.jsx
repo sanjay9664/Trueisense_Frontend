@@ -1413,9 +1413,9 @@ const ACOverview = () => {
                          textShadow: unit.operationMode === 'Auto' ? '0 0 5px rgba(245, 158, 11, 0.4)' : 'none'
                        }}>
                          {unit.operationMode === 'Auto' 
-                           ? `AUTO: ${unit.activeAutoOptions?.includes('SCHEDULE') 
-                               ? 'SCHEDULE' 
-                               : (unit.activeAutoOptions?.includes('TEMP') ? 'SENSOR' : 'ACTIVE')}` 
+                           ? (unit.activeAutoOptions && unit.activeAutoOptions.length > 0 
+                               ? `AUTO: ${unit.activeAutoOptions[0]}` 
+                               : 'AUTO') 
                            : 'MANUAL'}
                        </span>
                      )}
