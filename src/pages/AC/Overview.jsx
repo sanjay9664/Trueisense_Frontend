@@ -378,6 +378,28 @@ const ACOverview = () => {
     }
   };
 
+  const formatForDateTimeLocal = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dateStr)) {
+        return dateStr;
+      }
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) {
+        const parts = dateStr.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}):(\d{2})$/);
+        if (parts) {
+          const [, day, month, year, hour, min] = parts;
+          return `${year}-${month}-${day}T${hour}:${min}`;
+        }
+        return '';
+      }
+      const pad = (num) => String(num).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch (e) {
+      return '';
+    }
+  };
+
   const getACOnlineStatus = (unitName) => {
     try {
       const match = templates.find(t => 
@@ -397,7 +419,7 @@ const ACOverview = () => {
     return false;
   };
 
-  const applyTempRangeRules = async (startVal, endVal, unitName) => {
+  const applyTempRangeRules = async (startVal, endVal, condType, unitName) => {
     try {
       const matchIndex = templates.findIndex(t => 
         t.category === 'AC' && 
@@ -415,16 +437,18 @@ const ACOverview = () => {
       const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
       const token = localStorage.getItem('sochiot_token');
       
-      // Update Rule 1 (Start) comparison value
+      // Update Rule 1 (Start) comparison value and condition type
       if (rules[0]) {
+        if (!rules[0].condition) rules[0].condition = {};
         rules[0].condition.comparisonValue = String(startVal);
+        rules[0].condition.type = condType;
         const payload1 = {
           moduleId: rules[0].moduleId || deviceId,
           settingFields: [
             { fieldName: "condition_date_time", currentValue: rules[0].condition?.timeDate || "" },
             { fieldName: "condition_date_time_repeat_days", currentValue: (rules[0].condition?.repeatDays || []).join(',') },
             { fieldName: "consequence_value", currentValue: rules[0].consequence?.value || "" },
-            { fieldName: "condition_type", currentValue: rules[0].condition?.type || "MODBUS" },
+            { fieldName: "condition_type", currentValue: condType },
             { fieldName: "condition_modbus", currentValue: rules[0].condition?.modbus || "" },
             { fieldName: "comparison_type", currentValue: rules[0].condition?.comparisonType || "" },
             { fieldName: "comparison_value", currentValue: String(startVal) },
@@ -442,16 +466,18 @@ const ACOverview = () => {
         });
       }
       
-      // Update Rule 2 (Stop) comparison value
+      // Update Rule 2 (Stop) comparison value and condition type
       if (rules[1]) {
+        if (!rules[1].condition) rules[1].condition = {};
         rules[1].condition.comparisonValue = String(endVal);
+        rules[1].condition.type = condType;
         const payload2 = {
           moduleId: rules[1].moduleId || deviceId,
           settingFields: [
             { fieldName: "condition_date_time", currentValue: rules[1].condition?.timeDate || "" },
             { fieldName: "condition_date_time_repeat_days", currentValue: (rules[1].condition?.repeatDays || []).join(',') },
             { fieldName: "consequence_value", currentValue: rules[1].consequence?.value || "" },
-            { fieldName: "condition_type", currentValue: rules[1].condition?.type || "MODBUS" },
+            { fieldName: "condition_type", currentValue: condType },
             { fieldName: "condition_modbus", currentValue: rules[1].condition?.modbus || "" },
             { fieldName: "comparison_type", currentValue: rules[1].condition?.comparisonType || "" },
             { fieldName: "comparison_value", currentValue: String(endVal) },
@@ -477,6 +503,124 @@ const ACOverview = () => {
       
     } catch (e) {
       console.error('Error applying temperature range rules:', e);
+    }
+  };
+
+  const applyScheduleRules = async (timeDate, repeatDays, condType, unitName) => {
+    try {
+      const matchIndex = templates.findIndex(t => 
+        t.category === 'AC' && 
+        t.module === 'Overview' && 
+        t.mapping?.acConfig?.acUnit === unitName
+      );
+      if (matchIndex === -1) return;
+      
+      const updatedTemplates = [...templates];
+      const match = updatedTemplates[matchIndex];
+      const rules = match.mapping?.rules || [];
+      const deviceId = match.mapping?.acConfig?.device;
+      if (!deviceId || rules.length === 0) return;
+      
+      const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
+      const token = localStorage.getItem('sochiot_token');
+      
+      for (const rule of rules) {
+        if (!rule.condition) rule.condition = {};
+        rule.condition.timeDate = timeDate;
+        rule.condition.repeatDays = repeatDays;
+        rule.condition.type = condType;
+        
+        const payload = {
+          moduleId: rule.moduleId || deviceId,
+          settingFields: [
+            { fieldName: "condition_date_time", currentValue: timeDate || "" },
+            { fieldName: "condition_date_time_repeat_days", currentValue: (repeatDays || []).join(',') },
+            { fieldName: "consequence_value", currentValue: rule.consequence?.value || "" },
+            { fieldName: "condition_type", currentValue: condType },
+            { fieldName: "condition_modbus", currentValue: rule.condition?.modbus || "" },
+            { fieldName: "comparison_type", currentValue: rule.condition?.comparisonType || "" },
+            { fieldName: "comparison_value", currentValue: rule.condition?.comparisonValue || "" },
+            { fieldName: "consequence_type", currentValue: rule.consequence?.type || "" },
+            { fieldName: "consequence_modbus", currentValue: rule.consequence?.modbus || "" }
+          ]
+        };
+        
+        await fetch(`${backendUrl}/api/rule-engine/apply`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+      }
+      
+      match.mapping.rules = rules;
+      updatedTemplates[matchIndex] = match;
+      setTemplates(updatedTemplates);
+      localStorage.setItem('scada_templates', JSON.stringify(updatedTemplates));
+      window.dispatchEvent(new Event('storage'));
+      
+    } catch (e) {
+      console.error('Error applying schedule rules:', e);
+    }
+  };
+
+  const applySensorRules = async (condType, unitName) => {
+    try {
+      const matchIndex = templates.findIndex(t => 
+        t.category === 'AC' && 
+        t.module === 'Overview' && 
+        t.mapping?.acConfig?.acUnit === unitName
+      );
+      if (matchIndex === -1) return;
+      
+      const updatedTemplates = [...templates];
+      const match = updatedTemplates[matchIndex];
+      const rules = match.mapping?.rules || [];
+      const deviceId = match.mapping?.acConfig?.device;
+      if (!deviceId || rules.length === 0) return;
+      
+      const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
+      const token = localStorage.getItem('sochiot_token');
+      
+      for (const rule of rules) {
+        if (!rule.condition) rule.condition = {};
+        rule.condition.type = condType;
+        
+        const payload = {
+          moduleId: rule.moduleId || deviceId,
+          settingFields: [
+            { fieldName: "condition_date_time", currentValue: rule.condition?.timeDate || "" },
+            { fieldName: "condition_date_time_repeat_days", currentValue: (rule.condition?.repeatDays || []).join(',') },
+            { fieldName: "consequence_value", currentValue: rule.consequence?.value || "" },
+            { fieldName: "condition_type", currentValue: condType },
+            { fieldName: "condition_modbus", currentValue: rule.condition?.modbus || "" },
+            { fieldName: "comparison_type", currentValue: rule.condition?.comparisonType || "" },
+            { fieldName: "comparison_value", currentValue: rule.condition?.comparisonValue || "" },
+            { fieldName: "consequence_type", currentValue: rule.consequence?.type || "" },
+            { fieldName: "consequence_modbus", currentValue: rule.consequence?.modbus || "" }
+          ]
+        };
+        
+        await fetch(`${backendUrl}/api/rule-engine/apply`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+      }
+      
+      match.mapping.rules = rules;
+      updatedTemplates[matchIndex] = match;
+      setTemplates(updatedTemplates);
+      localStorage.setItem('scada_templates', JSON.stringify(updatedTemplates));
+      window.dispatchEvent(new Event('storage'));
+      
+    } catch (e) {
+      console.error('Error applying sensor rules:', e);
     }
   };
   const [units, setUnits] = useState(() => {
@@ -524,9 +668,20 @@ const ACOverview = () => {
   // Settings Modal State
   const [showSettings, setShowSettings] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState(null);
-  const [formData, setFormData] = useState({});
-  const [showTempRangeModal, setShowTempRangeModal] = useState(false);
-  const [tempRangeData, setTempRangeData] = useState({ startTemp: '28', endTemp: '24' });
+  const [formData, setFormData] = useState({});  const [showTempRangeModal, setShowTempRangeModal] = useState(false);
+  const [tempRangeData, setTempRangeData] = useState({ startTemp: '28', endTemp: '24', condType: 'MODBUS' });
+  const [showScheduleConfigModal, setShowScheduleConfigModal] = useState(false);
+  const [scheduleConfigData, setScheduleConfigData] = useState({
+    timeDate: '',
+    repeatDays: [],
+    condType: 'DATE_TIME_REPEAT'
+  });
+  const [showSensorConfigModal, setShowSensorConfigModal] = useState(false);
+  const [sensorConfigData, setSensorConfigData] = useState({
+    condType: 'SENSOR'
+  });
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   // Live Telemetry for template mapped registers
   const [liveTelemetry, setLiveTelemetry] = useState({});
@@ -563,8 +718,6 @@ const ACOverview = () => {
     const saved = localStorage.getItem('bms_ac_groups');
     return saved ? JSON.parse(saved) : [{ id: 'g1', name: 'Master Control', acIds: [1, 2] }];
   });
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   const [templates, setTemplates] = useState(() => {
     try {
@@ -1144,21 +1297,26 @@ const ACOverview = () => {
   };
 
   const handleAutoToggle = (option) => {
-    setAutoOptions(prev => {
-      const newOptions = prev.includes(option) ? [] : [option];
-      setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: newOptions } : u));
-      
-      if (option === 'TEMP') {
-        const unit = units.find(u => u.id === controlTargetId);
-        const rules = getMappedRules(unit?.name);
-        const startT = rules?.[0]?.condition?.comparisonValue || '28';
-        const endT = rules?.[1]?.condition?.comparisonValue || '24';
-        setTempRangeData({ startTemp: startT, endTemp: endT });
-        setShowTempRangeModal(true);
-      }
-      
-      return newOptions;
-    });
+    const unit = units.find(u => u.id === controlTargetId);
+    const rules = getMappedRules(unit?.name);
+    
+    if (option === 'SCHEDULE') {
+      const timeDate = rules?.[0]?.condition?.timeDate || '';
+      const repeatDays = rules?.[0]?.condition?.repeatDays || [];
+      const condType = rules?.[0]?.condition?.type || 'DATE_TIME_REPEAT';
+      setScheduleConfigData({ timeDate, repeatDays, condType });
+      setShowScheduleConfigModal(true);
+    } else if (option === 'SENSOR') {
+      const condType = rules?.[0]?.condition?.type || 'SENSOR';
+      setSensorConfigData({ condType });
+      setShowSensorConfigModal(true);
+    } else if (option === 'TEMP') {
+      const startT = rules?.[0]?.condition?.comparisonValue || '28';
+      const endT = rules?.[1]?.condition?.comparisonValue || '24';
+      const cType = rules?.[0]?.condition?.type || 'MODBUS';
+      setTempRangeData({ startTemp: startT, endTemp: endT, condType: cType });
+      setShowTempRangeModal(true);
+    }
   };
 
   const handleControlAction = (action) => {
@@ -2149,6 +2307,23 @@ const ACOverview = () => {
           <div className="d-flex flex-column gap-3">
             <div className="p-3 rounded bg-black bg-opacity-30 border border-white border-opacity-5">
               <Form.Group>
+                <Form.Label className="text-info fw-bold uppercase tracking-widest fs-11 d-block mb-2">Condition Type</Form.Label>
+                <Form.Select
+                  value={tempRangeData.condType || 'MODBUS'}
+                  onChange={(e) => setTempRangeData({ ...tempRangeData, condType: e.target.value })}
+                  className="premium-input py-2 text-white fw-bold"
+                  style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                >
+                  <option value="MODBUS">MODBUS</option>
+                  <option value="SENSOR">SENSOR</option>
+                  <option value="DATE_TIME_REPEAT">DATE_TIME_REPEAT</option>
+                  <option value="DATE_TIME_ONCE">DATE_TIME_ONCE</option>
+                  <option value="NA">NA</option>
+                </Form.Select>
+              </Form.Group>
+            </div>
+            <div className="p-3 rounded bg-black bg-opacity-30 border border-white border-opacity-5">
+              <Form.Group>
                 <Form.Label className="text-info fw-bold uppercase tracking-widest fs-11 d-block mb-2">Starting Temperature (°C)</Form.Label>
                 <div className="d-flex align-items-center gap-2">
                   <Form.Control
@@ -2192,8 +2367,161 @@ const ACOverview = () => {
             className="rounded-pill px-4 fw-bold shadow" 
             onClick={async () => {
               const unit = units.find(u => u.id === controlTargetId);
-              await applyTempRangeRules(tempRangeData.startTemp, tempRangeData.endTemp, unit?.name);
+              await applyTempRangeRules(tempRangeData.startTemp, tempRangeData.endTemp, tempRangeData.condType || 'MODBUS', unit?.name);
+              setAutoOptions(['TEMP']);
+              setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: ['TEMP'] } : u));
               setShowTempRangeModal(false);
+            }}
+          >
+            Save & Apply Rules
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* SCHEDULE CONFIGURATION MODAL */}
+      <Modal show={showScheduleConfigModal} onHide={() => setShowScheduleConfigModal(false)} centered size="md" className="premium-modal">
+        <Modal.Header closeButton closeVariant="white" className="border-bottom-0 pb-0" style={{ background: '#0f172a' }}>
+          <Modal.Title className="text-white fs-5 fw-bold d-flex align-items-center gap-2">
+            <Clock size={20} className="text-info" />
+            Configure Schedule Rules
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="px-4 py-4" style={{ background: '#0f172a', color: '#fff' }}>
+          <div className="d-flex flex-column gap-3">
+            
+            <div className="p-3 rounded bg-black bg-opacity-30 border border-white border-opacity-5">
+              <Form.Group>
+                <Form.Label className="text-info fw-bold uppercase tracking-widest fs-11 d-block mb-2">Condition Type</Form.Label>
+                <Form.Select
+                  value={scheduleConfigData.condType || 'DATE_TIME_REPEAT'}
+                  onChange={(e) => setScheduleConfigData({ ...scheduleConfigData, condType: e.target.value })}
+                  className="premium-input py-2 text-white fw-bold"
+                  style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                >
+                  <option value="DATE_TIME_REPEAT">DATE_TIME_REPEAT</option>
+                  <option value="DATE_TIME_ONCE">DATE_TIME_ONCE</option>
+                  <option value="MODBUS">MODBUS</option>
+                  <option value="SENSOR">SENSOR</option>
+                  <option value="NA">NA</option>
+                </Form.Select>
+              </Form.Group>
+            </div>
+
+            <div className="p-3 rounded bg-black bg-opacity-30 border border-white border-opacity-5">
+              <Form.Group>
+                <Form.Label className="text-info fw-bold uppercase tracking-widest fs-11 d-block mb-2">Condition Date & Time</Form.Label>
+                <Form.Control
+                  type="datetime-local"
+                  value={formatForDateTimeLocal(scheduleConfigData.timeDate)}
+                  onChange={(e) => setScheduleConfigData({ ...scheduleConfigData, timeDate: e.target.value })}
+                  className="premium-input py-2 text-white fw-bold font-monospace"
+                  style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', colorScheme: 'dark' }}
+                />
+                <small className="text-secondary mt-1 d-block" style={{ fontSize: '10px' }}>Use the calendar icon to select the execution date & time.</small>
+              </Form.Group>
+            </div>
+
+            <div className="p-3 rounded bg-black bg-opacity-30 border border-white border-opacity-5">
+              <Form.Group>
+                <Form.Label className="text-info fw-bold uppercase tracking-widest fs-11 d-block mb-2">Condition Date & Time Repeat Days</Form.Label>
+                <div className="d-flex flex-wrap gap-2 pt-1">
+                  {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(day => {
+                    const isChecked = scheduleConfigData.repeatDays.includes(day);
+                    return (
+                      <Button
+                        key={day}
+                        size="sm"
+                        variant={isChecked ? "info" : "outline-secondary"}
+                        className={`rounded-3 fw-bold fs-11 transition-all ${isChecked ? 'text-white' : 'text-secondary border-opacity-20'}`}
+                        onClick={() => {
+                          const newDays = isChecked 
+                            ? scheduleConfigData.repeatDays.filter(d => d !== day)
+                            : [...scheduleConfigData.repeatDays, day];
+                          setScheduleConfigData({ ...scheduleConfigData, repeatDays: newDays });
+                        }}
+                      >
+                        {day}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <small className="text-secondary mt-2 d-block" style={{ fontSize: '10px' }}>Selected repeat days will be applied to the active schedule.</small>
+              </Form.Group>
+            </div>
+
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="border-top-0 pt-0 px-4 pb-4 justify-content-end" style={{ background: '#0f172a' }}>
+          <Button variant="outline-secondary" className="rounded-pill px-4 me-2" onClick={() => setShowScheduleConfigModal(false)}>Cancel</Button>
+          <Button 
+            variant="info" 
+            className="rounded-pill px-4 fw-bold shadow" 
+            onClick={async () => {
+              const unit = units.find(u => u.id === controlTargetId);
+              let finalDateTime = scheduleConfigData.timeDate;
+              if (finalDateTime) {
+                try {
+                  const d = new Date(finalDateTime);
+                  if (!isNaN(d.getTime())) {
+                    finalDateTime = d.toISOString();
+                  }
+                } catch (e) {
+                  console.warn('Failed to parse date to ISO string, using raw value:', e);
+                }
+              }
+              await applyScheduleRules(finalDateTime, scheduleConfigData.repeatDays, scheduleConfigData.condType, unit?.name);
+              setAutoOptions(['SCHEDULE']);
+              setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: ['SCHEDULE'] } : u));
+              setShowScheduleConfigModal(false);
+            }}
+          >
+            Save & Apply Rules
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* SENSOR CONFIGURATION MODAL */}
+      <Modal show={showSensorConfigModal} onHide={() => setShowSensorConfigModal(false)} centered size="md" className="premium-modal">
+        <Modal.Header closeButton closeVariant="white" className="border-bottom-0 pb-0" style={{ background: '#0f172a' }}>
+          <Modal.Title className="text-white fs-5 fw-bold d-flex align-items-center gap-2">
+            <Activity size={20} className="text-info" />
+            Configure Sensor Rules
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="px-4 py-4" style={{ background: '#0f172a', color: '#fff' }}>
+          <div className="d-flex flex-column gap-3">
+            
+            <div className="p-3 rounded bg-black bg-opacity-30 border border-white border-opacity-5">
+              <Form.Group>
+                <Form.Label className="text-info fw-bold uppercase tracking-widest fs-11 d-block mb-2">Condition Type</Form.Label>
+                <Form.Select
+                  value={sensorConfigData.condType || 'SENSOR'}
+                  onChange={(e) => setSensorConfigData({ ...sensorConfigData, condType: e.target.value })}
+                  className="premium-input py-2 text-white fw-bold"
+                  style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
+                >
+                  <option value="SENSOR">SENSOR</option>
+                  <option value="MODBUS">MODBUS</option>
+                  <option value="DATE_TIME_REPEAT">DATE_TIME_REPEAT</option>
+                  <option value="DATE_TIME_ONCE">DATE_TIME_ONCE</option>
+                  <option value="NA">NA</option>
+                </Form.Select>
+              </Form.Group>
+            </div>
+
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="border-top-0 pt-0 px-4 pb-4 justify-content-end" style={{ background: '#0f172a' }}>
+          <Button variant="outline-secondary" className="rounded-pill px-4 me-2" onClick={() => setShowSensorConfigModal(false)}>Cancel</Button>
+          <Button 
+            variant="info" 
+            className="rounded-pill px-4 fw-bold shadow" 
+            onClick={async () => {
+              const unit = units.find(u => u.id === controlTargetId);
+              await applySensorRules(sensorConfigData.condType, unit?.name);
+              setAutoOptions(['SENSOR']);
+              setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: ['SENSOR'] } : u));
+              setShowSensorConfigModal(false);
             }}
           >
             Save & Apply Rules

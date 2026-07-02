@@ -37,6 +37,7 @@ export const loginToSochiot = async (email, password) => {
       const data = await response.json();
       if (data.token) {
         localStorage.setItem('sochiot_token', data.token);
+        localStorage.setItem('token_timestamp', Date.now().toString());
         return data.token;
       }
       throw new Error('No token received');

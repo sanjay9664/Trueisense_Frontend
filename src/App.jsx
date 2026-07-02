@@ -34,6 +34,8 @@ function App() {
     
     if (urlToken) {
       localStorage.setItem('token', urlToken);
+      localStorage.setItem('sochiot_token', urlToken);
+      localStorage.setItem('token_timestamp', Date.now().toString());
       localStorage.setItem('isAuthenticated', 'true');
       if (urlRole) localStorage.setItem('userRole', urlRole);
       
@@ -82,43 +84,111 @@ function App() {
     };
   }, []);
 
-  // Auth Token Auto-Refresh every 14 minutes
+  // Auth Token Auto-Refresh and Logout Manager
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const refreshAuthToken = async () => {
-      const email = localStorage.getItem('sochiot_email');
-      const password = localStorage.getItem('sochiot_password');
-      if (!email || !password) return;
+    const checkTokenAgeAndManageSession = async () => {
+      const tokenTimestamp = localStorage.getItem('token_timestamp');
+      if (!tokenTimestamp) {
+        // Set timestamp if not found to avoid premature logout
+        localStorage.setItem('token_timestamp', Date.now().toString());
+        return;
+      }
 
-      try {
-        console.log('[Auth Token Refresh] Initiating token auto-update...');
-        const response = await fetch('https://app.sochiot.com/api/auth-engine/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
+      const elapsedMs = Date.now() - parseInt(tokenTimestamp, 10);
+      const fifteenMinutesMs = 15 * 60 * 1000;
+      const gracePeriodMs = 20 * 60 * 1000; // 20 mins grace period to force logout if refresh consistently fails
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.token) {
-            localStorage.setItem('token', data.token);
-            localStorage.setItem('sochiot_token', data.token);
-            console.log('[Auth Token Refresh] Token successfully refreshed at', new Date().toLocaleTimeString());
-            window.dispatchEvent(new Event('storage-update'));
+      if (elapsedMs >= fifteenMinutesMs) {
+        const isTabActive = document.visibilityState === 'visible';
+
+        if (isTabActive) {
+          console.log('[Auth Manager] Token expired (15m). Tab is active, regenerating token...');
+          const email = localStorage.getItem('sochiot_email');
+          const password = localStorage.getItem('sochiot_password');
+          if (!email || !password) {
+            performSessionLogout('No credentials to auto-renew session');
+            return;
+          }
+
+          try {
+            const response = await fetch('https://app.sochiot.com/api/auth-engine/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password })
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.token) {
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('sochiot_token', data.token);
+                localStorage.setItem('token_timestamp', Date.now().toString());
+                console.log('[Auth Manager] Token successfully regenerated at', new Date().toLocaleTimeString());
+                window.dispatchEvent(new Event('storage-update'));
+              } else {
+                console.error('[Auth Manager] No token in refresh response.');
+              }
+            } else {
+              console.error('[Auth Manager] Failed to regenerate token, status:', response.status);
+              if (elapsedMs >= gracePeriodMs) {
+                performSessionLogout(`Token renewal failed repeatedly (expired for ${Math.round(elapsedMs / 1000 / 60)} minutes)`);
+              }
+            }
+          } catch (error) {
+            console.error('[Auth Manager] Error during token regeneration:', error);
+            if (elapsedMs >= gracePeriodMs) {
+              performSessionLogout('Token renewal network error (expired for too long)');
+            }
           }
         } else {
-          console.error('[Auth Token Refresh] Failed to refresh token, response status:', response.status);
+          // Tab is not active/hidden: trigger logout with timestamp
+          performSessionLogout('Tab is inactive, auto-logout triggered');
         }
-      } catch (error) {
-        console.error('[Auth Token Refresh] Error updating auth token:', error);
       }
     };
 
-    // Run interval every 14 minutes
-    const tokenInterval = setInterval(refreshAuthToken, 14 * 60 * 1000);
-    
-    return () => clearInterval(tokenInterval);
+    const performSessionLogout = (reason) => {
+      console.log(`[Auth Manager] Logging out. Reason: ${reason}`);
+      const logoutTimestamp = Date.now().toString();
+      localStorage.setItem('logout_timestamp', logoutTimestamp);
+
+      localStorage.removeItem('isAuthenticated');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('userData');
+      localStorage.removeItem('token');
+      localStorage.removeItem('sochiot_token');
+      localStorage.removeItem('sochiot_email');
+      localStorage.removeItem('sochiot_password');
+      localStorage.removeItem('scada_modules_config');
+      localStorage.removeItem('scada_submodules_config');
+      localStorage.removeItem('scada_feature_permissions');
+
+      window.dispatchEvent(new Event('storage-update'));
+      setIsAuthenticated(false);
+      window.location.href = '/login';
+    };
+
+    // Check token age every 10 seconds
+    const checkInterval = setInterval(checkTokenAgeAndManageSession, 10 * 1000);
+
+    // Check immediately when visibility state changes to visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkTokenAgeAndManageSession();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Initial check on mount
+    checkTokenAgeAndManageSession();
+
+    return () => {
+      clearInterval(checkInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [isAuthenticated]);
 
   const handleLoginSuccess = () => {

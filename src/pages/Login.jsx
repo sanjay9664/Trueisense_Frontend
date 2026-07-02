@@ -34,6 +34,7 @@ const Login = ({ onLoginSuccess }) => {
         const token = data.token;
         localStorage.setItem('token', token);
         localStorage.setItem('sochiot_token', token);
+        localStorage.setItem('token_timestamp', Date.now().toString());
         localStorage.setItem('sochiot_email', credentials.username);
         localStorage.setItem('sochiot_password', credentials.password);
 

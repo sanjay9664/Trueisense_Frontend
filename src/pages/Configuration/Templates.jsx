@@ -6514,29 +6514,6 @@ const ConfigTemplates = () => {
                                   )}
                                 </Row>
 
-                                <div className="mt-4 pt-3 border-top border-white border-opacity-5">
-                                  <Form.Label className="fs-10 text-info fw-black uppercase tracking-widest opacity-70 mb-2 d-block">Default Auto Mode Selection</Form.Label>
-                                  <div className="d-flex gap-3">
-                                    {[
-                                      { label: 'SCHEDULE CONTROL', value: 'SCHEDULE' },
-                                      { label: 'SENSOR CONTROL', value: 'SENSOR' },
-                                      { label: 'TEMPERATURE CONTROL', value: 'TEMP' },
-                                      { label: 'LOCAL CONTROL', value: 'LOCAL' }
-                                    ].map(mode => (
-                                      <Form.Check
-                                        key={mode.value}
-                                        type="radio"
-                                        id={`ac-automode-${mode.value}`}
-                                        label={mode.label}
-                                        name="acAutoModeRadio"
-                                        checked={acConfig.autoMode === mode.value}
-                                        onChange={() => setAcConfig(prev => ({ ...prev, autoMode: mode.value }))}
-                                        className="premium-radio fs-11 text-white fw-bold me-3"
-                                        style={{ accentColor: '#0ea5e9' }}
-                                      />
-                                    ))}
-                                  </div>
-                                </div>
 
                                 <div className="mt-4 pt-3 border-top border-white border-opacity-5">
                                   <Row className="align-items-center">

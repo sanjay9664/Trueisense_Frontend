@@ -320,7 +320,19 @@ const AQIOverview = () => {
 
             if (newZone.isPlaceholder || !newZone.history || newZone.history.length === 0) {
               newZone.isPlaceholder = false;
-              newZone.history = [historyItem];
+              const generated = createHistoryData(
+                getValidValue(newZone.temp, 'temp'),
+                getValidValue(newZone.hum, 'hum'),
+                getValidValue(newZone.aqi, 'aqi'),
+                getValidValue(newZone.co2, 'co2'),
+                getValidValue(newZone.tvoc, 'tvoc')
+              );
+              if (generated.length > 0) {
+                generated[generated.length - 1].time = timeStr;
+                newZone.history = generated;
+              } else {
+                newZone.history = [historyItem];
+              }
             } else {
               const lastVal = newZone.history[newZone.history.length - 1];
               if (lastVal && lastVal.time === timeStr) {
