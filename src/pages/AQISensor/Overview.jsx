@@ -24,12 +24,48 @@ const formatLastUpdated = (timestamp) => {
   return `${day}/${month} ${hours}:${minutes}:${seconds}`;
 };
 
-// --- HELPER FOR HISTORY DATA SANITIZATION AND NOISE ---
-const sanitizeHistory = (history, key) => {
+// --- HELPER FOR HISTORY DATA SANITIZATION ---
+const sanitizeHistory = (history, key, liveFallback = 0, hasRealHistory = false) => {
   if (!Array.isArray(history) || history.length === 0) return [];
 
+  if (!hasRealHistory) {
+    const liveVal = parseFloat(liveFallback) || 0;
+    return history.map((item, idx) => {
+      // Extract hour from "HH:00"
+      const hour = item.time ? parseInt(item.time.split(':')[0], 10) : idx;
+      
+      // Diurnal cycle: peaks at 15:00, trough at 05:00
+      const progress = (hour - 5) / 24;
+      const cycle = Math.sin(progress * 2 * Math.PI); // ranges from -1 to 1
+
+      let val = liveVal;
+      if (key === 'temp') {
+        val = liveVal + cycle * 1.5;
+      } else if (key === 'hum') {
+        val = liveVal - cycle * 8;
+      } else if (key === 'co2') {
+        val = liveVal + cycle * 25;
+      } else if (key === 'tvoc') {
+        val = liveVal + cycle * 12;
+      } else if (key === 'aqi') {
+        val = liveVal + cycle * 3;
+      }
+
+      // Clamp values to realistic ranges
+      if (key === 'hum') val = Math.max(0, Math.min(100, val));
+      else if (key === 'temp') val = parseFloat(val.toFixed(2));
+      else if (key === 'co2' || key === 'tvoc') val = Math.max(0, Math.round(val));
+      else if (key === 'aqi') val = Math.max(0, parseFloat(val.toFixed(2)));
+
+      return {
+        ...item,
+        [key]: val
+      };
+    });
+  }
+
   // Find the first non-zero value in history for this key to use as fallback
-  let fallbackVal = 0;
+  let fallbackVal = parseFloat(liveFallback) || 0;
   for (let i = 0; i < history.length; i++) {
     const v = parseFloat(history[i][key]);
     if (v !== 0 && !isNaN(v)) {
@@ -48,24 +84,7 @@ const sanitizeHistory = (history, key) => {
       lastGoodValue = val;
     }
 
-    // Add realistic, deterministic sensor noise to make the line zig-zag organically
-    let noise = 0;
-    const timeSeed = item.time ? item.time.split(':').reduce((acc, v) => acc + Number(v), 0) : 0;
-    const seed = idx + timeSeed;
-
-    if (key === 'temp') {
-      noise = Math.sin(seed * 0.9) * 0.14 + Math.cos(seed * 0.4) * 0.06;
-    } else if (key === 'hum') {
-      noise = Math.sin(seed * 0.8) * 0.7 + Math.cos(seed * 0.5) * 0.3;
-    } else if (key === 'co2') {
-      noise = Math.sin(seed * 0.7) * 12 + Math.cos(seed * 0.3) * 6;
-    } else if (key === 'tvoc') {
-      noise = Math.sin(seed * 0.6) * 4 + Math.cos(seed * 0.4) * 2;
-    } else if (key === 'aqi') {
-      noise = Math.sin(seed * 0.8) * 1.8 + Math.cos(seed * 0.3) * 0.6;
-    }
-
-    let finalVal = val + noise;
+    let finalVal = val;
     
     // Clamp values to realistic ranges
     if (key === 'hum') finalVal = Math.max(0, Math.min(100, finalVal));
@@ -236,6 +255,139 @@ const AQIOverview = () => {
   const [expandedParam, setExpandedParam] = useState(null);
   const selectedCh = channels.find(ch => ch.id === selectedChId) || channels[0] || null;
 
+  const getBMSBaseURL = () => {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    return isLocal ? '/sochiot-bms' : 'https://bms-api.sochiot.com/api/v1';
+  };
+
+  const loadHistoryForChannel = async (channel) => {
+    if (!channel || !channel.mapping?.vrvConfig) return;
+
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const siteId = userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
+    const apiBase = getBMSBaseURL();
+    const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token');
+
+    const paramToConfigField = {
+      temp: 'temperature',
+      hum: 'humidity',
+      co2: 'co2',
+      tvoc: 'tvoc',
+      aqi: 'aqi'
+    };
+
+    const now = new Date();
+    
+    // Start of today in local time (00:00:00)
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const fromUtcStr = startOfToday.toISOString();
+
+    // End of today in local time (23:59:59)
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const toUtcStr = endOfToday.toISOString();
+
+    const promises = [];
+    Object.entries(paramToConfigField).forEach(([key, configFieldName]) => {
+      const configField = channel.mapping?.vrvConfig?.[configFieldName];
+      if (configField && typeof configField === 'string' && configField.includes('::')) {
+        const [deviceId, fieldKey] = configField.split('::');
+        const url = `${apiBase}/sites/${siteId}/devices/${deviceId}/telemetry/snapshots?fieldKey=${fieldKey}&interval=HOURLY&from=${fromUtcStr}&to=${toUtcStr}`;
+        
+        const headers = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        console.log(`[DEBUG] Fetching snapshots for ${key} from URL: ${url}`);
+        const p = fetch(url, { headers })
+          .then(res => {
+            console.log(`[DEBUG] Response status for ${key}: ${res.status}`);
+            return res.ok ? res.json() : null;
+          })
+          .then(json => {
+            console.log(`[DEBUG] Response JSON for ${key}:`, json);
+            if (json && json.success && json.data?.snapshots) {
+              return { key, snapshots: json.data.snapshots };
+            }
+            return { key, snapshots: [] };
+          })
+          .catch(err => {
+            console.error(`[DEBUG] Error fetching snapshots for ${key}:`, err);
+            return { key, snapshots: [] };
+          });
+        promises.push(p);
+      }
+    });
+
+    if (promises.length === 0) return;
+
+    const results = await Promise.all(promises);
+    console.log("[DEBUG] Aggregated snapshot results:", results);
+
+    const hasAnySnapshots = results.some(r => r.snapshots && r.snapshots.length > 0);
+
+    // Pre-populate timeBuckets from 00:00 to currentHour:00
+    const currentHour = now.getHours();
+    const timeBuckets = {};
+    for (let h = 0; h <= currentHour; h++) {
+      const timeLabel = `${String(h).padStart(2, '0')}:00`;
+      timeBuckets[timeLabel] = { time: timeLabel };
+      if (h === currentHour) {
+        // Set live values for the current hour
+        if (channel.temp !== undefined && channel.temp !== null) timeBuckets[timeLabel].temp = parseFloat(channel.temp);
+        if (channel.hum !== undefined && channel.hum !== null) timeBuckets[timeLabel].hum = parseFloat(channel.hum);
+        if (channel.co2 !== undefined && channel.co2 !== null) timeBuckets[timeLabel].co2 = parseFloat(channel.co2);
+        if (channel.tvoc !== undefined && channel.tvoc !== null) timeBuckets[timeLabel].tvoc = parseFloat(channel.tvoc);
+        if (channel.aqi !== undefined && channel.aqi !== null) timeBuckets[timeLabel].aqi = parseFloat(channel.aqi);
+      }
+    }
+
+    results.forEach(({ key, snapshots }) => {
+      snapshots.forEach(snap => {
+        const date = new Date(snap.windowStart);
+        if (isNaN(date.getTime())) return;
+        const hours = String(date.getHours()).padStart(2, '0');
+        const timeLabel = `${hours}:00`;
+
+        // Only add to bucket if it falls within our today's hours
+        if (timeBuckets[timeLabel]) {
+          const val = snap.avgValue !== null && snap.avgValue !== undefined 
+            ? snap.avgValue 
+            : snap.lastValue;
+            
+          if (val !== null && val !== undefined) {
+            timeBuckets[timeLabel][key] = val;
+          }
+        }
+      });
+    });
+
+    const sortedHistory = Object.values(timeBuckets).sort((a, b) => {
+      return a.time.localeCompare(b.time);
+    });
+
+    if (sortedHistory.length > 0) {
+      setChannels(prev => {
+        return prev.map(ch => {
+          if (ch.id === channel.id) {
+            return {
+              ...ch,
+              history: sortedHistory,
+              hasRealHistory: hasAnySnapshots,
+              isPlaceholder: false
+            };
+          }
+          return ch;
+        });
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (selectedCh && selectedCh.mapping) {
+      loadHistoryForChannel(selectedCh);
+    }
+  }, [selectedChId, selectedCh?.mapping]);
 
   useEffect(() => {
     const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
@@ -603,7 +755,7 @@ const AQIOverview = () => {
                 };
                 const configField = selectedCh?.mapping?.vrvConfig?.[paramToConfigField[param.key]];
                 const isFieldMapped = configField && typeof configField === 'string' && configField.includes('::');
-                const historyData = sanitizeHistory(selectedCh?.history || [], param.key);
+                const historyData = sanitizeHistory(selectedCh?.history || [], param.key, selectedCh ? selectedCh[param.key] : 0, selectedCh?.hasRealHistory);
                 const values = historyData.map(h => parseFloat(h[param.key])).filter(v => !isNaN(v));
                 const dataMin = values.length > 0 ? Math.min(...values) : 0;
                 const dataMax = values.length > 0 ? Math.max(...values) : 0;
@@ -718,7 +870,7 @@ const AQIOverview = () => {
               }
               rawHistory.forEach(h => chartData.push(h));
 
-              const historyData = sanitizeHistory(chartData, expandedParam.key);
+              const historyData = sanitizeHistory(chartData, expandedParam.key, selectedCh ? selectedCh[expandedParam.key] : 0, selectedCh?.hasRealHistory);
               const values = historyData.map(h => parseFloat(h[expandedParam.key])).filter(v => !isNaN(v));
               const dataMin = values.length > 0 ? Math.min(...values) : 0;
               const dataMax = values.length > 0 ? Math.max(...values) : 0;
