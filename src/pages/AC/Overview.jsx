@@ -466,8 +466,8 @@ const ACOverview = () => {
         { rule: rule2, condType: 'NA' },
         { rule: rule3, condType: 'NA' },
         { rule: rule4, condType: 'NA' },
-        { rule: rule5, condType: 'MODBUS', comparisonType: 'MORE_THEN', comparisonValue: String(startVal) },
-        { rule: rule6, condType: 'MODBUS', comparisonType: 'LESS_THEN', comparisonValue: String(endVal) }
+        { rule: rule5, condType: 'MODBUS', comparisonType: 'MORE_THEN', comparisonValue: String(startVal), condModbus: '(8)3,1' },
+        { rule: rule6, condType: 'MODBUS', comparisonType: 'LESS_THEN', comparisonValue: String(endVal), condModbus: '(8)3,1' }
       ];
 
       for (const item of allRuleSettings) {
@@ -481,6 +481,9 @@ const ACOverview = () => {
         }
         if (item.comparisonValue !== undefined) {
           r.condition.comparisonValue = item.comparisonValue;
+        }
+        if (item.condModbus) {
+          r.condition.modbus = item.condModbus;
         }
 
         const payload = {
