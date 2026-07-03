@@ -191,7 +191,7 @@ const ConfigTemplates = () => {
         moduleId: config.moduleId,
         settingFields: [
           { fieldName: "condition_date_time", currentValue: config.condition.timeDate || "" },
-          { fieldName: "condition_date_time_repeat_days", currentValue: (config.condition.repeatDays || []).join(',') },
+          { fieldName: "condition_date_time_repeat_days", currentValue: (config.condition.repeatDays || []).join('##&##') },
           { fieldName: "consequence_value", currentValue: config.consequence.value || "" },
           { fieldName: "condition_type", currentValue: config.condition.type || "" },
           { fieldName: "condition_modbus", currentValue: config.condition.modbus || "" },
@@ -406,7 +406,7 @@ const ConfigTemplates = () => {
       } else if (selectedCategory === 'AC') {
         setAcRules(prev => {
           const next = [...prev];
-          next[ruleIndex] = updatedRule;
+          next[ruleIndex] = initializeRuleCustomProps(updatedRule);
           return next;
         });
       }
@@ -687,6 +687,71 @@ const ConfigTemplates = () => {
     ruleDevice: ''
   });
   const [acRules, setAcRules] = useState([initialRuleState, initialRuleState]);
+  const initializeRuleCustomProps = (rule) => {
+    if (!rule) return { ruleMode: 'Local', ruleState: 'off' };
+    let mode = rule.ruleMode;
+    if (!mode) {
+      const condType = rule.condition?.type || '';
+      const isSched = rule.condition?.isScheduleEnabled || condType === 'DATE_TIME_REPEAT' || condType === 'DATE_TIME_ONCE';
+      if (isSched) {
+        mode = 'schedule';
+      } else if (condType === 'INPUT_1' || condType === 'INPUT_2' || condType === 'ANALOG_1') {
+        mode = 'sensor';
+      } else if (condType === 'ANALOG_2') {
+        mode = 'temp';
+      } else {
+        mode = 'Local';
+      }
+    }
+    let state = rule.ruleState;
+    if (!state) {
+      const consVal = String(rule.consequence?.value || '');
+      state = (consVal === '1' || consVal.toUpperCase() === 'ON') ? 'on' : 'off';
+    }
+    return {
+      ...rule,
+      ruleMode: mode,
+      ruleState: state
+    };
+  };
+
+  const handleSetRuleFromDropdowns = (ruleIndex) => {
+    if (!acRules || !acRules[ruleIndex]) return;
+
+    const mode = acRules[ruleIndex].ruleMode || 'Local';
+    const state = acRules[ruleIndex].ruleState || 'off';
+
+    setAcRules(prev => {
+      const next = [...prev];
+      const targetRule = { ...next[ruleIndex] };
+
+      if (!targetRule.condition) targetRule.condition = {};
+      if (!targetRule.consequence) targetRule.consequence = {};
+
+      if (mode === 'schedule') {
+        targetRule.condition.type = 'DATE_TIME_REPEAT';
+        targetRule.condition.isScheduleEnabled = true;
+      } else if (mode === 'sensor') {
+        targetRule.condition.type = 'INPUT_1';
+        targetRule.condition.isScheduleEnabled = false;
+      } else if (mode === 'temp') {
+        targetRule.condition.type = 'ANALOG_2';
+        targetRule.condition.isScheduleEnabled = false;
+      } else {
+        targetRule.condition.type = 'NA';
+        targetRule.condition.isScheduleEnabled = false;
+      }
+
+      targetRule.consequence.value = state === 'on' ? '1' : '0';
+
+      next[ruleIndex] = targetRule;
+      return next;
+    });
+
+    setToastMessage({ type: 'success', text: `Rule ${ruleIndex + 1} updated to ${mode} (${state.toUpperCase()}). Remember to save template to persist changes.` });
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
   const acRule1Config = acRules[0] || initialRuleState;
   const acRule2Config = acRules[1] || initialRuleState;
   
@@ -2016,18 +2081,30 @@ const ConfigTemplates = () => {
           const alignedRules = ruleModules.map((m, idx) => {
             const hasSochiotData = m.parsedRule && (m.parsedRule.condition.type !== 'NA' || m.parsedRule.condition.modbus || m.parsedRule.consequence.modbus);
             const existingRule = hasSochiotData ? m.parsedRule : (rulesToLoad[idx] || m.parsedRule || initialRuleState);
-            return {
+            return initializeRuleCustomProps({
               ...existingRule,
               moduleId: m.id,
               ruleName: m.name
-            };
+            });
           });
-          setAcRules(alignedRules);
+
+          let filtered = alignedRules.filter((r) => {
+            const isActive = r.ruleMode && r.ruleMode !== 'Local';
+            return isActive;
+          });
+
+          if (filtered.length === 0) {
+            filtered = alignedRules.slice(0, 2);
+          } else if (filtered.length === 1) {
+            filtered = alignedRules.slice(0, 2);
+          }
+
+          setAcRules(filtered);
         } else {
           if (rulesToLoad.length > 0) {
-            setAcRules(rulesToLoad);
+            setAcRules(rulesToLoad.map(initializeRuleCustomProps));
           } else {
-            setAcRules([initialRuleState, initialRuleState]);
+            setAcRules([initialRuleState, initialRuleState].map(initializeRuleCustomProps));
           }
         }
 
@@ -3416,11 +3493,17 @@ const ConfigTemplates = () => {
           ...savedAcConfig
         });
         setTemplateName(loadedAcUnit);
-        const loaded = existing.mapping.rules || [
+        const loaded = (existing.mapping.rules || [
           existing.mapping.rule1Config || existing.mapping.ruleEngineConfig || initialRuleState,
           existing.mapping.rule2Config || initialRuleState
-        ];
-        setAcRules(loaded);
+        ]).map(initializeRuleCustomProps);
+        let filteredLoaded = loaded.filter(r => r.ruleMode && r.ruleMode !== 'Local');
+        if (filteredLoaded.length === 0) {
+          filteredLoaded = loaded.slice(0, 2);
+        } else if (filteredLoaded.length === 1) {
+          filteredLoaded = loaded.slice(0, 2);
+        }
+        setAcRules(filteredLoaded);
         if (existing.mapping.globalHierarchy) setGlobalLocation(existing.mapping.globalHierarchy);
 
         // Fetch location details so device dropdowns work
@@ -4219,19 +4302,31 @@ const ConfigTemplates = () => {
             const aligned = ruleModules.map((m, idx) => {
               const hasSochiotData = m.parsedRule && (m.parsedRule.condition.type !== 'NA' || m.parsedRule.condition.modbus || m.parsedRule.consequence.modbus);
               const existingRule = hasSochiotData ? m.parsedRule : (loadedRules[idx] || m.parsedRule || initialRuleState);
-              return {
+              return initializeRuleCustomProps({
                 ...existingRule,
                 moduleId: m.id,
                 ruleName: m.name
-              };
+              });
             });
-            setAcRules(aligned);
+
+            let filtered = aligned.filter((r) => {
+              const isActive = r.ruleMode && r.ruleMode !== 'Local';
+              return isActive;
+            });
+
+            if (filtered.length === 0) {
+              filtered = aligned.slice(0, 2);
+            } else if (filtered.length === 1) {
+              filtered = aligned.slice(0, 2);
+            }
+
+            setAcRules(filtered);
             lastLoadedAcDeviceRules.current = template.mapping.acConfig.device;
           } else {
-            setAcRules(loadedRules);
+            setAcRules(loadedRules.map(initializeRuleCustomProps));
           }
         } else {
-          setAcRules(loadedRules);
+          setAcRules(loadedRules.map(initializeRuleCustomProps));
         }
       }
       setRuleEngineConfig(template.mapping.ruleEngineConfig || r1);
@@ -6211,10 +6306,10 @@ const ConfigTemplates = () => {
                                   enabled: true, autoMode: 'SCHEDULE',
                                   ruleDevice: ''
                                 });
-                                const loaded = existing.mapping.rules || [
+                                const loaded = (existing.mapping.rules || [
                                   existing.mapping.rule1Config || existing.mapping.ruleEngineConfig || initialRuleState,
                                   existing.mapping.rule2Config || initialRuleState
-                                ];
+                                ]).map(initializeRuleCustomProps);
                                 
                                 const activeAcDevice = existing.mapping.acConfig?.device;
                                 let ruleHostDevice = existing.mapping.acConfig?.ruleDevice || activeAcDevice;
@@ -6258,13 +6353,25 @@ const ConfigTemplates = () => {
                                   const aligned = ruleModules.map((m, idx) => {
                                     const hasSochiotData = m.parsedRule && (m.parsedRule.condition.type !== 'NA' || m.parsedRule.condition.modbus || m.parsedRule.consequence.modbus);
                                     const existingRule = hasSochiotData ? m.parsedRule : (loaded[idx] || m.parsedRule || initialRuleState);
-                                    return {
+                                    return initializeRuleCustomProps({
                                       ...existingRule,
                                       moduleId: m.id,
                                       ruleName: m.name
-                                    };
+                                    });
                                   });
-                                  setAcRules(aligned);
+
+                                  let filtered = aligned.filter((r) => {
+                                    const isActive = r.ruleMode && r.ruleMode !== 'Local';
+                                    return isActive;
+                                  });
+
+                                  if (filtered.length === 0) {
+                                    filtered = aligned.slice(0, 2);
+                                  } else if (filtered.length === 1) {
+                                    filtered = aligned.slice(0, 2);
+                                  }
+
+                                  setAcRules(filtered);
                                   lastLoadedAcDeviceRules.current = activeAcDevice;
                                 } else {
                                   setAcRules(loaded);
@@ -6559,96 +6666,150 @@ const ConfigTemplates = () => {
                                   </Row>
                                 </div>
                                 
-                                <div className="mt-4 pt-3 border-top border-white border-opacity-5 d-flex justify-content-between align-items-center">
-                                  <div className="d-flex gap-2 flex-wrap align-items-center">
-                                    {acRules.map((rule, idx) => (
-                                      <Button
-                                        key={`send-rule-${idx}`}
-                                        variant="outline-info"
-                                        size="sm"
-                                        className="fw-black fs-11 px-3 py-1 rounded-pill d-flex align-items-center gap-1 shadow-glow mb-1"
-                                        disabled={!acConfig.enabled || !(acConfig.ruleDevice || findRuleHostDevice())}
-                                        onClick={() => {
-                                          handleSendRule({ ...rule, moduleId: rule.moduleId || acConfig.ruleDevice || findRuleHostDevice() });
-                                        }}
-                                      >
-                                        <Zap size={12} /> Send {rule.ruleName || `Rule ${idx + 1}`}
-                                      </Button>
-                                    ))}
-                                    {acConfig.enabled && (acConfig.ruleDevice || findRuleHostDevice()) && (
-                                      <Button
-                                        variant="outline-success"
-                                        size="sm"
-                                        className="fw-black fs-11 px-3 py-1 rounded-pill d-flex align-items-center gap-1 shadow-glow mb-1"
-                                        onClick={() => {
-                                          setAcRules(prev => [...prev, initialRuleState]);
-                                        }}
-                                      >
-                                        + Add Rule
-                                      </Button>
-                                    )}
-                                  </div>
+                                <div className="mt-4 pt-3 border-top border-white border-opacity-5">
                                   {(!acConfig.enabled || !(acConfig.ruleDevice || findRuleHostDevice())) ? (
-                                    <div className="text-info fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-2 opacity-50">
+                                    <div className="text-info fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-2 opacity-50 justify-content-center py-2">
                                       <Zap size={14} />
                                       RULE ENGINE NOT MAPPED
                                     </div>
                                   ) : (
-                                    <div className="d-flex gap-3 flex-wrap align-items-center">
-                                      {acRules.map((rule, idx) => (
-                                        <div key={`config-rule-${idx}`} className="d-flex align-items-center gap-1">
-                                          <Button
-                                            variant="link"
-                                            className="p-0 text-info text-decoration-none fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-1 transition-all hover-opacity-100 opacity-70"
-                                            onClick={() => {
+                                    <div className="d-flex flex-column gap-3 w-100">
+                                      {acRules.map((rule, idx) => {
+                                        return (
+                                          <div key={idx} className="d-flex align-items-center gap-3 w-100 flex-wrap p-2 bg-dark bg-opacity-20 border border-white border-opacity-5 rounded">
+                                            {/* 1. Rule Label */}
+                                            <div className="d-flex align-items-center gap-2">
+                                              <span className="text-secondary fs-11 uppercase fw-black opacity-60">Rule:</span>
+                                              <span className="text-white fs-11 fw-black bg-info bg-opacity-10 border border-info border-opacity-20 px-2 py-1 rounded">
+                                                {rule.ruleName || `Rule ${idx + 1}`}
+                                              </span>
+                                            </div>
 
-                                              const target = `RULE_${idx}`;
-                                              const config = rule;
-                                              const targetModuleId = rule.moduleId || acConfig.ruleDevice || findRuleHostDevice();
-                                              const ruleIndex = idx;
-                                              
-                                              // Find the rule host device to update its cache
-                                              let ruleHostDevice = acConfig.ruleDevice || acConfig.device;
-                                              if (!acConfig.ruleDevice) {
-                                                let locName = acConfig.building || globalLocation.building;
-                                                if (locName) {
-                                                  const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
-                                                  const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
-                                                  if (selectedSZ && selectedSZ.type === 'location') {
-                                                    locName = acConfig.subZone || globalLocation.subZone;
-                                                  }
-                                                  const locInfo = locationDetails[locName];
-                                                  if (locInfo && locInfo.deviceList) {
-                                                    const rd = locInfo.deviceList.find(d => 
-                                                      (d.label && d.label.toUpperCase().includes('RULE')) || 
-                                                      (d.id && String(d.id).toUpperCase().includes('RULE'))
-                                                    );
-                                                    if (rd) ruleHostDevice = rd.id;
-                                                  }
-                                                }
-                                              }
+                                            {/* 2. Mode Dropdown (schedule, sensor, temp, Local) */}
+                                            <div className="d-flex align-items-center gap-2">
+                                              <span className="text-secondary fs-11 uppercase fw-black opacity-60">Mode:</span>
+                                              <Form.Select
+                                                className="premium-input px-3 py-1 fs-11 fw-bold border-info border-opacity-20 shadow-inner"
+                                                style={{ height: '35px', minWidth: '120px' }}
+                                                value={rule.ruleMode || 'Local'}
+                                                onChange={(e) => {
+                                                  const val = e.target.value;
+                                                  setAcRules(prev => {
+                                                    const next = [...prev];
+                                                    next[idx] = { ...next[idx], ruleMode: val };
+                                                    return next;
+                                                  });
+                                                }}
+                                              >
+                                                <option value="schedule">Schedule</option>
+                                                <option value="sensor">Sensor</option>
+                                                <option value="temp">Temp</option>
+                                                <option value="Local">Local</option>
+                                              </Form.Select>
+                                            </div>
 
-                                              fetchAndOpenRuleEngineModal(target, config, targetModuleId, ruleHostDevice, ruleIndex);
+                                            {/* 3. State Dropdown (on / off) */}
+                                            <div className="d-flex align-items-center gap-2">
+                                              <span className="text-secondary fs-11 uppercase fw-black opacity-60">State:</span>
+                                              <Form.Select
+                                                className="premium-input px-3 py-1 fs-11 fw-bold border-info border-opacity-20 shadow-inner"
+                                                style={{ height: '35px', minWidth: '100px' }}
+                                                value={rule.ruleState || 'off'}
+                                                onChange={(e) => {
+                                                  const val = e.target.value;
+                                                  setAcRules(prev => {
+                                                    const next = [...prev];
+                                                    next[idx] = { ...next[idx], ruleState: val };
+                                                    return next;
+                                                  });
+                                                }}
+                                              >
+                                                <option value="on">ON</option>
+                                                <option value="off">OFF</option>
+                                              </Form.Select>
+                                            </div>
 
-                                            }}
-                                          >
-                                            <Zap size={14} className="shadow-glow-blue" />
-                                            {rule.ruleName || `Rule ${idx + 1}`} Config
-                                            <ChevronRight size={14} />
-                                          </Button>
-                                          {acRules.length > 2 && (
+                                            {/* 4. Set Button */}
+                                            <Button
+                                              variant="info"
+                                              size="sm"
+                                              className="fw-black fs-11 px-4 py-1.5 shadow-glow"
+                                              style={{ height: '35px' }}
+                                              onClick={() => handleSetRuleFromDropdowns(idx)}
+                                            >
+                                              Set
+                                            </Button>
+
+                                            {/* 5. Custom Config link */}
                                             <Button
                                               variant="link"
-                                              className="p-0 text-danger text-decoration-none fs-11 fw-black transition-all hover-opacity-100 opacity-50 ms-1"
+                                              className="p-0 text-info text-decoration-none fs-11 fw-black uppercase tracking-widest d-flex align-items-center gap-1 transition-all hover-opacity-100 opacity-70"
                                               onClick={() => {
-                                                setAcRules(prev => prev.filter((_, i) => i !== idx));
+                                                const target = `RULE_${idx}`;
+                                                const targetModuleId = rule?.moduleId || acConfig.ruleDevice || findRuleHostDevice();
+                                                let ruleHostDevice = acConfig.ruleDevice || acConfig.device;
+                                                if (!acConfig.ruleDevice) {
+                                                  let locName = acConfig.building || globalLocation.building;
+                                                  if (locName) {
+                                                    const szOptions = getFieldList('subZone', { ...globalLocation, ...acConfig });
+                                                    const selectedSZ = szOptions.find(o => o.id === (acConfig.subZone || globalLocation.subZone));
+                                                    if (selectedSZ && selectedSZ.type === 'location') {
+                                                      locName = acConfig.subZone || globalLocation.subZone;
+                                                    }
+                                                    const locInfo = locationDetails[locName];
+                                                    if (locInfo && locInfo.deviceList) {
+                                                      const rd = locInfo.deviceList.find(d => 
+                                                        (d.label && d.label.toUpperCase().includes('RULE')) || 
+                                                        (d.id && String(d.id).toUpperCase().includes('RULE'))
+                                                      );
+                                                      if (rd) ruleHostDevice = rd.id;
+                                                    }
+                                                  }
+                                                }
+                                                fetchAndOpenRuleEngineModal(target, rule, targetModuleId, ruleHostDevice, idx);
                                               }}
                                             >
-                                              ✕
+                                              <Settings size={12} /> Custom Config
                                             </Button>
-                                          )}
+
+                                            {/* 6. Delete Button */}
+                                            {acRules.length > 2 && (
+                                              <Button
+                                                variant="link"
+                                                className="ms-auto p-0 text-danger text-decoration-none fs-11 fw-black transition-all hover-opacity-100 opacity-50"
+                                                onClick={() => {
+                                                  setAcRules(prev => prev.filter((_, i) => i !== idx));
+                                                }}
+                                              >
+                                                ✕
+                                              </Button>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+
+                                      {/* 7. Bottom + Add Another Rule Button */}
+                                      {acConfig.enabled && (acConfig.ruleDevice || findRuleHostDevice()) && (
+                                        <div className="d-flex justify-content-start mt-2">
+                                          <Button
+                                            variant="outline-success"
+                                            size="sm"
+                                            className="fw-black fs-11 px-3 py-1.5 rounded d-flex align-items-center gap-1 shadow-glow"
+                                            style={{ height: '35px' }}
+                                            onClick={() => {
+                                              setAcRules(prev => {
+                                                const newRuleName = `Rule ${prev.length + 1}`;
+                                                const next = [...prev, initializeRuleCustomProps({ ...initialRuleState, ruleName: newRuleName })];
+                                                setToastMessage({ type: 'success', text: `Added new Rule ${next.length}. You can configure it below.` });
+                                                setTimeout(() => setToastMessage(null), 3000);
+                                                return next;
+                                              });
+                                            }}
+                                          >
+                                            + Add Another Rule
+                                          </Button>
                                         </div>
-                                      ))}
+                                      )}
                                     </div>
                                   )}
                                 </div>

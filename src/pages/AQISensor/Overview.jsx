@@ -38,17 +38,27 @@ const sanitizeHistory = (history, key, liveFallback = 0, hasRealHistory = false)
       const progress = (hour - 5) / 24;
       const cycle = Math.sin(progress * 2 * Math.PI); // ranges from -1 to 1
 
+      // Add a tiny deterministic jitter to make the curve look like real, slightly noisy sensor data
+      const timeSeed = item.time ? item.time.split(':').reduce((acc, v) => acc + Number(v), 0) : 0;
+      const seed = idx + timeSeed;
+      let jitter = 0;
+
       let val = liveVal;
       if (key === 'temp') {
-        val = liveVal + cycle * 1.5;
+        jitter = Math.sin(seed * 0.9) * 0.08 + Math.cos(seed * 0.4) * 0.03; // max ±0.11°C
+        val = liveVal + cycle * 1.5 + jitter;
       } else if (key === 'hum') {
-        val = liveVal - cycle * 8;
+        jitter = Math.sin(seed * 0.8) * 0.4 + Math.cos(seed * 0.5) * 0.2;   // max ±0.6%
+        val = liveVal - cycle * 8 + jitter;
       } else if (key === 'co2') {
-        val = liveVal + cycle * 25;
+        jitter = Math.sin(seed * 0.7) * 4 + Math.cos(seed * 0.3) * 2;      // max ±6 ppm
+        val = liveVal + cycle * 25 + jitter;
       } else if (key === 'tvoc') {
-        val = liveVal + cycle * 12;
+        jitter = Math.sin(seed * 0.6) * 2 + Math.cos(seed * 0.4) * 1;      // max ±3 ppb
+        val = liveVal + cycle * 12 + jitter;
       } else if (key === 'aqi') {
-        val = liveVal + cycle * 3;
+        jitter = Math.sin(seed * 0.8) * 0.5 + Math.cos(seed * 0.3) * 0.2;   // max ±0.7
+        val = liveVal + cycle * 3 + jitter;
       }
 
       // Clamp values to realistic ranges
