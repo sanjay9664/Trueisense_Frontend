@@ -359,12 +359,14 @@ const ACOverview = () => {
         const token = localStorage.getItem('sochiot_token');
         
         for (const rule of rules) {
+          const rawConsequenceVal = action === 'START' ? "1" : (action === 'STOP' ? "0" : (rule.consequence?.value || ""));
+          const consequenceVal = (String(rawConsequenceVal).toUpperCase() === 'ON' || String(rawConsequenceVal) === '1') ? '1' : rawConsequenceVal;
           const payload = {
             moduleId: rule.moduleId || deviceId,
             settingFields: [
               { fieldName: "condition_date_time", currentValue: rule.condition?.timeDate || "" },
               { fieldName: "condition_date_time_repeat_days", currentValue: (rule.condition?.repeatDays || []).join('##&##') },
-              { fieldName: "consequence_value", currentValue: action === 'START' ? "1" : (action === 'STOP' ? "0" : (rule.consequence?.value || "")) },
+              { fieldName: "consequence_value", currentValue: consequenceVal },
               { fieldName: "condition_type", currentValue: rule.condition?.type || "NA" },
               { fieldName: "condition_modbus", currentValue: rule.condition?.modbus || "" },
               { fieldName: "comparison_type", currentValue: rule.condition?.comparisonType || "" },
@@ -486,12 +488,19 @@ const ACOverview = () => {
           r.condition.modbus = item.condModbus;
         }
 
+        let consequenceVal = r.consequence?.value || "";
+        if (r === rule5) {
+          consequenceVal = "1";
+        } else if (String(consequenceVal).toUpperCase() === 'ON' || String(consequenceVal) === '1') {
+          consequenceVal = "1";
+        }
+
         const payload = {
           moduleId: r.moduleId || deviceId,
           settingFields: [
             { fieldName: "condition_date_time", currentValue: r.condition?.timeDate || "" },
             { fieldName: "condition_date_time_repeat_days", currentValue: (r.condition?.repeatDays || []).join('##&##') },
-            { fieldName: "consequence_value", currentValue: r.consequence?.value || "" },
+            { fieldName: "consequence_value", currentValue: consequenceVal },
             { fieldName: "condition_type", currentValue: item.condType },
             { fieldName: "condition_modbus", currentValue: r.condition?.modbus || "" },
             { fieldName: "comparison_type", currentValue: r.condition?.comparisonType || "" },
@@ -602,12 +611,17 @@ const ACOverview = () => {
 
         r.condition.type = item.condType;
 
+        let consequenceVal = r.consequence?.value || "";
+        if (String(consequenceVal).toUpperCase() === 'ON' || String(consequenceVal) === '1') {
+          consequenceVal = "1";
+        }
+
         const payload = {
           moduleId: r.moduleId || deviceId,
           settingFields: [
             { fieldName: "condition_date_time", currentValue: r.condition?.timeDate || "" },
             { fieldName: "condition_date_time_repeat_days", currentValue: (r.condition?.repeatDays || []).join('##&##') },
-            { fieldName: "consequence_value", currentValue: r.consequence?.value || "" },
+            { fieldName: "consequence_value", currentValue: consequenceVal },
             { fieldName: "condition_type", currentValue: item.condType },
             { fieldName: "condition_modbus", currentValue: r.condition?.modbus || "" },
             { fieldName: "comparison_type", currentValue: r.condition?.comparisonType || "" },
@@ -687,12 +701,17 @@ const ACOverview = () => {
 
         r.condition.type = item.condType;
 
+        let consequenceVal = r.consequence?.value || "";
+        if (String(consequenceVal).toUpperCase() === 'ON' || String(consequenceVal) === '1') {
+          consequenceVal = "1";
+        }
+
         const payload = {
           moduleId: r.moduleId || deviceId,
           settingFields: [
             { fieldName: "condition_date_time", currentValue: r.condition?.timeDate || "" },
             { fieldName: "condition_date_time_repeat_days", currentValue: (r.condition?.repeatDays || []).join('##&##') },
-            { fieldName: "consequence_value", currentValue: r.consequence?.value || "" },
+            { fieldName: "consequence_value", currentValue: consequenceVal },
             { fieldName: "condition_type", currentValue: item.condType },
             { fieldName: "condition_modbus", currentValue: r.condition?.modbus || "" },
             { fieldName: "comparison_type", currentValue: r.condition?.comparisonType || "" },
