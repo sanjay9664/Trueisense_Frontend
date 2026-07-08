@@ -8,16 +8,16 @@ import io from 'socket.io-client';
 
 // --- MOCK DATA ---
 const INITIAL_ACS = [
-  { id: 1, name: 'Master AC', type: '1.5 Ton Inverter Split AC', room: 'Master Bedroom', status: 'ON', mode: '--', setTemp: '--', roomTemp: 23.5, fanSpeed: '--', powerUsage: 1.2, scheduleStart: '', scheduleEnd: '', operationMode: 'Auto', activeAutoOptions: [] },
+  { id: 1, name: 'Master AC', type: '', room: 'Master Bedroom', status: 'ON', mode: '--', setTemp: '--', roomTemp: 23.5, fanSpeed: '--', powerUsage: 1.2, scheduleStart: '', scheduleEnd: '', operationMode: 'Auto', activeAutoOptions: [] },
   { id: 2, name: 'Lobby AC', type: '2.0 Ton Cassette AC', room: 'Lobby', status: 'ON', mode: '--', setTemp: '--', roomTemp: 25.0, fanSpeed: '--', powerUsage: 2.1, scheduleStart: '', scheduleEnd: '', operationMode: 'Auto', activeAutoOptions: [] },
   { id: 3, name: 'Main Hall AC', type: '2.0 Ton Split AC', room: 'Hall', status: 'OFF', mode: '--', setTemp: '--', roomTemp: 26.5, fanSpeed: '--', powerUsage: 0.0, scheduleStart: '', scheduleEnd: '', operationMode: 'Manual', activeAutoOptions: [] },
   { id: 4, name: 'Server Room AC', type: '2.0 Ton Cassette AC', room: 'Server Room', status: 'ON', mode: '--', setTemp: '--', roomTemp: 18.5, fanSpeed: '--', powerUsage: 2.5, scheduleStart: '', scheduleEnd: '', operationMode: 'Auto', activeAutoOptions: [] },
-  { id: 5, name: 'User AC', type: '1.5 Ton Split AC', room: 'User Office', status: 'OFF', mode: '--', setTemp: '--', roomTemp: 24.0, fanSpeed: '--', powerUsage: 0.0, scheduleStart: '', scheduleEnd: '', operationMode: 'Manual', activeAutoOptions: [] },
+  { id: 5, name: 'User AC', type: '', room: 'User Office', status: 'OFF', mode: '--', setTemp: '--', roomTemp: 24.0, fanSpeed: '--', powerUsage: 0.0, scheduleStart: '', scheduleEnd: '', operationMode: 'Manual', activeAutoOptions: [] },
   { id: 6, name: 'HO AC', type: '2.0 Ton Split AC', room: 'HO Office', status: 'OFF', mode: '--', setTemp: '--', roomTemp: 24.0, fanSpeed: '--', powerUsage: 0.0, scheduleStart: '', scheduleEnd: '', operationMode: 'Manual', activeAutoOptions: [] },
   ...Array.from({ length: 44 }, (_, i) => ({
     id: i + 7,
     name: `AC_${i + 7}`,
-    type: '1.5 Ton Split AC',
+    type: '',
     room: `Zone ${i + 7}`,
     status: 'OFF',
     mode: '--',
@@ -43,72 +43,6 @@ const RealisticAC = ({ unit, telemetry, mapping }) => {
       key: mapping.currentL1 ? 'currentL1' : (mapping.avgCurrent ? 'avgCurrent' : 'ampere'),
       unit: 'A'
     });
-    tiles.push({
-      label: mapping.kwR ? 'kW-R' : 'kW',
-      shortLabel: mapping.kwR ? 'kW-R' : 'kW',
-      key: mapping.kwR ? 'kwR' : 'kw',
-      unit: 'kW'
-    });
-    tiles.push({
-      label: mapping.voltageBR ? 'Voltage B-R' : 'Avg Voltage L-L',
-      shortLabel: mapping.voltageBR ? 'V.BR' : 'V.LL',
-      key: mapping.voltageBR ? 'voltageBR' : 'avgVoltageLL',
-      unit: 'V'
-    });
-    tiles.push({
-      label: 'Voltage R-N',
-      shortLabel: 'V.RN',
-      key: 'voltageRN',
-      unit: 'V'
-    });
-    if (mapping.kwhR) {
-      tiles.push({
-        label: 'KWH-R',
-        shortLabel: 'kwhR',
-        key: 'kwhR',
-        unit: 'kWH'
-      });
-    }
-    if (mapping.kwhY) {
-      tiles.push({
-        label: 'KWH-Y',
-        shortLabel: 'kwhY',
-        key: 'kwhY',
-        unit: 'kWH'
-      });
-    }
-    if (mapping.kwhB) {
-      tiles.push({
-        label: 'KWH-B',
-        shortLabel: 'kwhB',
-        key: 'kwhB',
-        unit: 'kWH'
-      });
-    }
-    if (mapping.pfR) {
-      tiles.push({
-        label: 'PF-R',
-        shortLabel: 'pf.R',
-        key: 'pfR',
-        unit: 'PF'
-      });
-    }
-    if (mapping.pfY) {
-      tiles.push({
-        label: 'PF-Y',
-        shortLabel: 'pf.Y',
-        key: 'pfY',
-        unit: 'PF'
-      });
-    }
-    if (mapping.pfB) {
-      tiles.push({
-        label: 'PF-B',
-        shortLabel: 'pf.B',
-        key: 'pfB',
-        unit: 'PF'
-      });
-    }
   }
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -356,6 +290,8 @@ const ACOverview = () => {
         
         // CHECK IF DISCONNECT CONFIG / IO IS ENABLED!
         const disconnectConfig = match.mapping?.acConfig?.disconnectConfig;
+        const argumentConfig = match.mapping?.acConfig?.argumentConfig;
+
         if (disconnectConfig && disconnectConfig.ioEnabled) {
           const payload = {
             argValue: 1, // always 1
@@ -377,6 +313,27 @@ const ACOverview = () => {
             console.error('Failed to send remote command:', err);
           }
           return; // Skip rule engine updates when using remote control command override
+        } else if (argumentConfig && argumentConfig.ioEnabled) {
+          const payload = {
+            argValue: argumentConfig.argValue !== undefined ? Number(argumentConfig.argValue) : 1,
+            cmdArg: action === 'START' ? 1 : 0, // 1 for ON/START, 0 for OFF/STOP
+            moduleId: String(argumentConfig.md),
+            cmdField: String(argumentConfig.add)
+          };
+          
+          console.log('Sending manual argument command to push/remote:', payload);
+          try {
+            await fetch('/sochiot-config/device/command/push/remote', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(payload)
+            });
+          } catch (err) {
+            console.error('Failed to send remote command:', err);
+          }
+          return; // Skip rule engine updates when using remote control command override
         }
 
         if (!deviceId || rules.length === 0) return;
@@ -384,7 +341,9 @@ const ACOverview = () => {
         const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
         const token = localStorage.getItem('sochiot_token');
         
-        for (const rule of rules) {
+        // Send rules SEQUENTIALLY with delay to prevent gateway overload/offline
+        for (let i = 0; i < rules.length; i++) {
+          const rule = rules[i];
           const rawConsequenceVal = action === 'START' ? "1" : (action === 'STOP' ? "0" : (rule.consequence?.value || ""));
           const consequenceVal = (String(rawConsequenceVal).toUpperCase() === 'ON' || String(rawConsequenceVal) === '1') ? '1' : rawConsequenceVal;
           const payload = {
@@ -402,14 +361,23 @@ const ACOverview = () => {
             ]
           };
           
-          await fetch(`${backendUrl}/api/rule-engine/apply`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(payload)
-          });
+          try {
+            await fetch(`${backendUrl}/api/rule-engine/apply`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify(payload)
+            });
+          } catch (err) {
+            console.error('Error sending rule:', err);
+          }
+          
+          // Wait 600ms between commands to give gateway breathing room
+          if (i < rules.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 600));
+          }
         }
       }
     } catch (e) {
@@ -419,20 +387,34 @@ const ACOverview = () => {
 
   const disableAllRulesForAC = async (unitName) => {
     try {
-      const match = templates.find(t => 
+      const matchIndex = templates.findIndex(t => 
         t.category === 'AC' && 
         t.module === 'Overview' && 
         t.mapping?.acConfig?.acUnit === unitName
       );
-      if (match) {
+      if (matchIndex !== -1) {
+        const updatedTemplates = [...templates];
+        const match = updatedTemplates[matchIndex];
         const rules = match.mapping?.rules || [];
         const deviceId = match.mapping?.acConfig?.device;
+        
+        // Update template autoMode to '' to save manual operation state
+        if (!match.mapping.acConfig) match.mapping.acConfig = {};
+        match.mapping.acConfig.autoMode = '';
+        updatedTemplates[matchIndex] = match;
+        setTemplates(updatedTemplates);
+        localStorage.setItem('scada_templates', JSON.stringify(updatedTemplates));
+        window.dispatchEvent(new Event('storage'));
+
+        // Clear active auto options in units state
+        setUnits(prev => prev.map(u => u.name === unitName ? { ...u, operationMode: 'Manual', activeAutoOptions: [] } : u));
+
         if (!deviceId || rules.length === 0) return;
         
         const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
         const token = localStorage.getItem('sochiot_token');
         
-        for (const rule of rules) {
+        const promises = rules.map(rule => {
           const payload = {
             moduleId: rule.moduleId || deviceId,
             settingFields: [
@@ -448,21 +430,22 @@ const ACOverview = () => {
             ]
           };
           
-          await fetch(`${backendUrl}/api/rule-engine/apply`, {
+          return fetch(`${backendUrl}/api/rule-engine/apply`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify(payload)
-          });
-        }
+          }).catch(err => console.error('Error disabling rule:', err));
+        });
+        
+        await Promise.all(promises);
       }
     } catch (e) {
       console.error('Error disabling rules for AC:', e);
     }
   };
-
   const formatForDateTimeLocal = (dateStr) => {
     if (!dateStr) return '';
     try {
@@ -495,13 +478,25 @@ const ACOverview = () => {
       if (match && match.mapping?.acConfig) {
         const deviceId = match.mapping.acConfig.device;
         const gatewayUuid = match.mapping.gatewayUuid;
-        let isOnline = getOverallStatus(deviceId, gatewayUuid);
-        return isOnline || !!deviceId;
+        if (!deviceId) return false;
+        return !!getOverallStatus(deviceId, gatewayUuid);
       }
     } catch (e) {
       console.error(e);
     }
     return false;
+  };
+
+  const getOccupancyStatus = (unitName) => {
+    const telemetry = liveTelemetry[unitName];
+    if (telemetry && telemetry.occupied !== undefined && telemetry.occupied !== null) {
+      const valStr = String(telemetry.occupied).toUpperCase().trim();
+      if (valStr === 'HIGH' || valStr === '1' || valStr === 'TRUE' || valStr === 'ON') {
+        return 'Occupied';
+      }
+      return 'Unoccupied';
+    }
+    return 'Unoccupied';
   };
 
   const applyTempRangeRules = async (startVal, endVal, condType, unitName) => {
@@ -544,9 +539,9 @@ const ACOverview = () => {
         { rule: rule6, condType: 'MODBUS', comparisonType: 'LESS_THAN', comparisonValue: String(endVal), condModbus: '(8)3,1', consequenceType: 'OUTPUT_2' }
       ];
 
-      for (const item of allRuleSettings) {
+      const promises = allRuleSettings.map(item => {
         const r = item.rule;
-        if (!r) continue;
+        if (!r) return null;
         if (!r.condition) r.condition = {};
         if (!r.consequence) r.consequence = {};
         
@@ -591,15 +586,17 @@ const ACOverview = () => {
           ]
         };
 
-        await fetch(`${backendUrl}/api/rule-engine/apply`, {
+        return fetch(`${backendUrl}/api/rule-engine/apply`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify(payload)
-        });
-      }
+        }).catch(err => console.error('Error applying temp rule:', err));
+      }).filter(Boolean);
+
+      await Promise.all(promises);
 
       match.mapping.rules = rules;
       if (!match.mapping.acConfig) match.mapping.acConfig = {};
@@ -685,9 +682,9 @@ const ACOverview = () => {
         { rule: rule6, condType: 'NA' }
       ];
 
-      for (const item of allRuleSettings) {
+      const promises = allRuleSettings.map(item => {
         const r = item.rule;
-        if (!r) continue;
+        if (!r) return null;
         if (!r.condition) r.condition = {};
 
         r.condition.type = item.condType;
@@ -712,15 +709,17 @@ const ACOverview = () => {
           ]
         };
 
-        await fetch(`${backendUrl}/api/rule-engine/apply`, {
+        return fetch(`${backendUrl}/api/rule-engine/apply`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify(payload)
-        });
-      }
+        }).catch(err => console.error('Error applying schedule rule:', err));
+      }).filter(Boolean);
+
+      await Promise.all(promises);
 
       match.mapping.rules = rules;
       if (!match.mapping.acConfig) match.mapping.acConfig = {};
@@ -775,9 +774,9 @@ const ACOverview = () => {
         { rule: rule6, condType: 'NA' }
       ];
 
-      for (const item of allRuleSettings) {
+      const promises = allRuleSettings.map(item => {
         const r = item.rule;
-        if (!r) continue;
+        if (!r) return null;
         if (!r.condition) r.condition = {};
         if (!r.consequence) r.consequence = {};
 
@@ -821,15 +820,17 @@ const ACOverview = () => {
           ]
         };
 
-        await fetch(`${backendUrl}/api/rule-engine/apply`, {
+        return fetch(`${backendUrl}/api/rule-engine/apply`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify(payload)
-        });
-      }
+        }).catch(err => console.error('Error applying sensor rule:', err));
+      }).filter(Boolean);
+
+      await Promise.all(promises);
 
       match.mapping.rules = rules;
       if (!match.mapping.acConfig) match.mapping.acConfig = {};
@@ -843,6 +844,7 @@ const ACOverview = () => {
       console.error('Error applying sensor rules:', e);
     }
   };
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
   const [units, setUnits] = useState(() => {
     const saved = localStorage.getItem('bms_ac_units');
     let loaded = saved ? JSON.parse(saved) : INITIAL_ACS;
@@ -1038,6 +1040,12 @@ const ACOverview = () => {
           if (acConfig.device) {
             modulesToPoll.add(String(acConfig.device));
           }
+          if (acConfig.argumentConfig && acConfig.argumentConfig.ioEnabled && acConfig.argumentConfig.md) {
+            modulesToPoll.add(String(acConfig.argumentConfig.md));
+          }
+          if (acConfig.disconnectConfig && acConfig.disconnectConfig.ioEnabled && acConfig.disconnectConfig.md) {
+            modulesToPoll.add(String(acConfig.disconnectConfig.md));
+          }
         });
         
         const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
@@ -1104,6 +1112,40 @@ const ACOverview = () => {
               const nextPfy = getRegisterValue(acConfig.pfY);
               const nextPfb = getRegisterValue(acConfig.pfB);
               
+              const rules = match.mapping?.rules || [];
+              const rule3 = rules.find(r => (r.ruleName || '').toLowerCase().includes('rule_3') || (r.ruleName || '').toLowerCase().includes('rule 3'));
+              const rule3Modbus = rule3?.condition?.modbus;
+
+              let nextOccupiedVal = null;
+              const argumentConfig = match.mapping?.acConfig?.argumentConfig;
+              const disconnectConfig = match.mapping?.acConfig?.disconnectConfig;
+
+              if (argumentConfig && argumentConfig.ioEnabled && argumentConfig.md && argumentConfig.add) {
+                nextOccupiedVal = getRegisterValue(`${argumentConfig.md}::${argumentConfig.add}`);
+              } else if (disconnectConfig && disconnectConfig.ioEnabled && disconnectConfig.md && disconnectConfig.add) {
+                nextOccupiedVal = getRegisterValue(`${disconnectConfig.md}::${disconnectConfig.add}`);
+              } else if (rule3Modbus) {
+                nextOccupiedVal = getRegisterValue(rule3Modbus);
+              }
+
+              let nextOccupied = null;
+              if (nextOccupiedVal !== null && nextOccupiedVal !== undefined) {
+                const valStr = String(nextOccupiedVal).toUpperCase().trim();
+                const targetActiveVal = argumentConfig && argumentConfig.ioEnabled && argumentConfig.argValue !== undefined 
+                  ? String(argumentConfig.argValue).toUpperCase().trim() 
+                  : (disconnectConfig && disconnectConfig.ioEnabled && disconnectConfig.argValue !== undefined 
+                      ? String(disconnectConfig.argValue).toUpperCase().trim() 
+                      : '1'); 
+
+                if (targetActiveVal === '1' || targetActiveVal === 'HIGH' || targetActiveVal === 'TRUE' || targetActiveVal === 'ON') {
+                  nextOccupied = (valStr === 'HIGH' || valStr === '1' || valStr === 'TRUE' || valStr === 'ON');
+                } else if (targetActiveVal === '0' || targetActiveVal === 'LOW' || targetActiveVal === 'FALSE' || targetActiveVal === 'OFF') {
+                  nextOccupied = (valStr === 'LOW' || valStr === '0' || valStr === 'FALSE' || valStr === 'OFF');
+                } else {
+                  nextOccupied = (valStr === targetActiveVal);
+                }
+              }
+
               nextTelemetry[acUnit] = {
                 temperature: nextTemp !== null ? nextTemp : (prevUnit.temperature !== undefined ? prevUnit.temperature : null),
                 humidity: nextHum !== null ? nextHum : (prevUnit.humidity !== undefined ? prevUnit.humidity : null),
@@ -1126,7 +1168,8 @@ const ACOverview = () => {
                 kwhB: nextKwhb !== null ? nextKwhb : (prevUnit.kwhB !== undefined ? prevUnit.kwhB : null),
                 pfR: nextPfr !== null ? nextPfr : (prevUnit.pfR !== undefined ? prevUnit.pfR : null),
                 pfY: nextPfy !== null ? nextPfy : (prevUnit.pfY !== undefined ? prevUnit.pfY : null),
-                pfB: nextPfb !== null ? nextPfb : (prevUnit.pfB !== undefined ? prevUnit.pfB : null)
+                pfB: nextPfb !== null ? nextPfb : (prevUnit.pfB !== undefined ? prevUnit.pfB : null),
+                occupied: nextOccupied !== null ? nextOccupied : (prevUnit.occupied !== undefined ? prevUnit.occupied : null)
               };
             });
             return nextTelemetry;
@@ -1211,6 +1254,40 @@ const ACOverview = () => {
             const nextPfy = getRegisterValue(acConfig.pfY);
             const nextPfb = getRegisterValue(acConfig.pfB);
 
+            const rules = match.mapping?.rules || [];
+            const rule3 = rules.find(r => (r.ruleName || '').toLowerCase().includes('rule_3') || (r.ruleName || '').toLowerCase().includes('rule 3'));
+            const rule3Modbus = rule3?.condition?.modbus;
+
+            let nextOccupiedVal = null;
+            const argumentConfig = match.mapping?.acConfig?.argumentConfig;
+            const disconnectConfig = match.mapping?.acConfig?.disconnectConfig;
+
+            if (argumentConfig && argumentConfig.ioEnabled && argumentConfig.md && argumentConfig.add) {
+              nextOccupiedVal = getRegisterValue(`${argumentConfig.md}::${argumentConfig.add}`);
+            } else if (disconnectConfig && disconnectConfig.ioEnabled && disconnectConfig.md && disconnectConfig.add) {
+              nextOccupiedVal = getRegisterValue(`${disconnectConfig.md}::${disconnectConfig.add}`);
+            } else if (rule3Modbus) {
+              nextOccupiedVal = getRegisterValue(rule3Modbus);
+            }
+
+            let nextOccupied = null;
+            if (nextOccupiedVal !== null && nextOccupiedVal !== undefined) {
+              const valStr = String(nextOccupiedVal).toUpperCase().trim();
+              const targetActiveVal = argumentConfig && argumentConfig.ioEnabled && argumentConfig.argValue !== undefined 
+                ? String(argumentConfig.argValue).toUpperCase().trim() 
+                : (disconnectConfig && disconnectConfig.ioEnabled && disconnectConfig.argValue !== undefined 
+                    ? String(disconnectConfig.argValue).toUpperCase().trim() 
+                    : '1'); 
+
+              if (targetActiveVal === '1' || targetActiveVal === 'HIGH' || targetActiveVal === 'TRUE' || targetActiveVal === 'ON') {
+                nextOccupied = (valStr === 'HIGH' || valStr === '1' || valStr === 'TRUE' || valStr === 'ON');
+              } else if (targetActiveVal === '0' || targetActiveVal === 'LOW' || targetActiveVal === 'FALSE' || targetActiveVal === 'OFF') {
+                nextOccupied = (valStr === 'LOW' || valStr === '0' || valStr === 'FALSE' || valStr === 'OFF');
+              } else {
+                nextOccupied = (valStr === targetActiveVal);
+              }
+            }
+
             nextTelemetry[acUnit] = {
               temperature: nextTemp !== null ? nextTemp : (prevUnit.temperature !== undefined ? prevUnit.temperature : null),
               humidity: nextHum !== null ? nextHum : (prevUnit.humidity !== undefined ? prevUnit.humidity : null),
@@ -1233,7 +1310,8 @@ const ACOverview = () => {
               kwhB: nextKwhb !== null ? nextKwhb : (prevUnit.kwhB !== undefined ? prevUnit.kwhB : null),
               pfR: nextPfr !== null ? nextPfr : (prevUnit.pfR !== undefined ? prevUnit.pfR : null),
               pfY: nextPfy !== null ? nextPfy : (prevUnit.pfY !== undefined ? prevUnit.pfY : null),
-              pfB: nextPfb !== null ? nextPfb : (prevUnit.pfB !== undefined ? prevUnit.pfB : null)
+              pfB: nextPfb !== null ? nextPfb : (prevUnit.pfB !== undefined ? prevUnit.pfB : null),
+              occupied: nextOccupied !== null ? nextOccupied : (prevUnit.occupied !== undefined ? prevUnit.occupied : null)
             };
           });
 
@@ -1564,7 +1642,9 @@ const ACOverview = () => {
     }
   };
 
-  const handleControlAction = (action) => {
+  const handleControlAction = async (action) => {
+    if (isSendingCommand) return; // Debounce check
+    
     if (action === 'SCHEDULE') {
       setShowControlModal(false);
       setScheduleTargetId(controlTargetId.toString());
@@ -1572,6 +1652,7 @@ const ACOverview = () => {
       return;
     }
 
+    setIsSendingCommand(true); // Set sending flag
     setControlSuccessMessage(`SUCCESSFULL ${action}`);
     
     if (action === 'START') {
@@ -1583,11 +1664,12 @@ const ACOverview = () => {
     // Call rule engine for manual start/stop action
     const targetUnit = units.find(u => u.id === controlTargetId);
     if (targetUnit) {
-      sendRulesToEngineForAC(targetUnit.name, action);
+      await sendRulesToEngineForAC(targetUnit.name, action);
     }
 
     setTimeout(() => {
       setControlSuccessMessage('');
+      setIsSendingCommand(false); // Reset sending flag
       setShowControlModal(false);
     }, 2000);
   };
@@ -1763,6 +1845,54 @@ const ACOverview = () => {
       background: 'transparent',
       fontFamily: "'Inter', sans-serif" 
     }}>
+      <style>{`
+        @keyframes guardBounce {
+          0% { transform: translateY(0px) rotate(0deg) scale(1); }
+          15% { transform: translateY(-8px) rotate(-3deg) scale(1.05); }
+          30% { transform: translateY(0px) rotate(0deg) scale(1); }
+          45% { transform: translateY(-5px) rotate(3deg) scale(1.03); }
+          60% { transform: translateY(0px) rotate(0deg) scale(1); }
+          100% { transform: translateY(0px) rotate(0deg) scale(1); }
+        }
+        @keyframes guardGlow {
+          0% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.3), 0 4px 20px rgba(16, 185, 129, 0.15); }
+          50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.6), 0 4px 35px rgba(16, 185, 129, 0.3); }
+          100% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.3), 0 4px 20px rgba(16, 185, 129, 0.15); }
+        }
+        @keyframes guardSad {
+          0% { transform: translateY(0px) rotate(0deg) scale(0.95); }
+          50% { transform: translateY(4px) rotate(-2deg) scale(0.9); }
+          100% { transform: translateY(0px) rotate(0deg) scale(0.95); }
+        }
+        @keyframes labelPulse {
+          0% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(0.98); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+        .guard-active {
+          animation: guardBounce 2.2s ease-in-out infinite, guardGlow 2.5s ease-in-out infinite;
+          border: 3px solid #10b981;
+          background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.05) 80%);
+        }
+        .guard-active img {
+          filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5));
+        }
+        .guard-inactive {
+          animation: guardSad 4.5s ease-in-out infinite;
+          filter: grayscale(80%) brightness(0.5);
+          border: 2px dashed rgba(239, 68, 68, 0.35);
+          opacity: 0.5;
+        }
+        .guard-label-active {
+          animation: labelPulse 2s ease-in-out infinite;
+        }
+        .guard-container {
+          transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .guard-container:hover {
+          transform: scale(1.1);
+        }
+      `}</style>
       
       {/* HEADER SECTION */}
       <div className="d-flex justify-content-between align-items-center mb-5 pb-4 position-relative" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
@@ -1828,88 +1958,119 @@ const ACOverview = () => {
                   style={{ top: '16px', right: '16px', zIndex: 10, background: 'rgba(255,255,255,0.03)', border: 'none', color: '#64748b', display: 'none' }}
                 >
                   <Settings size={18} />
-                </button>                 {/* ROOM INFO */}
-                 <div className="mb-4 pe-4">
-                   <div className="d-flex align-items-center justify-content-between">
-                     <div className="d-flex align-items-center gap-2 mb-2">
-                       <MapPin size={12} style={{ color: unit.status === 'ON' ? '#f97316' : '#64748b', transition: 'all 0.3s ease' }} />
-                       <span className="fw-bold text-uppercase" style={{ fontSize: '10px', letterSpacing: '1.5px', color: unit.status === 'ON' ? '#f97316' : '#64748b', transition: 'all 0.3s ease' }}>{unit.room}</span>
-                     </div>
-                   </div>
-                   <h4 className="text-white fw-bold mb-1">{unit.name}</h4>
-                   <div className="text-secondary fw-medium mb-3" style={{ fontSize: '12px' }}>{unit.type}</div>
-                   
-                   {/* Detailed Status Row */}
-                   <div className="d-flex align-items-center gap-2 flex-wrap">
-                     {/* Online/Offline Status */}
-                     <span style={{ 
-                       fontSize: '9px', 
-                       fontWeight: 'bold', 
-                       letterSpacing: '0.5px',
-                       padding: '2px 8px',
-                       borderRadius: '4px',
-                       background: getACOnlineStatus(unit.name) ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                       border: `1px solid ${getACOnlineStatus(unit.name) ? '#10b981' : '#ef4444'}`,
-                       color: getACOnlineStatus(unit.name) ? '#34d399' : '#f87171',
-                       textShadow: getACOnlineStatus(unit.name) ? '0 0 5px rgba(52, 211, 153, 0.4)' : 'none'
-                     }}>
-                       {getACOnlineStatus(unit.name) ? 'ONLINE' : 'OFFLINE'}
-                     </span>
+                </button>
 
-                     {/* Power Status */}
-                     <span style={{ 
-                       fontSize: '9px', 
-                       fontWeight: 'bold', 
-                       letterSpacing: '0.5px',
-                       padding: '2px 8px',
-                       borderRadius: '4px',
-                       background: unit.status === 'ON' ? 'rgba(249, 115, 22, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                       border: `1px solid ${unit.status === 'ON' ? '#f97316' : 'rgba(255,255,255,0.08)'}`,
-                       color: unit.status === 'ON' ? '#fdba74' : '#64748b',
-                       textShadow: unit.status === 'ON' ? '0 0 5px rgba(249, 115, 22, 0.4)' : 'none'
-                     }}>
-                       POWER: {unit.status}
-                     </span>
+                {/* PREMIUM HEADER SECTION */}
+                <div className="mb-3">
+                  {/* Row 1: Room location + Occupancy Widget */}
+                  <div className="d-flex justify-content-between align-items-start">
+                    <div className="flex-grow-1">
+                      <div className="d-flex align-items-center gap-1 mb-2">
+                        <span style={{
+                          fontSize: '8px',
+                          fontWeight: 900,
+                          letterSpacing: '2px',
+                          background: 'linear-gradient(90deg, #38bdf8, #818cf8)',
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                          textTransform: 'uppercase'
+                        }}>
+                          Smart Climate Controller
+                        </span>
+                      </div>
+                      <h4 className="text-white fw-bold mb-1" style={{ fontSize: '1.2rem', letterSpacing: '0.3px', textShadow: '0 2px 10px rgba(0,0,0,0.5)' }}>{unit.name}</h4>
+                      <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 500 }}>{unit.type}</div>
+                    </div>
 
-                     {/* Control Mode (Auto/Manual) */}
-                     {getACOnlineStatus(unit.name) && (
-                       <span style={{ 
-                         fontSize: '9px', 
-                         fontWeight: 'bold', 
-                         letterSpacing: '0.5px',
-                         padding: '2px 8px',
-                         borderRadius: '4px',
-                         background: unit.operationMode === 'Auto' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                         border: `1px solid ${unit.operationMode === 'Auto' ? '#f59e0b' : 'rgba(255,255,255,0.08)'}`,
-                         color: unit.operationMode === 'Auto' ? '#fde047' : '#64748b',
-                         textShadow: unit.operationMode === 'Auto' ? '0 0 5px rgba(245, 158, 11, 0.4)' : 'none'
-                       }}>
-                         {unit.operationMode === 'Auto' 
-                           ? (unit.activeAutoOptions && unit.activeAutoOptions.length > 0 
-                               ? `AUTO: ${unit.activeAutoOptions[0]}` 
-                               : 'AUTO') 
-                           : 'MANUAL'}
-                       </span>
-                     )}
+                    {/* Occupancy Cartoon Widget */}
+                    {(() => {
+                      const isOccupied = getOccupancyStatus(unit.name) === 'Occupied';
+                      return (
+                        <div className="d-flex flex-column align-items-center guard-container" style={{ minWidth: '85px', marginTop: '-6px' }}>
+                          <div 
+                            className={`rounded-circle d-flex align-items-center justify-content-center overflow-hidden ${isOccupied ? 'guard-active' : 'guard-inactive'}`}
+                            style={{ 
+                              width: '68px', 
+                              height: '68px', 
+                              padding: '2px',
+                              cursor: 'pointer',
+                              transition: 'all 0.5s ease'
+                            }}
+                            title={isOccupied ? 'Room is Occupied' : 'Room is Unoccupied'}
+                          >
+                            <img 
+                              src="/guard.png" 
+                              alt="Guard" 
+                              style={{ 
+                                width: '100%', 
+                                height: '100%', 
+                                objectFit: 'contain',
+                                transform: isOccupied ? 'scale(1.22) translateY(1px)' : 'scale(1.0) translateY(4px) rotate(-6deg)',
+                                transition: 'all 0.5s ease'
+                              }} 
+                            />
+                          </div>
+                          <span 
+                            className={`mt-1 text-center text-uppercase ${isOccupied ? 'guard-label-active' : ''}`}
+                            style={{ 
+                              fontSize: '8.5px', 
+                              letterSpacing: '0.8px',
+                              color: isOccupied ? '#34d399' : '#ef4444',
+                              fontWeight: 900,
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {isOccupied ? '● OCCUPIED' : '○ VACANT'}
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </div>
 
-                     {/* Running Mode (COOL/DRY/FAN etc. if ON) */}
-                     {getACOnlineStatus(unit.name) && unit.status === 'ON' && unit.mode && unit.mode !== '--' && (
-                       <span style={{ 
-                         fontSize: '9px', 
-                         fontWeight: 'bold', 
-                         letterSpacing: '0.5px',
-                         padding: '2px 8px',
-                         borderRadius: '4px',
-                         background: 'rgba(14, 165, 233, 0.15)',
-                         border: '1px solid #0ea5e9',
-                         color: '#38bdf8',
-                         textShadow: '0 0 5px rgba(14, 165, 233, 0.4)'
-                       }}>
-                         MODE: {unit.mode.toUpperCase()}
-                       </span>
-                     )}
-                   </div>
-                 </div> 
+                  {/* Row 2: Status Chips */}
+                  <div className="d-flex align-items-center gap-2 flex-wrap mt-3">
+                    {/* Online/Offline */}
+                    <div className="d-flex align-items-center gap-1" style={{ 
+                      fontSize: '9px', fontWeight: 700, letterSpacing: '0.5px', padding: '3px 10px', borderRadius: '20px',
+                      background: getACOnlineStatus(unit.name) ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                      border: `1px solid ${getACOnlineStatus(unit.name) ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}`,
+                      color: getACOnlineStatus(unit.name) ? '#34d399' : '#f87171'
+                    }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: getACOnlineStatus(unit.name) ? '#10b981' : '#ef4444', boxShadow: getACOnlineStatus(unit.name) ? '0 0 6px #10b981' : '0 0 6px #ef4444' }}></div>
+                      {getACOnlineStatus(unit.name) ? 'ONLINE' : 'OFFLINE'}
+                    </div>
+
+                    {/* Power Status */}
+                    <div className="d-flex align-items-center gap-1" style={{ 
+                      fontSize: '9px', fontWeight: 700, letterSpacing: '0.5px', padding: '3px 10px', borderRadius: '20px',
+                      background: unit.status === 'ON' ? 'rgba(249, 115, 22, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                      border: `1px solid ${unit.status === 'ON' ? 'rgba(249, 115, 22, 0.35)' : 'rgba(255,255,255,0.08)'}`,
+                      color: unit.status === 'ON' ? '#fdba74' : '#64748b'
+                    }}>
+                      <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: unit.status === 'ON' ? '#f97316' : '#475569', boxShadow: unit.status === 'ON' ? '0 0 6px #f97316' : 'none' }}></div>
+                      POWER: {unit.status}
+                    </div>
+
+                    {/* Auto/Manual Mode */}
+                    {(() => {
+                      const modeLabel = unit.operationMode === 'Auto' 
+                        ? (unit.activeAutoOptions && unit.activeAutoOptions.length > 0 ? `AUTO: ${unit.activeAutoOptions[0].toUpperCase()}` : 'AUTO') 
+                        : 'MANUAL';
+                      const isAuto = unit.operationMode === 'Auto';
+                      return (
+                        <div className="d-flex align-items-center gap-1" style={{ 
+                          fontSize: '9px', fontWeight: 700, letterSpacing: '0.5px', padding: '3px 10px', borderRadius: '20px',
+                          background: isAuto ? 'rgba(245, 158, 11, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                          border: `1px solid ${isAuto ? 'rgba(245, 158, 11, 0.35)' : 'rgba(255,255,255,0.08)'}`,
+                          color: isAuto ? '#fbbf24' : '#64748b'
+                        }}>
+                          <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: isAuto ? '#f59e0b' : '#475569', boxShadow: isAuto ? '0 0 6px #f59e0b' : 'none' }}></div>
+                          {modeLabel}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
 
                 {/* REALISTIC AC GRAPHIC */}
                 <div className="mb-4 px-2">
@@ -1922,150 +2083,210 @@ const ACOverview = () => {
 
                 {/* CONTROLS AREA */}
                 <div className="mt-auto">
-                                    {/* Room Temp & Humidity Grid */}
-                  <Row className="g-3 mb-3">
-                    <Col xs={6}>
-                      <div className="p-3 rounded-4 text-center h-100" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div className="text-secondary fw-bold mb-1 text-uppercase text-nowrap" style={{ fontSize: '10px', letterSpacing: '0.5px', opacity: 0.8 }}>Room Temp</div>
-                        <div className="d-flex align-items-baseline justify-content-center text-nowrap mt-1">
-                          <span className="text-white fw-black lh-1" style={{ fontSize: '2rem', letterSpacing: '-1px', textShadow: '0 0 10px rgba(249, 115, 22, 0.4)' }}>
-                            {getMappedTelemetry(unit.name) && getUnitTelemetry(unit.name).temperature !== null ? getUnitTelemetry(unit.name).temperature : unit.roomTemp}
-                          </span>
-                          <span className="fw-bold ms-1" style={{ fontSize: '1.1rem', color: '#f97316' }}>
-                            {((getMappedTelemetry(unit.name) && getUnitTelemetry(unit.name).temperature !== null) || unit.roomTemp !== '--') ? '°C' : ''}
-                          </span>
-                        </div>
-                      </div>
-                    </Col>
-
-                    <Col xs={6}>
-                      <div className="p-3 rounded-4 text-center h-100" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div className="text-secondary fw-bold mb-1 text-uppercase text-nowrap" style={{ fontSize: '10px', letterSpacing: '0.5px', opacity: 0.8 }}>Humidity</div>
-                        <div className="d-flex align-items-baseline justify-content-center text-nowrap mt-1">
-                          <span className="text-white fw-black lh-1" style={{ fontSize: '2rem', letterSpacing: '-1px', textShadow: '0 0 10px rgba(245, 158, 11, 0.4)' }}>
-                            {(() => {
-                              const ut = getUnitTelemetry(unit.name);
-                              return ut.humidity !== null ? ut.humidity : (unit.humidity !== undefined ? unit.humidity : '--');
-                            })()}
-                          </span>
-                          <span className="text-warning fw-bold ms-1" style={{ fontSize: '1.1rem' }}>%</span>
-                        </div>
-                      </div>
-                    </Col>
-                  </Row>
-
-                  {/* Sleek Control Button */}
+                  {/* Premium Control Button */}
                   <button 
                     onClick={() => openControlModal(unit.id)}
-                    className="w-100 mb-3 d-flex align-items-center justify-content-center gap-2 fw-bold tracking-wider text-uppercase"
+                    className="w-100 mb-3 d-flex align-items-center justify-content-center gap-2 fw-bold text-uppercase position-relative overflow-hidden"
                     style={{
                       background: unit.status === 'ON' 
-                        ? 'linear-gradient(135deg, #ff7a00 0%, #ff5100 100%)' 
-                        : 'rgba(255, 255, 255, 0.04)',
+                        ? 'linear-gradient(135deg, #ea580c 0%, #f97316 50%, #fb923c 100%)' 
+                        : 'linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.6) 100%)',
                       color: unit.status === 'ON' ? '#ffffff' : '#94a3b8',
-                      border: unit.status === 'ON' ? '1px solid rgba(255, 122, 0, 0.3)' : '1px solid rgba(255, 255, 255, 0.08)',
-                      borderRadius: '16px',
-                      padding: '12px 24px',
+                      border: unit.status === 'ON' ? '1px solid rgba(251, 146, 60, 0.4)' : '1px solid rgba(255, 255, 255, 0.06)',
+                      borderRadius: '14px',
+                      padding: '10px 20px',
                       boxShadow: unit.status === 'ON' 
-                        ? '0 6px 20px rgba(255, 122, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)' 
-                        : 'inset 0 1px 0 rgba(255, 255, 255, 0.02)',
-                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      fontSize: '12px',
+                        ? '0 8px 32px rgba(249, 115, 22, 0.25), 0 2px 8px rgba(249, 115, 22, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.25)' 
+                        : '0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03)',
+                      transition: 'all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                      fontSize: '11px',
                       cursor: 'pointer',
-                      letterSpacing: '1px',
-                      textShadow: unit.status === 'ON' ? '0 1px 2px rgba(0,0,0,0.3)' : 'none'
+                      letterSpacing: '1.5px',
+                      textShadow: unit.status === 'ON' ? '0 1px 3px rgba(0,0,0,0.25)' : 'none',
+                      fontWeight: 800
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.transform = 'translateY(-2px) scale(1.01)';
                       if (unit.status === 'ON') {
-                        e.currentTarget.style.boxShadow = '0 8px 25px rgba(255, 122, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3)';
+                        e.currentTarget.style.boxShadow = '0 12px 40px rgba(249, 115, 22, 0.35), 0 4px 12px rgba(249, 115, 22, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3)';
                       } else {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 122, 0, 0.25)';
+                        e.currentTarget.style.borderColor = 'rgba(249, 115, 22, 0.2)';
+                        e.currentTarget.style.color = '#e2e8f0';
+                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)';
                       }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.transform = 'translateY(0) scale(1)';
                       if (unit.status === 'ON') {
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(255, 122, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
+                        e.currentTarget.style.boxShadow = '0 8px 32px rgba(249, 115, 22, 0.25), 0 2px 8px rgba(249, 115, 22, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.25)';
                       } else {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+                        e.currentTarget.style.color = '#94a3b8';
+                        e.currentTarget.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03)';
                       }
                     }}
                   >
-                    <Power size={14} strokeWidth={unit.status === 'ON' ? 3 : 2} style={{ color: unit.status === 'ON' ? '#ffffff' : '#f97316' }} />
-                    <span style={{ color: unit.status === 'ON' ? '#ffffff' : '#e2e8f0' }}>AC {unit.status}</span>
+                    <Power size={15} strokeWidth={unit.status === 'ON' ? 2.5 : 2} style={{ color: unit.status === 'ON' ? '#ffffff' : '#f97316' }} />
+                    <span>AC {unit.status}</span>
                   </button>
 
-                  {/* PREMIUM ENERGY TELEMETRY DETAILS PANEL */}
+                  {/* ─── FIGMA-PREMIUM METRICS GRID ─── */}
                   {(() => {
                     const mapping = getMappedTelemetry(unit.name);
                     const telemetry = getUnitTelemetry(unit.name);
-                    
-                    const mappedItems = [
-                      { key: 'kwhR', label: 'Total Energy Consumed', unit: 'kWh', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Zap size={13} style={{ color: '#f97316' }} /> },
-                      { key: 'kwhY', label: 'KWH-Y (Phase Energy)', unit: 'kWh', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Zap size={13} style={{ color: '#f97316' }} /> },
-                      { key: 'kwhB', label: 'KWH-B (Phase Energy)', unit: 'kWh', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Zap size={13} style={{ color: '#f97316' }} /> },
-                      { key: 'pfR', label: 'PF-R (Power Factor)', unit: 'PF', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Activity size={13} style={{ color: '#f97316' }} /> },
-                      { key: 'pfY', label: 'PF-Y (Power Factor)', unit: 'PF', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Activity size={13} style={{ color: '#f97316' }} /> },
-                      { key: 'pfB', label: 'PF-B (Power Factor)', unit: 'PF', color: '#f97316', glow: 'rgba(249, 115, 22, 0.4)', icon: <Activity size={13} style={{ color: '#f97316' }} /> }
-                    ].filter(item => mapping && mapping[item.key]);
+                    const seenLabels = new Set();
 
-                    if (mappedItems.length === 0) return null;
+                    /* Build unified tile array: Room Temp + Humidity + all telemetry */
+                    const allTiles = [];
 
-                    const isSingle = mappedItems.length === 1;
+                    /* Room Temperature */
+                    const tempVal = getMappedTelemetry(unit.name) && getUnitTelemetry(unit.name).temperature !== null
+                      ? getUnitTelemetry(unit.name).temperature : unit.roomTemp;
+                    allTiles.push({
+                      id: '_roomTemp',
+                      label: 'Room Temp',
+                      value: tempVal,
+                      unitStr: ((getMappedTelemetry(unit.name) && getUnitTelemetry(unit.name).temperature !== null) || unit.roomTemp !== '--') ? '°C' : '',
+                      accent: '#f97316',
+                      accentEnd: '#fb923c'
+                    });
+
+                    /* Humidity */
+                    const humVal = (() => {
+                      const ut = getUnitTelemetry(unit.name);
+                      return ut.humidity !== null ? ut.humidity : (unit.humidity !== undefined ? unit.humidity : '--');
+                    })();
+                    allTiles.push({
+                      id: '_humidity',
+                      label: 'Humidity',
+                      value: humVal,
+                      unitStr: '%',
+                      accent: '#06b6d4',
+                      accentEnd: '#22d3ee'
+                    });
+
+                    /* Telemetry tiles */
+                    const telemetryDefs = [
+                      { key: 'kwhR', label: 'Energy', accent: '#a855f7', accentEnd: '#c084fc', unitStr: 'kWh' },
+                      { key: 'kwhY', label: 'KWH-Y', accent: '#a855f7', accentEnd: '#c084fc', unitStr: 'kWh' },
+                      { key: 'kwhB', label: 'KWH-B', accent: '#a855f7', accentEnd: '#c084fc', unitStr: 'kWh' },
+                      { key: 'voltageBR', label: 'Voltage B-R', accent: '#3b82f6', accentEnd: '#60a5fa', unitStr: 'V' },
+                      { key: 'avgVoltageLL', label: 'Avg Volt L-L', accent: '#3b82f6', accentEnd: '#60a5fa', unitStr: 'V' },
+                      { key: 'voltageRN', label: 'Voltage R-N', accent: '#3b82f6', accentEnd: '#60a5fa', unitStr: 'V' },
+                      { key: 'voltageYN', label: 'Voltage Y-N', accent: '#3b82f6', accentEnd: '#60a5fa', unitStr: 'V' },
+                      { key: 'kw', label: 'Active Power', accent: '#10b981', accentEnd: '#34d399', unitStr: 'kW' },
+                      { key: 'kwR', label: 'Power R', accent: '#10b981', accentEnd: '#34d399', unitStr: 'kW' },
+                      { key: 'pfR', label: 'PF-R', accent: '#f59e0b', accentEnd: '#fbbf24', unitStr: 'PF' },
+                      { key: 'pfY', label: 'PF-Y', accent: '#f59e0b', accentEnd: '#fbbf24', unitStr: 'PF' },
+                      { key: 'pfB', label: 'PF-B', accent: '#f59e0b', accentEnd: '#fbbf24', unitStr: 'PF' }
+                    ];
+
+                    const hasKw = mapping && mapping['kw'];
+                    telemetryDefs.forEach(def => {
+                      if (!mapping || !mapping[def.key]) return;
+                      if (def.key === 'kwR' && hasKw) return;
+                      const labelKey = def.label.toUpperCase().trim();
+                      if (seenLabels.has(labelKey)) return;
+                      seenLabels.add(labelKey);
+                      allTiles.push({
+                        id: def.key,
+                        label: def.label,
+                        value: telemetry[def.key] !== null && telemetry[def.key] !== undefined ? telemetry[def.key] : '--',
+                        unitStr: def.unitStr,
+                        accent: def.accent,
+                        accentEnd: def.accentEnd
+                      });
+                    });
 
                     return (
-                      <div 
-                        className="p-3 rounded-4 mb-4 border" 
-                        style={{ 
-                          background: 'linear-gradient(135deg, rgba(249, 115, 22, 0.02) 0%, rgba(8, 10, 15, 0.65) 100%)', 
-                          borderColor: 'rgba(249, 115, 22, 0.15)',
-                          backdropFilter: 'blur(10px)',
-                          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.3), inset 0 1px 0 0 rgba(255, 255, 255, 0.05)'
-                        }}
-                      >
-                        <div className="row g-3">
-                          {mappedItems.map((item) => {
-                            const value = telemetry[item.key];
-                            return (
-                              <div key={item.key} className={isSingle ? "col-12" : "col-6"}>
-                                <div className="d-flex flex-column">
-                                  <span className="text-secondary fw-bold mb-2 text-uppercase d-flex align-items-center gap-2 text-wrap" style={{ fontSize: isSingle ? '11px' : '9px', letterSpacing: '0.5px', opacity: 0.85, lineHeight: 1.2 }}>
-                                    {item.icon}
-                                    {item.label}
-                                  </span>
-                                  <div className="d-flex align-items-baseline text-nowrap">
-                                    <span className="text-white fw-black font-monospace lh-1" style={{ fontSize: isSingle ? '2.2rem' : '1.5rem', letterSpacing: '-1px', textShadow: `0 0 10px ${item.glow}` }}>
-                                      {value !== null && value !== undefined ? value : '--'}
-                                    </span>
-                                    <span className="fw-bold ms-1.5 font-monospace" style={{ fontSize: isSingle ? '12px' : '10px', color: item.color }}>{item.unit}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(2, 1fr)',
+                        gap: '8px',
+                        marginBottom: '12px'
+                      }}>
+                        {allTiles.map((tile, idx) => (
+                          <div
+                            key={tile.id}
+                            className="position-relative overflow-hidden"
+                            style={{
+                              background: 'linear-gradient(160deg, rgba(15, 23, 42, 0.7) 0%, rgba(8, 12, 24, 0.9) 100%)',
+                              border: '1px solid rgba(255, 255, 255, 0.05)',
+                              borderRadius: '14px',
+                              padding: '14px 14px 14px 16px',
+                              minHeight: '78px',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'center',
+                              transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                              cursor: 'default',
+                              boxShadow: '0 2px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.03)'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.border = `1px solid ${tile.accent}33`;
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                              e.currentTarget.style.boxShadow = `0 8px 28px ${tile.accent}15, 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)`;
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.border = '1px solid rgba(255, 255, 255, 0.05)';
+                              e.currentTarget.style.transform = 'translateY(0)';
+                              e.currentTarget.style.boxShadow = '0 2px 12px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.03)';
+                            }}
+                          >
+                            {/* Left accent gradient bar */}
+                            <div style={{
+                              position: 'absolute', left: 0, top: '12px', bottom: '12px', width: '3px',
+                              background: `linear-gradient(180deg, ${tile.accent}, ${tile.accentEnd})`,
+                              borderRadius: '0 3px 3px 0',
+                              boxShadow: `0 0 8px ${tile.accent}40`
+                            }}></div>
+
+                            {/* Subtle corner glow */}
+                            <div style={{
+                              position: 'absolute', right: '-8px', top: '-8px', width: '40px', height: '40px',
+                              borderRadius: '50%', background: `radial-gradient(circle, ${tile.accent}08 0%, transparent 70%)`,
+                              pointerEvents: 'none'
+                            }}></div>
+
+                            {/* Label */}
+                            <span style={{
+                              fontSize: '9.5px',
+                              color: '#64748b',
+                              fontWeight: 600,
+                              letterSpacing: '1px',
+                              textTransform: 'uppercase',
+                              marginBottom: '6px',
+                              lineHeight: 1.1
+                            }}>{tile.label}</span>
+
+                            {/* Value row */}
+                            <div className="d-flex align-items-baseline" style={{ gap: '4px' }}>
+                              <span style={{
+                                fontSize: '1.5rem',
+                                fontWeight: 700,
+                                color: '#f1f5f9',
+                                fontFamily: "'Inter', 'SF Pro Display', -apple-system, sans-serif",
+                                letterSpacing: '-0.5px',
+                                lineHeight: 1
+                              }}>
+                                {tile.value}
+                              </span>
+                              <span style={{
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                color: tile.accent,
+                                letterSpacing: '0.3px',
+                                opacity: 0.85
+                              }}>{tile.unitStr}</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     );
                   })()}
 
-                  {/* Status Badges */}
-                  <div className="d-flex gap-2 mb-4">
-                    <Badge bg="transparent" className="flex-grow-1 py-2 px-0 text-light fw-normal d-flex justify-content-center align-items-center border border-secondary border-opacity-25 rounded-pill" style={{ background: 'rgba(255,255,255,0.02) !important' }}>
-                      {getModeIcon(unit.mode)} <span className="ms-2 fs-12">{unit.status === 'ON' ? unit.mode : '--'}</span>
-                    </Badge>
-                    <Badge bg="transparent" className="flex-grow-1 py-2 px-0 text-light fw-normal d-flex justify-content-center align-items-center border border-secondary border-opacity-25 rounded-pill" style={{ background: 'rgba(255,255,255,0.02) !important' }}>
-                      <Fan size={14} className="text-secondary me-2" /> <span className="fs-12">{unit.status === 'ON' ? unit.fanSpeed : '--'}</span>
-                    </Badge>
-                    <Badge bg="transparent" className="flex-grow-1 py-2 px-0 text-light fw-normal d-flex justify-content-center align-items-center border border-secondary border-opacity-25 rounded-pill" style={{ background: 'rgba(255,255,255,0.02) !important' }}>
-                      <Zap size={14} className={unit.powerUsage > 0 ? "text-warning me-2" : "text-secondary me-2"} /> <span className="fs-12">{unit.status === 'ON' ? `${unit.powerUsage}kW` : '--'}</span>
-                    </Badge>
-                  </div>
-
                   {/* Schedule Indicator */}
-                  {getActiveScheduleForUnit(unit) ? (
+                  {getActiveScheduleForUnit(unit) && (
                     <div className="d-flex flex-column gap-2 mt-2">
                       <div className="d-flex align-items-center justify-content-between px-3 py-2 rounded-pill" style={{ background: 'rgba(14, 165, 233, 0.1)', border: '1px solid rgba(14, 165, 233, 0.2)' }}>
                         <div className="d-flex align-items-center gap-2">
@@ -2087,10 +2308,6 @@ const ACOverview = () => {
                           </div>
                         );
                       })()}
-                    </div>
-                  ) : (
-                    <div className="d-flex align-items-center justify-content-center px-3 py-2 rounded-pill mt-2" style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px dashed rgba(255, 255, 255, 0.1)' }}>
-                      <span className="text-secondary fw-bold" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>No Active Schedule</span>
                     </div>
                   )}
 
@@ -2497,7 +2714,8 @@ const ACOverview = () => {
                 <button 
                   onClick={() => handleControlAction('START')} 
                   className={`action-btn-premium start-btn ${units.find(u => u.id === controlTargetId)?.status === 'ON' ? 'active' : ''}`} 
-                  style={{ width: '100px', height: '85px' }}
+                  style={{ width: '100px', height: '85px', opacity: isSendingCommand ? 0.5 : 1, cursor: isSendingCommand ? 'not-allowed' : 'pointer' }}
+                  disabled={isSendingCommand}
                 >
                   <Play size={24} className="mb-2" />
                   <span>START</span>
@@ -2505,7 +2723,8 @@ const ACOverview = () => {
                 <button 
                   onClick={() => handleControlAction('STOP')} 
                   className={`action-btn-premium stop-btn ${units.find(u => u.id === controlTargetId)?.status === 'OFF' ? 'active' : ''}`} 
-                  style={{ width: '100px', height: '85px' }}
+                  style={{ width: '100px', height: '85px', opacity: isSendingCommand ? 0.5 : 1, cursor: isSendingCommand ? 'not-allowed' : 'pointer' }}
+                  disabled={isSendingCommand}
                 >
                   <Square size={22} className="mb-2" fill="currentColor" />
                   <span>STOP</span>
