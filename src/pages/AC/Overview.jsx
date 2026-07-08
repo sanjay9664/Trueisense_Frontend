@@ -468,14 +468,15 @@ const ACOverview = () => {
         { rule: rule2, condType: 'NA' },
         { rule: rule3, condType: 'NA' },
         { rule: rule4, condType: 'NA' },
-        { rule: rule5, condType: 'MODBUS', comparisonType: 'MORE_THEN', comparisonValue: String(startVal), condModbus: '(8)3,1' },
-        { rule: rule6, condType: 'MODBUS', comparisonType: 'LESS_THEN', comparisonValue: String(endVal), condModbus: '(8)3,1' }
+        { rule: rule5, condType: 'MODBUS', comparisonType: 'MORE_THAN', comparisonValue: String(startVal), condModbus: '(8)3,1', consequenceType: 'OUTPUT_2' },
+        { rule: rule6, condType: 'MODBUS', comparisonType: 'LESS_THAN', comparisonValue: String(endVal), condModbus: '(8)3,1', consequenceType: 'OUTPUT_2' }
       ];
 
       for (const item of allRuleSettings) {
         const r = item.rule;
         if (!r) continue;
         if (!r.condition) r.condition = {};
+        if (!r.consequence) r.consequence = {};
         
         r.condition.type = item.condType;
         if (item.comparisonType) {
@@ -487,9 +488,11 @@ const ACOverview = () => {
         if (item.condModbus) {
           r.condition.modbus = item.condModbus;
         }
+        if (item.consequenceType) {
+          r.consequence.type = item.consequenceType;
+        }
 
         let consequenceVal = r.consequence?.value || "";
-        if (!r.consequence) r.consequence = {};
         if (r === rule5) {
           consequenceVal = "1";
           r.consequence.value = "1";
@@ -695,7 +698,7 @@ const ACOverview = () => {
         { rule: rule1, condType: 'NA' },
         { rule: rule2, condType: 'NA' },
         { rule: rule3, condType: isDeselect ? 'NA' : 'INPUT_2' },
-        { rule: rule4, condType: isDeselect ? 'INPUT_2' : 'NA' },
+        { rule: rule4, condType: isDeselect ? 'NA' : 'INPUT_2' },
         { rule: rule5, condType: 'NA' },
         { rule: rule6, condType: 'NA' }
       ];
@@ -1465,16 +1468,9 @@ const ACOverview = () => {
       setScheduleRulesState(initialized);
       setShowScheduleConfigModal(true);
     } else if (option === 'SENSOR') {
-      const isAlreadyActive = autoOptions.includes('SENSOR');
-      if (isAlreadyActive) {
-        applySensorRules(unit?.name, true);
-        setAutoOptions([]);
-        setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: [], operationMode: 'Manual' } : u));
-      } else {
-        applySensorRules(unit?.name, false);
-        setAutoOptions(['SENSOR']);
-        setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: ['SENSOR'], operationMode: 'Auto' } : u));
-      }
+      applySensorRules(unit?.name, false);
+      setAutoOptions(['SENSOR']);
+      setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: ['SENSOR'], operationMode: 'Auto' } : u));
     } else if (option === 'TEMP') {
       const tempRules = rules.filter(r => r.ruleMode === 'temp' || r.condition?.type === 'ANALOG_2');
       const startT = tempRules[0]?.condition?.comparisonValue || '28';
