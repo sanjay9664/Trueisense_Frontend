@@ -489,10 +489,16 @@ const ACOverview = () => {
         }
 
         let consequenceVal = r.consequence?.value || "";
+        if (!r.consequence) r.consequence = {};
         if (r === rule5) {
           consequenceVal = "1";
+          r.consequence.value = "1";
+        } else if (r === rule6) {
+          consequenceVal = "0";
+          r.consequence.value = "0";
         } else if (String(consequenceVal).toUpperCase() === 'ON' || String(consequenceVal) === '1') {
           consequenceVal = "1";
+          r.consequence.value = "1";
         }
 
         const payload = {
@@ -654,7 +660,7 @@ const ACOverview = () => {
     }
   };
  
-  const applySensorRules = async (unitName) => {
+  const applySensorRules = async (unitName, isDeselect = false) => {
     try {
       const matchIndex = templates.findIndex(t => 
         t.category === 'AC' && 
@@ -688,8 +694,8 @@ const ACOverview = () => {
       const allRuleSettings = [
         { rule: rule1, condType: 'NA' },
         { rule: rule2, condType: 'NA' },
-        { rule: rule3, condType: 'INPUT_2' },
-        { rule: rule4, condType: 'NA' },
+        { rule: rule3, condType: isDeselect ? 'NA' : 'INPUT_2' },
+        { rule: rule4, condType: isDeselect ? 'INPUT_2' : 'NA' },
         { rule: rule5, condType: 'NA' },
         { rule: rule6, condType: 'NA' }
       ];
@@ -698,12 +704,20 @@ const ACOverview = () => {
         const r = item.rule;
         if (!r) continue;
         if (!r.condition) r.condition = {};
+        if (!r.consequence) r.consequence = {};
 
         r.condition.type = item.condType;
 
         let consequenceVal = r.consequence?.value || "";
-        if (String(consequenceVal).toUpperCase() === 'ON' || String(consequenceVal) === '1') {
+        if (r === rule3) {
           consequenceVal = "1";
+          r.consequence.value = "1";
+        } else if (r === rule4) {
+          consequenceVal = "0";
+          r.consequence.value = "0";
+        } else if (String(consequenceVal).toUpperCase() === 'ON' || String(consequenceVal) === '1') {
+          consequenceVal = "1";
+          r.consequence.value = "1";
         }
 
         const payload = {
@@ -733,7 +747,7 @@ const ACOverview = () => {
 
       match.mapping.rules = rules;
       if (!match.mapping.acConfig) match.mapping.acConfig = {};
-      match.mapping.acConfig.autoMode = 'SENSOR';
+      match.mapping.acConfig.autoMode = isDeselect ? '' : 'SENSOR';
       updatedTemplates[matchIndex] = match;
       setTemplates(updatedTemplates);
       localStorage.setItem('scada_templates', JSON.stringify(updatedTemplates));
@@ -1451,11 +1465,16 @@ const ACOverview = () => {
       setScheduleRulesState(initialized);
       setShowScheduleConfigModal(true);
     } else if (option === 'SENSOR') {
-      const sensorRule = rules.find(r => r.ruleMode === 'sensor' || r.condition?.type === 'INPUT_1' || r.condition?.type === 'INPUT_2' || r.condition?.type === 'ANALOG_1');
-      const condType = sensorRule?.condition?.type || 'SENSOR';
-      applySensorRules(unit?.name);
-      setAutoOptions(['SENSOR']);
-      setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: ['SENSOR'] } : u));
+      const isAlreadyActive = autoOptions.includes('SENSOR');
+      if (isAlreadyActive) {
+        applySensorRules(unit?.name, true);
+        setAutoOptions([]);
+        setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: [], operationMode: 'Manual' } : u));
+      } else {
+        applySensorRules(unit?.name, false);
+        setAutoOptions(['SENSOR']);
+        setUnits(units.map(u => u.id === controlTargetId ? { ...u, activeAutoOptions: ['SENSOR'], operationMode: 'Auto' } : u));
+      }
     } else if (option === 'TEMP') {
       const tempRules = rules.filter(r => r.ruleMode === 'temp' || r.condition?.type === 'ANALOG_2');
       const startT = tempRules[0]?.condition?.comparisonValue || '28';
