@@ -353,6 +353,32 @@ const ACOverview = () => {
       if (match) {
         const rules = match.mapping?.rules || [];
         const deviceId = match.mapping?.acConfig?.device;
+        
+        // CHECK IF DISCONNECT CONFIG / IO IS ENABLED!
+        const disconnectConfig = match.mapping?.acConfig?.disconnectConfig;
+        if (disconnectConfig && disconnectConfig.ioEnabled) {
+          const payload = {
+            argValue: 1, // always 1
+            cmdArg: action === 'START' ? 1 : 0, // 1 for ON/START, 0 for OFF/STOP
+            moduleId: String(disconnectConfig.md),
+            cmdField: String(disconnectConfig.add)
+          };
+          
+          console.log('Sending manual disconnect command to push/remote:', payload);
+          try {
+            await fetch('/sochiot-config/device/command/push/remote', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(payload)
+            });
+          } catch (err) {
+            console.error('Failed to send remote command:', err);
+          }
+          return; // Skip rule engine updates when using remote control command override
+        }
+
         if (!deviceId || rules.length === 0) return;
         
         const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
@@ -388,6 +414,52 @@ const ACOverview = () => {
       }
     } catch (e) {
       console.error('Error sending rules to rule engine:', e);
+    }
+  };
+
+  const disableAllRulesForAC = async (unitName) => {
+    try {
+      const match = templates.find(t => 
+        t.category === 'AC' && 
+        t.module === 'Overview' && 
+        t.mapping?.acConfig?.acUnit === unitName
+      );
+      if (match) {
+        const rules = match.mapping?.rules || [];
+        const deviceId = match.mapping?.acConfig?.device;
+        if (!deviceId || rules.length === 0) return;
+        
+        const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
+        const token = localStorage.getItem('sochiot_token');
+        
+        for (const rule of rules) {
+          const payload = {
+            moduleId: rule.moduleId || deviceId,
+            settingFields: [
+              { fieldName: "condition_date_time", currentValue: rule.condition?.timeDate || "" },
+              { fieldName: "condition_date_time_repeat_days", currentValue: (rule.condition?.repeatDays || []).join('##&##') },
+              { fieldName: "consequence_value", currentValue: rule.consequence?.value || "" },
+              { fieldName: "condition_type", currentValue: "NA" }, // disable rule
+              { fieldName: "condition_modbus", currentValue: rule.condition?.modbus || "" },
+              { fieldName: "comparison_type", currentValue: rule.condition?.comparisonType || "" },
+              { fieldName: "comparison_value", currentValue: rule.condition?.comparisonValue || "" },
+              { fieldName: "consequence_type", currentValue: rule.consequence?.type || "" },
+              { fieldName: "consequence_modbus", currentValue: rule.consequence?.modbus || "" }
+            ]
+          };
+          
+          await fetch(`${backendUrl}/api/rule-engine/apply`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Error disabling rules for AC:', e);
     }
   };
 
@@ -712,12 +784,23 @@ const ACOverview = () => {
         r.condition.type = item.condType;
 
         let consequenceVal = r.consequence?.value || "";
+        let comparisonTypeVal = r.condition?.comparisonType || "";
+        let comparisonValueVal = r.condition?.comparisonValue || "";
+
         if (r === rule3) {
           consequenceVal = "1";
           r.consequence.value = "1";
+          comparisonTypeVal = "EQUAL";
+          r.condition.comparisonType = "EQUAL";
+          comparisonValueVal = "1";
+          r.condition.comparisonValue = "1";
         } else if (r === rule4) {
           consequenceVal = "0";
           r.consequence.value = "0";
+          comparisonTypeVal = "EQUAL";
+          r.condition.comparisonType = "EQUAL";
+          comparisonValueVal = "0";
+          r.condition.comparisonValue = "0";
         } else if (String(consequenceVal).toUpperCase() === 'ON' || String(consequenceVal) === '1') {
           consequenceVal = "1";
           r.consequence.value = "1";
@@ -731,8 +814,8 @@ const ACOverview = () => {
             { fieldName: "consequence_value", currentValue: consequenceVal },
             { fieldName: "condition_type", currentValue: item.condType },
             { fieldName: "condition_modbus", currentValue: r.condition?.modbus || "" },
-            { fieldName: "comparison_type", currentValue: r.condition?.comparisonType || "" },
-            { fieldName: "comparison_value", currentValue: r.condition?.comparisonValue || "" },
+            { fieldName: "comparison_type", currentValue: comparisonTypeVal },
+            { fieldName: "comparison_value", currentValue: comparisonValueVal },
             { fieldName: "consequence_type", currentValue: r.consequence?.type || "" },
             { fieldName: "consequence_modbus", currentValue: r.consequence?.modbus || "" }
           ]
@@ -2362,6 +2445,10 @@ const ACOverview = () => {
                 setControlMode('Manual'); 
                 setControlSuccessMessage('');
                 setUnits(units.map(u => u.id === controlTargetId ? { ...u, operationMode: 'Manual' } : u));
+                const targetUnit = units.find(u => u.id === controlTargetId);
+                if (targetUnit) {
+                  disableAllRulesForAC(targetUnit.name);
+                }
               }}
               className={`w-50 text-center py-2 rounded-pill fw-bold transition-all ${controlMode === 'Manual' ? 'bg-info text-white shadow' : (isDark ? 'text-secondary' : 'text-dark')}`}
               style={{ fontSize: '12px', letterSpacing: '1px', cursor: 'pointer' }}

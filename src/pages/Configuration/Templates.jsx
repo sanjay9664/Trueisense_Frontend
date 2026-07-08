@@ -684,7 +684,8 @@ const ConfigTemplates = () => {
     kwhR: '', kwhY: '', kwhB: '',
     pfR: '', pfY: '', pfB: '',
     enabled: true, autoMode: 'SCHEDULE',
-    ruleDevice: ''
+    ruleDevice: '',
+    disconnectConfig: { ioEnabled: false, device: '', md: '', add: '', argValue: 1, cmdArg: 1 }
   });
   const [acRules, setAcRules] = useState([initialRuleState, initialRuleState]);
   const initializeRuleCustomProps = (rule) => {
@@ -2443,6 +2444,12 @@ const ConfigTemplates = () => {
       }
     }
   }, [selectedCategory, acConfig.building, acConfig.subZone, globalLocation.building, globalLocation.subZone, locationDetails, deviceDetails]);
+
+  useEffect(() => {
+    if (acConfig.disconnectConfig?.device && !deviceDetails[acConfig.disconnectConfig.device]) {
+      fetchDeviceDetails(acConfig.disconnectConfig.device);
+    }
+  }, [acConfig.disconnectConfig?.device, deviceDetails]);
 
   const handleConfigChange = async (config, setter, key, rawValue) => {
     const value = rawValue === 'UNSELECT' ? '' : rawValue;
@@ -6790,25 +6797,203 @@ const ConfigTemplates = () => {
 
                                       {/* 7. Bottom + Add Another Rule Button */}
                                       {acConfig.enabled && (acConfig.ruleDevice || findRuleHostDevice()) && (
-                                        <div className="d-flex justify-content-start mt-2">
-                                          <Button
-                                            variant="outline-success"
-                                            size="sm"
-                                            className="fw-black fs-11 px-3 py-1.5 rounded d-flex align-items-center gap-1 shadow-glow"
-                                            style={{ height: '35px' }}
-                                            onClick={() => {
-                                              setAcRules(prev => {
-                                                const newRuleName = `Rule ${prev.length + 1}`;
-                                                const next = [...prev, initializeRuleCustomProps({ ...initialRuleState, ruleName: newRuleName })];
-                                                setToastMessage({ type: 'success', text: `Added new Rule ${next.length}. You can configure it below.` });
-                                                setTimeout(() => setToastMessage(null), 3000);
-                                                return next;
-                                              });
-                                            }}
-                                          >
-                                            + Add Another Rule
-                                          </Button>
-                                        </div>
+                                        <>
+                                          <div className="d-flex justify-content-start mt-2">
+                                            <Button
+                                              variant="outline-success"
+                                              size="sm"
+                                              className="fw-black fs-11 px-3 py-1.5 rounded d-flex align-items-center gap-1 shadow-glow"
+                                              style={{ height: '35px' }}
+                                              onClick={() => {
+                                                setAcRules(prev => {
+                                                  const newRuleName = `Rule ${prev.length + 1}`;
+                                                  const next = [...prev, initializeRuleCustomProps({ ...initialRuleState, ruleName: newRuleName })];
+                                                  setToastMessage({ type: 'success', text: `Added new Rule ${next.length}. You can configure it below.` });
+                                                  setTimeout(() => setToastMessage(null), 3000);
+                                                  return next;
+                                                });
+                                              }}
+                                            >
+                                              + Add Another Rule
+                                            </Button>
+                                          </div>
+
+                                          {/* 8. Disconnect/IO Configuration Section */}
+                                          <div className="mt-4 pt-3 border-top border-white border-opacity-5 w-100">
+                                            <Row className="align-items-center mb-3">
+                                              <Col sm={4}>
+                                                <Form.Label className="fs-10 text-info fw-black uppercase tracking-widest opacity-70 mb-0">Setting Template</Form.Label>
+                                              </Col>
+                                              <Col sm={8}>
+                                                <Form.Select
+                                                  className="premium-input px-3 py-1 fs-11 fw-bold border-info border-opacity-20 shadow-inner"
+                                                  style={{ height: '35px' }}
+                                                  value={acConfig.disconnectConfig?.ioEnabled ? 'IO' : 'NONE'}
+                                                  onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setAcConfig(prev => ({
+                                                      ...prev,
+                                                      disconnectConfig: {
+                                                        ...(prev.disconnectConfig || { md: '', add: '', argValue: 1, cmdArg: 1, device: '' }),
+                                                        ioEnabled: val === 'IO'
+                                                      }
+                                                    }));
+                                                  }}
+                                                >
+                                                  <option value="NONE">NONE</option>
+                                                  <option value="IO">IO</option>
+                                                </Form.Select>
+                                              </Col>
+                                            </Row>
+
+                                            {acConfig.disconnectConfig?.ioEnabled && (
+                                              <div className="p-3 rounded bg-dark bg-opacity-40 border border-info border-opacity-10 mt-3">
+                                                <Row className="g-3">
+                                                  <Col md={12}>
+                                                    <Form.Label className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-2 d-block">SELECT DEVICE ID</Form.Label>
+                                                    <Form.Select
+                                                      className="premium-input p-3 fs-11 fw-bold border-info border-opacity-10 shadow-inner"
+                                                      style={{ height: '45px' }}
+                                                      value={acConfig.disconnectConfig?.device || ''}
+                                                      onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setAcConfig(prev => ({
+                                                          ...prev,
+                                                          disconnectConfig: {
+                                                            ...(prev.disconnectConfig || {}),
+                                                            device: val,
+                                                            md: '',
+                                                            add: ''
+                                                          }
+                                                        }));
+                                                        if (val) {
+                                                          fetchDeviceDetails(val);
+                                                        }
+                                                      }}
+                                                    >
+                                                      <option value="">SELECT DEVICE</option>
+                                                      {(() => {
+                                                        const allDevices = [];
+                                                        Object.entries(locationDetails).forEach(([locName, locInfo]) => {
+                                                          if (locInfo && locInfo.deviceList) {
+                                                            locInfo.deviceList.forEach(d => {
+                                                              if (!allDevices.some(ad => ad.id === d.id)) {
+                                                                allDevices.push({
+                                                                  id: d.id,
+                                                                  label: `${locName} / ${d.label || d.id}`
+                                                                });
+                                                              }
+                                                            });
+                                                          }
+                                                        });
+                                                        allDevices.sort((a, b) => a.label.localeCompare(b.label));
+                                                        return allDevices.map(d => (
+                                                          <option key={d.id} value={d.id}>{d.label}</option>
+                                                        ));
+                                                      })()}
+                                                    </Form.Select>
+                                                  </Col>
+                                                                                             {(() => {
+                                                    const selectedDeviceModules = acConfig.disconnectConfig?.device ? (deviceDetails[acConfig.disconnectConfig.device]?.modules || {}) : {};
+                                                    const selectedModule = acConfig.disconnectConfig?.md ? selectedDeviceModules[acConfig.disconnectConfig.md] : null;
+                                                    const rawMod = selectedModule?.rawModule || {};
+                                                    const selectedModuleSettings = rawMod.settingFieldsList || rawMod.settingFieldVOList || rawMod.settingFieldList || rawMod.settingFields || [];
+                                                    const hasDevice = !!acConfig.disconnectConfig?.device;
+                                                    const hasModule = !!acConfig.disconnectConfig?.md;
+                                                    const isDeviceLoaded = hasDevice && !!deviceDetails[acConfig.disconnectConfig.device];
+
+                                                    return (
+                                                      <>
+                                                        <Col md={6}>
+                                                          <Form.Label className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-2 d-block">md (Module ID)</Form.Label>
+                                                          <Form.Select
+                                                            className="premium-input p-3 fs-11 fw-bold border-info border-opacity-10 shadow-inner"
+                                                            style={{ height: '45px' }}
+                                                            value={acConfig.disconnectConfig?.md || ''}
+                                                            onChange={(e) => {
+                                                              const val = e.target.value;
+                                                              setAcConfig(prev => ({
+                                                                ...prev,
+                                                                disconnectConfig: {
+                                                                  ...(prev.disconnectConfig || {}),
+                                                                  md: val,
+                                                                  add: ''
+                                                                }
+                                                              }));
+                                                            }}
+                                                            disabled={!hasDevice}
+                                                          >
+                                                            {!hasDevice ? (
+                                                              <option value="">SELECT DEVICE FIRST</option>
+                                                            ) : !isDeviceLoaded ? (
+                                                              <option value="">Loading modules...</option>
+                                                            ) : (
+                                                              <>
+                                                                <option value="">SELECT MODULE</option>
+                                                                {Object.values(selectedDeviceModules).map(m => (
+                                                                  <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
+                                                                ))}
+                                                              </>
+                                                            )}
+                                                          </Form.Select>
+                                                        </Col>
+
+                                                        <Col md={6}>
+                                                          <Form.Label className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-2 d-block">add (Address)</Form.Label>
+                                                          <Form.Select
+                                                            className="premium-input p-3 fs-11 fw-bold border-info border-opacity-10 shadow-inner"
+                                                            style={{ height: '45px' }}
+                                                            value={acConfig.disconnectConfig?.add || ''}
+                                                            onChange={(e) => {
+                                                              const val = e.target.value;
+                                                              setAcConfig(prev => ({
+                                                                ...prev,
+                                                                disconnectConfig: {
+                                                                  ...(prev.disconnectConfig || {}),
+                                                                  add: val
+                                                                }
+                                                              }));
+                                                            }}
+                                                            disabled={!hasModule}
+                                                          >
+                                                            {!hasModule ? (
+                                                              <option value="">SELECT MODULE FIRST</option>
+                                                            ) : (
+                                                              <>
+                                                                <option value="">SELECT ADDRESS</option>
+                                                                {selectedModuleSettings.map(f => {
+                                                                  const fieldVal = f.fieldName || f.name || f.id;
+                                                                  const fieldLabel = f.displayName || f.fieldName || f.name || f.id;
+                                                                  return (
+                                                                    <option key={fieldVal} value={fieldVal}>{fieldLabel} ({fieldVal})</option>
+                                                                  );
+                                                                })}
+                                                                {selectedModuleSettings.length === 0 && (
+                                                                  <option value="">No settings found for this module</option>
+                                                                )}
+                                                              </>
+                                                            )}
+                                                          </Form.Select>
+                                                        </Col>
+                                                      </>
+                                                    );
+                                                  })()}
+
+                                                  <Col md={12}>
+                                                    <Form.Label className="fs-10 text-secondary fw-black uppercase tracking-widest opacity-50 mb-2 d-block">argValue</Form.Label>
+                                                    <Form.Control
+                                                      type="number"
+                                                      className="premium-input p-3 fs-11 fw-bold border-info border-opacity-10 shadow-inner"
+                                                      style={{ height: '45px' }}
+                                                      value={1}
+                                                      disabled
+                                                    />
+                                                  </Col>
+                                                </Row>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </>
                                       )}
                                     </div>
                                   )}
