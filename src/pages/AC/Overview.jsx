@@ -479,17 +479,7 @@ const ACOverview = () => {
         const deviceId = match.mapping.acConfig.device;
         const gatewayUuid = match.mapping.gatewayUuid;
         if (!deviceId) return false;
-        
-        // 1. Check if device is overall online via context
-        const devStatusOnline = !!getOverallStatus(deviceId, gatewayUuid);
-        if (devStatusOnline) return true;
-        
-        // 2. Check if we have fresh telemetry (in the last 2 minutes)
-        const telemetry = liveTelemetry[unitName];
-        const lastTs = telemetry?.lastTelemetryTimestamp;
-        if (lastTs && (Date.now() - lastTs < 2 * 60 * 1000)) {
-          return true;
-        }
+        return !!getOverallStatus(deviceId, gatewayUuid);
       }
     } catch (e) {
       console.error(e);

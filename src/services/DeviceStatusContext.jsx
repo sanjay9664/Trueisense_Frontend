@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getSochiotGatewayStatus, getSochiotDeviceStatus, getSochiotDeviceDetails } from './authService';
 
 const DeviceStatusContext = createContext();
@@ -50,8 +50,6 @@ const resolveDeviceOnlineStatus = (deviceData) => {
 export const DeviceStatusProvider = ({ children }) => {
   const [deviceStatuses, setDeviceStatuses] = useState({});
   const [gatewayStatuses, setGatewayStatuses] = useState({});
-  const lastSeenOnlineRef = useRef({});
-  const lastSeenGatewayOnlineRef = useRef({});
 
   const checkDeviceStatus = useCallback(async (deviceId) => {
     if (!deviceId) return false;
@@ -65,14 +63,11 @@ export const DeviceStatusProvider = ({ children }) => {
           res = await getSochiotDeviceStatus(deviceId);
           const deviceData = res?.data || res;
           const isOnline = resolveDeviceOnlineStatus(deviceData);
-          if (isOnline) {
-            lastSeenOnlineRef.current[deviceId] = Date.now();
-            setDeviceStatuses(prev => ({
-              ...prev,
-              [deviceId]: true
-            }));
-            return true;
-          }
+          setDeviceStatuses(prev => ({
+            ...prev,
+            [deviceId]: isOnline
+          }));
+          return isOnline;
         } catch (statusErr) {
           console.warn(`getSochiotDeviceStatus failed for ${deviceId}, falling back to getSochiotDeviceDetails:`, statusErr);
         }
@@ -86,26 +81,19 @@ export const DeviceStatusProvider = ({ children }) => {
       }
       const deviceData = res?.data || res;
       const isOnline = resolveDeviceOnlineStatus(deviceData);
-      if (isOnline) {
-        lastSeenOnlineRef.current[deviceId] = Date.now();
-      }
-      
-      // Latch/Damp status: keep it online if it was seen online in the last 90 seconds
-      const finalStatus = isOnline || (lastSeenOnlineRef.current[deviceId] && (Date.now() - lastSeenOnlineRef.current[deviceId] < 90000));
       
       setDeviceStatuses(prev => ({
         ...prev,
-        [deviceId]: !!finalStatus
+        [deviceId]: isOnline
       }));
-      return !!finalStatus;
+      return isOnline;
     } catch (e) {
       console.error(`Error checking device status for ${deviceId}:`, e);
-      const finalStatus = lastSeenOnlineRef.current[deviceId] && (Date.now() - lastSeenOnlineRef.current[deviceId] < 90000);
       setDeviceStatuses(prev => ({
         ...prev,
-        [deviceId]: !!finalStatus
+        [deviceId]: false
       }));
-      return !!finalStatus;
+      return false;
     }
   }, []);
 
@@ -126,26 +114,19 @@ export const DeviceStatusProvider = ({ children }) => {
       const res = await getSochiotGatewayStatus(clusterId);
       const gatewayData = res?.data || res;
       const isOnline = resolveDeviceOnlineStatus(gatewayData);
-      if (isOnline) {
-        lastSeenGatewayOnlineRef.current[clusterId] = Date.now();
-      }
-      
-      // Latch/Damp status: keep it online if it was seen online in the last 90 seconds
-      const finalStatus = isOnline || (lastSeenGatewayOnlineRef.current[clusterId] && (Date.now() - lastSeenGatewayOnlineRef.current[clusterId] < 90000));
       
       setGatewayStatuses(prev => ({
         ...prev,
-        [clusterId]: !!finalStatus
+        [clusterId]: isOnline
       }));
-      return !!finalStatus;
+      return isOnline;
     } catch (e) {
       console.error(`Error checking gateway status for ${clusterId}:`, e);
-      const finalStatus = lastSeenGatewayOnlineRef.current[clusterId] && (Date.now() - lastSeenGatewayOnlineRef.current[clusterId] < 90000);
       setGatewayStatuses(prev => ({
         ...prev,
-        [clusterId]: !!finalStatus
+        [clusterId]: false
       }));
-      return !!finalStatus;
+      return false;
     }
   }, []);
 
@@ -199,7 +180,7 @@ export const DeviceStatusProvider = ({ children }) => {
 
     handlePoll();
 
-    const interval = setInterval(handlePoll, 30000); // Poll every 30 seconds
+    const interval = setInterval(handlePoll, 15000); // Poll every 15 seconds for instant status
 
     window.addEventListener('storage-update', handlePoll);
     window.addEventListener('storage', handlePoll);
