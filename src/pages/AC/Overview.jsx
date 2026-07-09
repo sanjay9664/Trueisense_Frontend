@@ -479,7 +479,17 @@ const ACOverview = () => {
         const deviceId = match.mapping.acConfig.device;
         const gatewayUuid = match.mapping.gatewayUuid;
         if (!deviceId) return false;
-        return !!getOverallStatus(deviceId, gatewayUuid);
+        
+        // 1. Check if device is overall online via context
+        const devStatusOnline = !!getOverallStatus(deviceId, gatewayUuid);
+        if (devStatusOnline) return true;
+        
+        // 2. Check if we have fresh telemetry (in the last 2 minutes)
+        const telemetry = liveTelemetry[unitName];
+        const lastTs = telemetry?.lastTelemetryTimestamp;
+        if (lastTs && (Date.now() - lastTs < 2 * 60 * 1000)) {
+          return true;
+        }
       }
     } catch (e) {
       console.error(e);
@@ -909,6 +919,43 @@ const ACOverview = () => {
   // Live Telemetry for template mapped registers
   const [liveTelemetry, setLiveTelemetry] = useState({});
 
+  const getLatestTimestamp = (stats, acConfig) => {
+    if (!stats || !acConfig) return null;
+    let latestTs = null;
+    const regs = [
+      acConfig.temperature, acConfig.humidity, acConfig.ampere, acConfig.kw,
+      acConfig.avgVoltageLL, acConfig.avgCurrent, acConfig.avgPowerKva,
+      acConfig.voltageRN, acConfig.voltageYN, acConfig.voltageBR,
+      acConfig.currentL1, acConfig.currentL2, acConfig.currentL3,
+      acConfig.kwR, acConfig.kwY, acConfig.kwB,
+      acConfig.kwhR, acConfig.kwhY, acConfig.kwhB,
+      acConfig.pfR, acConfig.pfY, acConfig.pfB
+    ];
+    regs.forEach(reg => {
+      if (reg && typeof reg === 'string') {
+        let modId = null;
+        if (reg.includes('::')) modId = reg.split('::')[0];
+        else if (reg.includes(',')) modId = reg.split(',')[0];
+        if (modId) {
+          const matchStat = stats.find(s =>
+            String(s.moduleId) === String(modId) ||
+            String(s.meta?.module_id) === String(modId)
+          );
+          if (matchStat) {
+            if (matchStat.meta?.created_at_timestamp) {
+              const raw = matchStat.meta.created_at_timestamp;
+              const tsMs = raw > 1e12 ? raw : raw * 1000;
+              if (!latestTs || tsMs > latestTs) latestTs = tsMs;
+            } else {
+              latestTs = Date.now();
+            }
+          }
+        }
+      }
+    });
+    return latestTs;
+  };
+
   const getUnitTelemetry = (unitName) => {
     return liveTelemetry[unitName] || {
       temperature: null,
@@ -1146,6 +1193,7 @@ const ACOverview = () => {
                 }
               }
 
+              const latestTs = getLatestTimestamp(stats, acConfig);
               nextTelemetry[acUnit] = {
                 temperature: nextTemp !== null ? nextTemp : (prevUnit.temperature !== undefined ? prevUnit.temperature : null),
                 humidity: nextHum !== null ? nextHum : (prevUnit.humidity !== undefined ? prevUnit.humidity : null),
@@ -1169,7 +1217,8 @@ const ACOverview = () => {
                 pfR: nextPfr !== null ? nextPfr : (prevUnit.pfR !== undefined ? prevUnit.pfR : null),
                 pfY: nextPfy !== null ? nextPfy : (prevUnit.pfY !== undefined ? prevUnit.pfY : null),
                 pfB: nextPfb !== null ? nextPfb : (prevUnit.pfB !== undefined ? prevUnit.pfB : null),
-                occupied: nextOccupied !== null ? nextOccupied : (prevUnit.occupied !== undefined ? prevUnit.occupied : null)
+                occupied: nextOccupied !== null ? nextOccupied : (prevUnit.occupied !== undefined ? prevUnit.occupied : null),
+                lastTelemetryTimestamp: latestTs || prevUnit.lastTelemetryTimestamp || null
               };
             });
             return nextTelemetry;
@@ -1288,6 +1337,7 @@ const ACOverview = () => {
               }
             }
 
+            const latestTs = getLatestTimestamp(stats, acConfig);
             nextTelemetry[acUnit] = {
               temperature: nextTemp !== null ? nextTemp : (prevUnit.temperature !== undefined ? prevUnit.temperature : null),
               humidity: nextHum !== null ? nextHum : (prevUnit.humidity !== undefined ? prevUnit.humidity : null),
@@ -1311,7 +1361,8 @@ const ACOverview = () => {
               pfR: nextPfr !== null ? nextPfr : (prevUnit.pfR !== undefined ? prevUnit.pfR : null),
               pfY: nextPfy !== null ? nextPfy : (prevUnit.pfY !== undefined ? prevUnit.pfY : null),
               pfB: nextPfb !== null ? nextPfb : (prevUnit.pfB !== undefined ? prevUnit.pfB : null),
-              occupied: nextOccupied !== null ? nextOccupied : (prevUnit.occupied !== undefined ? prevUnit.occupied : null)
+              occupied: nextOccupied !== null ? nextOccupied : (prevUnit.occupied !== undefined ? prevUnit.occupied : null),
+              lastTelemetryTimestamp: latestTs || prevUnit.lastTelemetryTimestamp || null
             };
           });
 
@@ -1934,7 +1985,7 @@ const ACOverview = () => {
         {/* AC UNIT CARDS */}
         {mappedUnits.length > 0 ? (
           mappedUnits.map((unit) => (
-          <Col xl={3} lg={4} md={6} sm={12} xs={12} key={unit.id}>
+          <Col xl={4} lg={6} md={6} sm={12} xs={12} key={unit.id}>
             <Card className="border-0 h-100 overflow-hidden premium-card" style={{ 
               background: 'linear-gradient(135deg, rgba(16, 16, 24, 0.75) 0%, rgba(8, 8, 12, 0.9) 100%)', 
               borderRadius: '24px', 
@@ -2170,10 +2221,7 @@ const ACOverview = () => {
                       { key: 'kwhR', label: 'Energy', accent: '#a855f7', accentEnd: '#c084fc', unitStr: 'kWh' },
                       { key: 'kwhY', label: 'KWH-Y', accent: '#a855f7', accentEnd: '#c084fc', unitStr: 'kWh' },
                       { key: 'kwhB', label: 'KWH-B', accent: '#a855f7', accentEnd: '#c084fc', unitStr: 'kWh' },
-                      { key: 'voltageBR', label: 'Voltage B-R', accent: '#3b82f6', accentEnd: '#60a5fa', unitStr: 'V' },
-                      { key: 'avgVoltageLL', label: 'Avg Volt L-L', accent: '#3b82f6', accentEnd: '#60a5fa', unitStr: 'V' },
                       { key: 'voltageRN', label: 'Voltage R-N', accent: '#3b82f6', accentEnd: '#60a5fa', unitStr: 'V' },
-                      { key: 'voltageYN', label: 'Voltage Y-N', accent: '#3b82f6', accentEnd: '#60a5fa', unitStr: 'V' },
                       { key: 'kw', label: 'Active Power', accent: '#10b981', accentEnd: '#34d399', unitStr: 'kW' },
                       { key: 'kwR', label: 'Power R', accent: '#10b981', accentEnd: '#34d399', unitStr: 'kW' },
                       { key: 'pfR', label: 'PF-R', accent: '#f59e0b', accentEnd: '#fbbf24', unitStr: 'PF' },
