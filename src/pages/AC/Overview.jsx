@@ -2249,7 +2249,7 @@ const ACOverview = () => {
                     return (
                       <div style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(2, 1fr)',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
                         gap: '8px',
                         marginBottom: '12px'
                       }}>
@@ -2261,8 +2261,8 @@ const ACOverview = () => {
                               background: 'linear-gradient(160deg, rgba(15, 23, 42, 0.7) 0%, rgba(8, 12, 24, 0.9) 100%)',
                               border: '1px solid rgba(255, 255, 255, 0.05)',
                               borderRadius: '14px',
-                              padding: '14px 14px 14px 16px',
-                              minHeight: '78px',
+                              padding: '10px 10px 10px 12px',
+                              minHeight: '68px',
                               display: 'flex',
                               flexDirection: 'column',
                               justifyContent: 'center',
@@ -2310,7 +2310,7 @@ const ACOverview = () => {
                             {/* Value row */}
                             <div className="d-flex align-items-baseline" style={{ gap: '4px' }}>
                               <span style={{
-                                fontSize: '1.5rem',
+                                fontSize: '1.25rem',
                                 fontWeight: 700,
                                 color: '#f1f5f9',
                                 fontFamily: "'Inter', 'SF Pro Display', -apple-system, sans-serif",
