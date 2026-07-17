@@ -171,7 +171,13 @@ const EnergyMeteringOverview = () => {
 
     const fetchTemplatesFromBackend = async () => {
       try {
-        const res = await fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`);
+        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        const tenantId = userData?.tenantId || userData?.organizationId;
+        const templatesUrl = tenantId 
+          ? `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates?tenantId=${tenantId}`
+          : `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`;
+
+        const res = await fetch(templatesUrl);
         if (!res.ok) return;
         const data = await res.json();
         const mapped = data.map(t => {

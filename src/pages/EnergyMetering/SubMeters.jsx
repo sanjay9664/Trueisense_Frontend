@@ -862,7 +862,13 @@ const SubMeters = () => {
       }
     }
 
-    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const tenantId = userData?.tenantId || userData?.organizationId;
+    const templatesUrl = tenantId 
+      ? `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates?tenantId=${tenantId}`
+      : `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`;
+
+    fetch(templatesUrl)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
         const mapped = data.map(t => {
@@ -884,16 +890,19 @@ const SubMeters = () => {
       .catch(err => console.error('Error fetching templates in SubMeters:', err));
   }, [refreshStatuses]);
 
-
-
-
   // Live Telemetry Sync using Websockets and Polling
   useEffect(() => {
     const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
     const socket = io(backendUrl, { path: '/socket.io', transports: ['websocket', 'polling'] });
 
     const fetchTemplates = () => {
-      fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      const tenantId = userData?.tenantId || userData?.organizationId;
+      const templatesUrl = tenantId 
+        ? `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates?tenantId=${tenantId}`
+        : `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`;
+
+      fetch(templatesUrl)
         .then(res => res.ok ? res.json() : [])
         .then(data => {
           const mapped = data.map(t => {

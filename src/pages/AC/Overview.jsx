@@ -1007,7 +1007,7 @@ const ACOverview = () => {
       try {
         const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
         const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const tenantId = userData?.tenantId;
+        const tenantId = userData?.tenantId || userData?.organizationId;
         const url = tenantId 
           ? `${backendUrl}/api/templates?tenantId=${tenantId}` 
           : `${backendUrl}/api/templates`;

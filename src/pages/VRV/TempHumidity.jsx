@@ -357,7 +357,7 @@ const EnvDashboard = () => {
         // Fallback to fetch if cache is empty
         if (!templatesData || templatesData.length === 0) {
           const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-          const tenantId = userData?.tenantId;
+          const tenantId = userData?.tenantId || userData?.organizationId;
           const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
           const response = await fetch(`${backendUrl}${url}`);
           if (response.ok) {

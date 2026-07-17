@@ -3452,7 +3452,7 @@ const ConfigTemplates = () => {
     const fetchTemplates = async () => {
       try {
         const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const tenantId = userData?.tenantId;
+        const tenantId = userData?.tenantId || userData?.organizationId;
         const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
 
         const response = await fetch(url);
@@ -4019,8 +4019,7 @@ const ConfigTemplates = () => {
         await syncRulesToSochiot(ugRules);
       }
 
-      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-      const tenantId = userData?.tenantId;
+      const tenantId = userData?.tenantId || userData?.organizationId;
 
       const response = await fetch('/api/templates/save', {
         method: 'POST',
