@@ -468,7 +468,12 @@ const MainMeter = () => {
       }
     }
 
-    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
+    const _ud = JSON.parse(localStorage.getItem('userData') || '{}');
+    const _tid = _ud?.tenantId || _ud?.organizationId;
+    const _tplUrl = _tid
+      ? `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates?tenantId=${_tid}`
+      : `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`;
+    fetch(_tplUrl)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
         const mapped = data.map(t => {
