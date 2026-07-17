@@ -361,7 +361,7 @@ const normalizeMeterGroups = (groups, meters) => {
 
 const fetchSavedMeterGroups = async (meters) => {
   const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-  const tenantId = userData?.tenantId || userData?.organizationId;
+  const tenantId = userData?.tenantId;
   const url = tenantId
     ? `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates/energy-meter-groups?tenantId=${tenantId}`
     : `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates/energy-meter-groups`;
@@ -773,7 +773,7 @@ const SubMeters = () => {
     }
 
     const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-    const tenantId = userData?.tenantId || userData?.organizationId;
+    const tenantId = userData?.tenantId;
     const normalized = normalizeMeterGroups(meterGroups, meters);
     try {
       const response = await fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates/energy-meter-groups`, {
@@ -862,11 +862,7 @@ const SubMeters = () => {
       }
     }
 
-    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-    const tenantId = userData?.tenantId || userData?.organizationId;
-    const queryStr = tenantId ? `?tenantId=${tenantId}` : '';
-
-    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates${queryStr}`)
+    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
         const mapped = data.map(t => {
@@ -897,11 +893,7 @@ const SubMeters = () => {
     const socket = io(backendUrl, { path: '/socket.io', transports: ['websocket', 'polling'] });
 
     const fetchTemplates = () => {
-      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-      const tenantId = userData?.tenantId || userData?.organizationId;
-      const queryStr = tenantId ? `?tenantId=${tenantId}` : '';
-
-      fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates${queryStr}`)
+      fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
         .then(res => res.ok ? res.json() : [])
         .then(data => {
           const mapped = data.map(t => {

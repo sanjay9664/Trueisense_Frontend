@@ -102,7 +102,7 @@ const normalizeOverviewGroups = (groups, subMeterRows) => {
 
 const fetchPersistedGroups = async () => {
   const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-  const tenantId = userData?.tenantId || userData?.organizationId;
+  const tenantId = userData?.tenantId;
   const url = tenantId
     ? `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates/energy-meter-groups?tenantId=${tenantId}`
     : `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates/energy-meter-groups`;
@@ -171,10 +171,7 @@ const EnergyMeteringOverview = () => {
 
     const fetchTemplatesFromBackend = async () => {
       try {
-        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const tenantId = userData?.tenantId || userData?.organizationId;
-        const queryStr = tenantId ? `?tenantId=${tenantId}` : '';
-        const res = await fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates${queryStr}`);
+        const res = await fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`);
         if (!res.ok) return;
         const data = await res.json();
         const mapped = data.map(t => {
@@ -694,7 +691,7 @@ const EnergyMeteringOverview = () => {
 
   const saveGroupsToBackend = async (groupsToSave) => {
     const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-    const tenantId = userData?.tenantId || userData?.organizationId;
+    const tenantId = userData?.tenantId;
     const normalized = normalizeOverviewGroups(groupsToSave, subMeterRows);
     const response = await fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates/energy-meter-groups`, {
       method: 'POST',

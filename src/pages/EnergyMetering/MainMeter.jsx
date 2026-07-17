@@ -468,11 +468,7 @@ const MainMeter = () => {
       }
     }
 
-    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-    const tenantId = userData?.tenantId || userData?.organizationId;
-    const queryStr = tenantId ? `?tenantId=${tenantId}` : '';
-
-    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates${queryStr}`)
+    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
         const mapped = data.map(t => {
