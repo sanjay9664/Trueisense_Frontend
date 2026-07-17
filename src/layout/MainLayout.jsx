@@ -75,12 +75,30 @@ const MainLayout = ({ children }) => {
           localStorage.setItem('userData', JSON.stringify(userData));
         }
 
-        const tenantId = userData?.tenantId || userData?.organizationId;
-        const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
+        const url = '/api/templates';
 
         const response = await fetch(`${backendUrl}${url}`);
         if (response.ok) {
-          const data = await response.json();
+          const rawData = await response.json();
+          
+          const myOrgId = userData?.organizationId;
+          const userRole = localStorage.getItem('userRole') || 'USER';
+          const roleName = (userData.roleName || userRole || '').toLowerCase();
+          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+
+          let data = rawData;
+          if (!isSuperAdmin && myOrgId) {
+            data = rawData.filter(t => {
+              if (t.tenantId && Number(t.tenantId) === Number(myOrgId)) {
+                return true;
+              }
+              if (!t.tenantId && Number(myOrgId) === 12) {
+                return true;
+              }
+              return false;
+            });
+          }
+
           // Map backend data to frontend format to match what templates page saves
           const mappedData = data.map(t => ({
             id: t.id,
@@ -88,7 +106,8 @@ const MainLayout = ({ children }) => {
             category: t.category || 'Water Management',
             module: t.settings[0]?.eventKey || 'AG Tank',
             mapping: (t.defaultValues || t.settings[0]?.meta || {}),
-            timestamp: new Date(t.createdAt).toLocaleString()
+            timestamp: new Date(t.createdAt).toLocaleString(),
+            tenantId: t.tenantId
           }));
           
           // Cleanup corrupted mappings like Templates.jsx does

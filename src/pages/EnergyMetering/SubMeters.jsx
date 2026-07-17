@@ -863,14 +863,29 @@ const SubMeters = () => {
     }
 
     const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-    const tenantId = userData?.tenantId || userData?.organizationId;
-    const templatesUrl = tenantId 
-      ? `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates?tenantId=${tenantId}`
-      : `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`;
+    const templatesUrl = `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`;
 
     fetch(templatesUrl)
       .then(res => res.ok ? res.json() : [])
-      .then(data => {
+      .then(rawData => {
+        const myOrgId = userData?.organizationId;
+        const userRole = localStorage.getItem('userRole') || 'USER';
+        const roleName = (userData.roleName || userRole || '').toLowerCase();
+        const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+
+        let data = rawData;
+        if (!isSuperAdmin && myOrgId) {
+          data = rawData.filter(t => {
+            if (t.tenantId && Number(t.tenantId) === Number(myOrgId)) {
+              return true;
+            }
+            if (!t.tenantId && Number(myOrgId) === 12) {
+              return true;
+            }
+            return false;
+          });
+        }
+
         const mapped = data.map(t => {
           const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
           const defValues = hasDef ? t.defaultValues : null;
@@ -880,7 +895,8 @@ const SubMeters = () => {
             name: t.name,
             category: (defValues && defValues.category) || t.category || 'Water Management',
             module: (defValues && defValues.module) || t.settings?.[0]?.eventKey || 'AG Tank',
-            mapping: mappingSource
+            mapping: mappingSource,
+            tenantId: t.tenantId
           };
         });
         setTemplates(mapped);
@@ -897,14 +913,29 @@ const SubMeters = () => {
 
     const fetchTemplates = () => {
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-      const tenantId = userData?.tenantId || userData?.organizationId;
-      const templatesUrl = tenantId 
-        ? `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates?tenantId=${tenantId}`
-        : `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`;
+      const templatesUrl = `${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`;
 
       fetch(templatesUrl)
         .then(res => res.ok ? res.json() : [])
-        .then(data => {
+        .then(rawData => {
+          const myOrgId = userData?.organizationId;
+          const userRole = localStorage.getItem('userRole') || 'USER';
+          const roleName = (userData.roleName || userRole || '').toLowerCase();
+          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+
+          let data = rawData;
+          if (!isSuperAdmin && myOrgId) {
+            data = rawData.filter(t => {
+              if (t.tenantId && Number(t.tenantId) === Number(myOrgId)) {
+                return true;
+              }
+              if (!t.tenantId && Number(myOrgId) === 12) {
+                return true;
+              }
+              return false;
+            });
+          }
+
           const mapped = data.map(t => {
             const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
             const defValues = hasDef ? t.defaultValues : null;
@@ -914,7 +945,8 @@ const SubMeters = () => {
               name: t.name,
               category: (defValues && defValues.category) || t.category || 'Water Management',
               module: (defValues && defValues.module) || t.settings?.[0]?.eventKey || 'AG Tank',
-              mapping: mappingSource
+              mapping: mappingSource,
+              tenantId: t.tenantId
             };
           });
           setTemplates(mapped);

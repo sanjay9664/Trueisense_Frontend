@@ -527,11 +527,28 @@ const AQIOverview = () => {
         // Fallback to fetch if cache is empty
         if (!templatesData || templatesData.length === 0) {
           const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-          const tenantId = userData?.tenantId || userData?.organizationId;
-          const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
+          const url = '/api/templates';
           const response = await fetch(`${backendUrl}${url}`);
           if (response.ok) {
-            templatesData = await response.json();
+            const rawData = await response.json();
+            const myOrgId = userData?.organizationId;
+            const userRole = localStorage.getItem('userRole') || 'USER';
+            const roleName = (userData.roleName || userRole || '').toLowerCase();
+            const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+
+            let filtered = rawData;
+            if (!isSuperAdmin && myOrgId) {
+              filtered = rawData.filter(t => {
+                if (t.tenantId && Number(t.tenantId) === Number(myOrgId)) {
+                  return true;
+                }
+                if (!t.tenantId && Number(myOrgId) === 12) {
+                  return true;
+                }
+                return false;
+              });
+            }
+            templatesData = filtered;
           }
         }
 
