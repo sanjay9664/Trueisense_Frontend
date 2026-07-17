@@ -357,11 +357,39 @@ const EnvDashboard = () => {
         // Fallback to fetch if cache is empty
         if (!templatesData || templatesData.length === 0) {
           const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-          const tenantId = userData?.tenantId;
-          const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
-          const response = await fetch(`${backendUrl}${url}`);
+          const userRole = localStorage.getItem('userRole') || 'USER';
+          const response = await fetch(`${backendUrl}/api/templates`);
           if (response.ok) {
-            templatesData = await response.json();
+            const rawData = await response.json();
+            
+            // Filter templates by organization in the frontend
+            const roleName = (userData.roleName || userRole || '').toLowerCase();
+            const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+            
+            if (isSuperAdmin) {
+              templatesData = rawData;
+            } else {
+              const orgId = userData.organizationId;
+              templatesData = rawData.filter(t => {
+                if (t.tenantId !== undefined && t.tenantId !== null && Number(t.tenantId) === Number(orgId)) {
+                  return true;
+                }
+                const mapping = t.defaultValues || t.settings?.[0]?.meta || {};
+                const orgName = mapping.globalHierarchy?.organization || mapping.vrvConfig?.organization || (t.defaultValues?.mapping?.globalHierarchy?.organization);
+                if (!orgName) return false;
+                
+                const numId = Number(orgId);
+                const orgLower = orgName.toLowerCase();
+                if (numId === 12) {
+                  return orgLower === 'zomato' || orgLower === 'oragnization';
+                }
+                if (numId === 24) {
+                  return orgLower === 'hyperpure';
+                }
+                return false;
+              });
+            }
+            localStorage.setItem('scada_templates', JSON.stringify(templatesData));
           }
         }
 

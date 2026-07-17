@@ -68,23 +68,16 @@ const MainLayout = ({ children }) => {
       try {
         const userDataStr = localStorage.getItem('userData') || '{}';
         const userData = JSON.parse(userDataStr);
-        
-        // Auto-migrate organizationId to tenantId if missing
-        if (userData.organizationId && !userData.tenantId) {
-          userData.tenantId = userData.organizationId;
-          localStorage.setItem('userData', JSON.stringify(userData));
-        }
+        const userRole = localStorage.getItem('userRole') || 'USER';
 
-        const tenantId = userData?.tenantId || userData?.organizationId;
-        const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
-
-        const response = await fetch(`${backendUrl}${url}`);
+        const response = await fetch(`${backendUrl}/api/templates`);
         if (response.ok) {
           const data = await response.json();
           // Map backend data to frontend format to match what templates page saves
           const mappedData = data.map(t => ({
             id: t.id,
             name: t.name,
+            tenantId: t.tenantId,
             category: t.category || 'Water Management',
             module: t.settings[0]?.eventKey || 'AG Tank',
             mapping: (t.defaultValues || t.settings[0]?.meta || {}),
@@ -112,7 +105,35 @@ const MainLayout = ({ children }) => {
             mapping: cleanCorruptedMapping(t.mapping)
           }));
 
-          localStorage.setItem('scada_templates', JSON.stringify(finalData));
+          // Filter templates by organization in the frontend
+          const roleName = (userData.roleName || userRole || '').toLowerCase();
+          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+          
+          let filteredData = finalData;
+          if (!isSuperAdmin) {
+            const orgId = userData.organizationId;
+            filteredData = finalData.filter(t => {
+              // 1. If explicit tenantId matches
+              if (t.tenantId !== undefined && t.tenantId !== null && Number(t.tenantId) === Number(orgId)) {
+                return true;
+              }
+              // 2. Fallback check on mapping organization name
+              const orgName = t.mapping?.globalHierarchy?.organization || t.defaultValues?.mapping?.globalHierarchy?.organization;
+              if (!orgName) return false;
+              
+              const numId = Number(orgId);
+              const orgLower = orgName.toLowerCase();
+              if (numId === 12) {
+                return orgLower === 'zomato' || orgLower === 'oragnization';
+              }
+              if (numId === 24) {
+                return orgLower === 'hyperpure';
+              }
+              return false;
+            });
+          }
+
+          localStorage.setItem('scada_templates', JSON.stringify(filteredData));
           window.dispatchEvent(new Event('storage'));
         }
       } catch (error) {

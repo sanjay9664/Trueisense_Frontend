@@ -3452,10 +3452,9 @@ const ConfigTemplates = () => {
     const fetchTemplates = async () => {
       try {
         const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const tenantId = userData?.tenantId;
-        const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
+        const userRole = localStorage.getItem('userRole') || 'USER';
 
-        const response = await fetch(url);
+        const response = await fetch('/api/templates');
         if (response.ok) {
           const data = await response.json();
           // Map backend data to frontend format if necessary
@@ -3466,15 +3465,41 @@ const ConfigTemplates = () => {
             return {
               id: t.id,
               name: t.name,
+              tenantId: t.tenantId,
               category: (defValues && defValues.category) || t.category || 'Water Management',
               module: (defValues && defValues.module) || t.settings[0]?.eventKey || 'AG Tank',
               mapping: cleanCorruptedMapping(mappingSource),
               timestamp: new Date(t.createdAt).toLocaleString()
             };
           });
-          if (mappedData.length > 0) {
-            setSavedTemplates(mappedData);
+
+          // Filter templates by organization in the frontend
+          const roleName = (userData.roleName || userRole || '').toLowerCase();
+          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+          
+          let filteredData = mappedData;
+          if (!isSuperAdmin) {
+            const orgId = userData.organizationId;
+            filteredData = mappedData.filter(t => {
+              if (t.tenantId !== undefined && t.tenantId !== null && Number(t.tenantId) === Number(orgId)) {
+                return true;
+              }
+              const orgName = t.mapping?.globalHierarchy?.organization || t.defaultValues?.mapping?.globalHierarchy?.organization;
+              if (!orgName) return false;
+              
+              const numId = Number(orgId);
+              const orgLower = orgName.toLowerCase();
+              if (numId === 12) {
+                return orgLower === 'zomato' || orgLower === 'oragnization';
+              }
+              if (numId === 24) {
+                return orgLower === 'hyperpure';
+              }
+              return false;
+            });
           }
+
+          setSavedTemplates(filteredData);
         }
       } catch (error) {
         console.error('Error fetching templates:', error);

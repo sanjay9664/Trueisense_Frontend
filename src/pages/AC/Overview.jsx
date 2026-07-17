@@ -1007,12 +1007,9 @@ const ACOverview = () => {
       try {
         const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
         const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const tenantId = userData?.tenantId;
-        const url = tenantId 
-          ? `${backendUrl}/api/templates?tenantId=${tenantId}` 
-          : `${backendUrl}/api/templates`;
+        const userRole = localStorage.getItem('userRole') || 'USER';
 
-        const response = await fetch(url);
+        const response = await fetch(`${backendUrl}/api/templates`);
         if (response.ok) {
           const data = await response.json();
           const mapped = data.map(t => {
@@ -1022,13 +1019,41 @@ const ACOverview = () => {
             return {
               id: t.id,
               name: t.name,
+              tenantId: t.tenantId,
               category: (defValues && defValues.category) || t.category || 'Water Management',
               module: (defValues && defValues.module) || t.settings?.[0]?.eventKey || 'AG Tank',
               mapping: mappingSource
             };
           });
-          setTemplates(mapped);
-          localStorage.setItem('scada_templates', JSON.stringify(mapped));
+
+          // Filter templates by organization in the frontend
+          const roleName = (userData.roleName || userRole || '').toLowerCase();
+          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+          
+          let filteredData = mapped;
+          if (!isSuperAdmin) {
+            const orgId = userData.organizationId;
+            filteredData = mapped.filter(t => {
+              if (t.tenantId !== undefined && t.tenantId !== null && Number(t.tenantId) === Number(orgId)) {
+                return true;
+              }
+              const orgName = t.mapping?.globalHierarchy?.organization || t.mapping?.acConfig?.organization || (t.defaultValues?.mapping?.globalHierarchy?.organization);
+              if (!orgName) return false;
+              
+              const numId = Number(orgId);
+              const orgLower = orgName.toLowerCase();
+              if (numId === 12) {
+                return orgLower === 'zomato' || orgLower === 'oragnization';
+              }
+              if (numId === 24) {
+                return orgLower === 'hyperpure';
+              }
+              return false;
+            });
+          }
+
+          setTemplates(filteredData);
+          localStorage.setItem('scada_templates', JSON.stringify(filteredData));
         }
       } catch (error) {
         console.error('Error fetching templates in AC Overview:', error);
