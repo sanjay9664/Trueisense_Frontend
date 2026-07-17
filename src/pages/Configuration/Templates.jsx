@@ -3452,29 +3452,12 @@ const ConfigTemplates = () => {
     const fetchTemplates = async () => {
       try {
         const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const url = '/api/templates';
+        const tenantId = userData?.tenantId;
+        const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
 
         const response = await fetch(url);
         if (response.ok) {
-          const rawData = await response.json();
-          const myOrgId = userData?.organizationId;
-          const userRole = localStorage.getItem('userRole') || 'USER';
-          const roleName = (userData.roleName || userRole || '').toLowerCase();
-          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-
-          let data = rawData;
-          if (!isSuperAdmin && myOrgId) {
-            data = rawData.filter(t => {
-              if (t.tenantId && Number(t.tenantId) === Number(myOrgId)) {
-                return true;
-              }
-              if (!t.tenantId && Number(myOrgId) === 12) {
-                return true;
-              }
-              return false;
-            });
-          }
-
+          const data = await response.json();
           // Map backend data to frontend format if necessary
           const mappedData = data.map(t => {
             const hasDefaultValues = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
@@ -3486,8 +3469,7 @@ const ConfigTemplates = () => {
               category: (defValues && defValues.category) || t.category || 'Water Management',
               module: (defValues && defValues.module) || t.settings[0]?.eventKey || 'AG Tank',
               mapping: cleanCorruptedMapping(mappingSource),
-              timestamp: new Date(t.createdAt).toLocaleString(),
-              tenantId: t.tenantId
+              timestamp: new Date(t.createdAt).toLocaleString()
             };
           });
           if (mappedData.length > 0) {
@@ -4037,7 +4019,8 @@ const ConfigTemplates = () => {
         await syncRulesToSochiot(ugRules);
       }
 
-      const tenantId = userData?.tenantId || userData?.organizationId;
+      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+      const tenantId = userData?.tenantId;
 
       const response = await fetch('/api/templates/save', {
         method: 'POST',

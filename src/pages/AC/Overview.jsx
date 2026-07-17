@@ -1001,34 +1001,20 @@ const ACOverview = () => {
     )
   );
 
+  // Load templates on mount & API fetch sync
   useEffect(() => {
     const fetchTemplates = async () => {
       try {
         const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
         const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const url = `${backendUrl}/api/templates`;
+        const tenantId = userData?.tenantId;
+        const url = tenantId 
+          ? `${backendUrl}/api/templates?tenantId=${tenantId}` 
+          : `${backendUrl}/api/templates`;
 
         const response = await fetch(url);
         if (response.ok) {
-          const rawData = await response.json();
-          const myOrgId = userData?.organizationId;
-          const userRole = localStorage.getItem('userRole') || 'USER';
-          const roleName = (userData.roleName || userRole || '').toLowerCase();
-          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-
-          let data = rawData;
-          if (!isSuperAdmin && myOrgId) {
-            data = rawData.filter(t => {
-              if (t.tenantId && Number(t.tenantId) === Number(myOrgId)) {
-                return true;
-              }
-              if (!t.tenantId && Number(myOrgId) === 12) {
-                return true;
-              }
-              return false;
-            });
-          }
-
+          const data = await response.json();
           const mapped = data.map(t => {
             const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
             const defValues = hasDef ? t.defaultValues : null;
