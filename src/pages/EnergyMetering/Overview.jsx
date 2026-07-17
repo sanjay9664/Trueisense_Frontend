@@ -172,7 +172,9 @@ const EnergyMeteringOverview = () => {
     const fetchTemplatesFromBackend = async () => {
       try {
         const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const res = await fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`);
+        const tenantId = userData?.tenantId || userData?.organizationId;
+        const queryStr = tenantId ? `?tenantId=${tenantId}` : '';
+        const res = await fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates${queryStr}`);
         if (!res.ok) return;
         const data = await res.json();
         const mapped = data.map(t => {
@@ -182,36 +184,14 @@ const EnergyMeteringOverview = () => {
           return {
             id: t.id,
             name: t.name,
-            tenantId: t.tenantId,
             category: (defValues && defValues.category) || t.category || 'Water Management',
             module: (defValues && defValues.module) || t.settings?.[0]?.eventKey || 'AG Tank',
             mapping: mappingSource
           };
         });
-
-        const userRole = localStorage.getItem('userRole') || 'USER';
-        const roleName = (userData.roleName || userRole || '').toLowerCase();
-        const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-
-        let filtered = mapped;
-        if (!isSuperAdmin) {
-          filtered = mapped.filter(t => {
-            if (t.tenantId !== null && t.tenantId !== undefined) {
-              return Number(t.tenantId) === Number(userData.organizationId);
-            }
-            const templateOrg = (
-              t.mapping?.globalHierarchy?.organization || 
-              t.defaultValues?.globalHierarchy?.organization || 
-              ''
-            ).toLowerCase().trim();
-            const userOrg = (userData.organizationName || '').toLowerCase().trim();
-            return templateOrg === userOrg;
-          });
-        }
-
         if (active) {
-          setTemplates(filtered);
-          localStorage.setItem('scada_templates', JSON.stringify(filtered));
+          setTemplates(mapped);
+          localStorage.setItem('scada_templates', JSON.stringify(mapped));
         }
       } catch (err) {
         console.error('Error fetching templates in Overview:', err);

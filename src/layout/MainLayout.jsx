@@ -68,94 +68,28 @@ const MainLayout = ({ children }) => {
       try {
         const userDataStr = localStorage.getItem('userData') || '{}';
         const userData = JSON.parse(userDataStr);
-        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
         
-        const userRole = localStorage.getItem('userRole') || 'USER';
-        const roleName = (userData.roleName || userRole || '').toLowerCase();
-        const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-
-        // Auto-migrate organizationId and siteId if missing for non-super admins
-        if (!isSuperAdmin && (!userData.organizationId || !userData.siteId) && token) {
-          try {
-            const userEmail = userData.email;
-            const searchParam = userEmail ? `?search=${encodeURIComponent(userEmail)}&pageSize=5` : `?pageSize=100`;
-            const userListRes = await fetch(`${import.meta.env.VITE_BACKEND_BMS_URL}/users${searchParam}`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (userListRes.ok) {
-              const listJson = await userListRes.json();
-              const usersList = Array.isArray(listJson)
-                ? listJson
-                : (Array.isArray(listJson.data)
-                    ? listJson.data
-                    : (Array.isArray(listJson.data?.list)
-                        ? listJson.data.list
-                        : []));
-              const myEmail = (userEmail || '').toLowerCase();
-              const matched = usersList.find(u => 
-                (u.email || '').toLowerCase() === myEmail
-              );
-              if (matched) {
-                if (matched.organizationId) {
-                  userData.organizationId = matched.organizationId;
-                  userData.tenantId = matched.organizationId;
-                }
-                if (matched.siteId) {
-                  userData.siteId = matched.siteId;
-                }
-              }
-            }
-          } catch (err) {
-            console.warn('Failed to auto-migrate missing user details in MainLayout:', err);
-          }
+        // Auto-migrate organizationId to tenantId if missing
+        if (userData.organizationId && !userData.tenantId) {
+          userData.tenantId = userData.organizationId;
+          localStorage.setItem('userData', JSON.stringify(userData));
         }
 
-        // Auto-fetch organizationName if missing
-        if (userData.organizationId && !userData.organizationName && token) {
-          try {
-            const orgRes = await fetch('https://app.sochiot.com/api/location-engine/organization/getAll', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({})
-            });
-            if (orgRes.ok) {
-              const orgsJson = await orgRes.json();
-              const orgList = orgsJson.list || orgsJson.data || [];
-              const matchedOrg = orgList.find(o => Number(o.id) === Number(userData.organizationId));
-              if (matchedOrg) {
-                userData.organizationName = matchedOrg.name;
-              }
-            }
-          } catch (orgErr) {
-            console.error('Failed to sync organizationName on load:', orgErr);
-          }
-        }
+        const tenantId = userData?.tenantId || userData?.organizationId;
+        const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
 
-        // Always save any migrated changes to localStorage
-        localStorage.setItem('userData', JSON.stringify(userData));
-
-        // Fetch all templates globally from backend
-        const response = await fetch(`${backendUrl}/api/templates`);
+        const response = await fetch(`${backendUrl}${url}`);
         if (response.ok) {
           const data = await response.json();
           // Map backend data to frontend format to match what templates page saves
-          const mappedData = data.map(t => {
-            const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
-            const defValues = hasDef ? t.defaultValues : null;
-            const mappingSource = defValues || t.settings[0]?.meta || {};
-            return {
-              id: t.id,
-              name: t.name,
-              tenantId: t.tenantId,
-              category: (defValues && defValues.category) || t.category || 'Water Management',
-              module: (defValues && defValues.module) || t.settings[0]?.eventKey || 'AG Tank',
-              mapping: mappingSource,
-              timestamp: new Date(t.createdAt).toLocaleString()
-            };
-          });
+          const mappedData = data.map(t => ({
+            id: t.id,
+            name: t.name,
+            category: t.category || 'Water Management',
+            module: t.settings[0]?.eventKey || 'AG Tank',
+            mapping: (t.defaultValues || t.settings[0]?.meta || {}),
+            timestamp: new Date(t.createdAt).toLocaleString()
+          }));
           
           // Cleanup corrupted mappings like Templates.jsx does
           const cleanCorruptedMapping = (obj) => {
@@ -178,31 +112,7 @@ const MainLayout = ({ children }) => {
             mapping: cleanCorruptedMapping(t.mapping)
           }));
 
-          const userRole = localStorage.getItem('userRole') || 'USER';
-          const roleName = (userData.roleName || userRole || '').toLowerCase();
-          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-
-          let filteredData = finalData;
-          if (!isSuperAdmin) {
-            filteredData = finalData.filter(t => {
-              if (t.tenantId !== null && t.tenantId !== undefined) {
-                return Number(t.tenantId) === Number(userData.organizationId);
-              }
-              const templateOrg = (
-                t.mapping?.globalHierarchy?.organization || 
-                t.defaultValues?.globalHierarchy?.organization || 
-                ''
-              ).toLowerCase().trim();
-              const userOrg = (userData.organizationName || '').toLowerCase().trim();
-              return templateOrg === userOrg;
-            });
-          }
-
-          console.log('[SCADA DIAGNOSTIC] User Role:', userRole, 'Role Name:', roleName, 'Is SuperAdmin:', isSuperAdmin);
-          console.log('[SCADA DIAGNOSTIC] User OrgName:', userData.organizationName, 'User OrgId:', userData.organizationId);
-          console.log('[SCADA DIAGNOSTIC] Total templates fetched:', finalData.length, 'Filtered count:', filteredData.length);
-
-          localStorage.setItem('scada_templates', JSON.stringify(filteredData));
+          localStorage.setItem('scada_templates', JSON.stringify(finalData));
           window.dispatchEvent(new Event('storage'));
         }
       } catch (error) {
