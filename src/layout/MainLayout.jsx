@@ -193,6 +193,10 @@ const MainLayout = ({ children }) => {
             });
           }
 
+          console.log('[SCADA DIAGNOSTIC] User Role:', userRole, 'Role Name:', roleName, 'Is SuperAdmin:', isSuperAdmin);
+          console.log('[SCADA DIAGNOSTIC] User OrgName:', userData.organizationName, 'User OrgId:', userData.organizationId);
+          console.log('[SCADA DIAGNOSTIC] Total templates fetched:', finalData.length, 'Filtered count:', filteredData.length);
+
           localStorage.setItem('scada_templates', JSON.stringify(filteredData));
           window.dispatchEvent(new Event('storage'));
         }
