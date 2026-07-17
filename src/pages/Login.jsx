@@ -114,7 +114,9 @@ const Login = ({ onLoginSuccess }) => {
           roleName: (meData.roles && meData.roles.length > 0 && meData.roles[0] !== 'ADMIN' && meData.roles[0] !== 'SUPER_ADMIN')
             ? meData.roles[0]
             : (meData.role?.name || meData.roleName || (role === 'SUPER_ADMIN' ? 'Super Admin' : role === 'ADMIN' ? 'Administrator' : role)),
-          organizationId: meData.organizationId || null
+          organizationId: meData.organizationId || null,
+          tenantId: meData.organizationId || null,
+          siteId: meData.siteId || null
         };
 
         localStorage.setItem('userRole', role);

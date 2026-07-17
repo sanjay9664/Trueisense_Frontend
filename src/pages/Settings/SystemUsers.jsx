@@ -595,7 +595,17 @@ const AdministratorUserTab = () => {
       const res = await fetchWithAuth(`${import.meta.env.VITE_BACKEND_BMS_URL}/sites/`);
       if (res.ok) {
         const j = await res.json();
-        setSites(j.data || []);
+        const rawSites = j.data || [];
+        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        const userRole = localStorage.getItem('userRole') || 'USER';
+        const roleName = (userData.roleName || userRole || '').toLowerCase();
+        const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+        
+        let filteredSites = rawSites;
+        if (!isSuperAdmin && userData.organizationId) {
+          filteredSites = rawSites.filter(s => Number(s.organizationId) === Number(userData.organizationId));
+        }
+        setSites(filteredSites);
       }
     } catch (e) {
       console.error('Sites fetch failed:', e);
@@ -940,13 +950,16 @@ const AdministratorUserTab = () => {
           }
 
           localStorage.setItem('userRole', newRole);
+          const matchedSite = sites.find(s => Number(s.organizationId) === Number(form.organizationId));
           const updatedUserObj = {
             ...loggedInUser,
             name: form.name.trim(),
             email: form.email.trim(),
             role: newRole,
             roleName: newRoleName,
-            organizationId: form.organizationId
+            organizationId: form.organizationId,
+            tenantId: form.organizationId,
+            siteId: form.siteId || (matchedSite ? matchedSite.id : null)
           };
           localStorage.setItem('userData', JSON.stringify(updatedUserObj));
 

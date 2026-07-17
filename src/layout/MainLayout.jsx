@@ -66,8 +66,16 @@ const MainLayout = ({ children }) => {
     const backendUrl = window.process?.env?.REACT_APP_BACKEND_URL || '';
     const fetchTemplates = async () => {
       try {
-        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const tenantId = userData?.tenantId;
+        const userDataStr = localStorage.getItem('userData') || '{}';
+        const userData = JSON.parse(userDataStr);
+        
+        // Auto-migrate organizationId to tenantId if missing
+        if (userData.organizationId && !userData.tenantId) {
+          userData.tenantId = userData.organizationId;
+          localStorage.setItem('userData', JSON.stringify(userData));
+        }
+
+        const tenantId = userData?.tenantId || userData?.organizationId;
         const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
 
         const response = await fetch(`${backendUrl}${url}`);
@@ -119,7 +127,7 @@ const MainLayout = ({ children }) => {
 
     socket.on('templates_updated', (payload) => {
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-      const tenantId = userData?.tenantId;
+      const tenantId = userData?.tenantId || userData?.organizationId;
 
       // If the payload matches current tenantId or is global, sync templates
       if (!payload || payload.tenantId === undefined || Number(payload.tenantId) === Number(tenantId)) {

@@ -216,7 +216,20 @@ const UserManagement = () => {
   const fetchSites = async () => {
     try {
       const res  = await fetchWithAuth(`${import.meta.env.VITE_BACKEND_BMS_URL}/sites/`);
-      if (res.ok) { const j = await res.json(); setSites(j.data || []); }
+      if (res.ok) {
+        const j = await res.json();
+        const rawSites = j.data || [];
+        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        const userRole = localStorage.getItem('userRole') || 'USER';
+        const roleName = (userData.roleName || userRole || '').toLowerCase();
+        const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+        
+        let filteredSites = rawSites;
+        if (!isSuperAdmin && userData.organizationId) {
+          filteredSites = rawSites.filter(s => Number(s.organizationId) === Number(userData.organizationId));
+        }
+        setSites(filteredSites);
+      }
     } catch (e) { console.error('Sites fetch failed:', e); }
   };
 
@@ -408,12 +421,16 @@ const UserManagement = () => {
         }
 
         localStorage.setItem('userRole', newRole);
+        const matchedSite = sites.find(s => Number(s.organizationId) === Number(formData.organizationId));
         const updatedUserObj = {
           ...loggedInUser,
           name: formData.name.trim(),
           email: formData.email.trim(),
           role: newRole,
-          roleName: newRoleName
+          roleName: newRoleName,
+          organizationId: formData.organizationId || loggedInUser.organizationId,
+          tenantId: formData.organizationId || loggedInUser.organizationId,
+          siteId: formData.siteId || (matchedSite ? matchedSite.id : null) || loggedInUser.siteId
         };
         localStorage.setItem('userData', JSON.stringify(updatedUserObj));
 

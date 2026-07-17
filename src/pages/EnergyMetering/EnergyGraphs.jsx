@@ -864,15 +864,31 @@ const EnergyGraphs = () => {
       const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
       if (!token) return;
 
-      // 1. Fetch sites in background
       fetch(`${API_BASE_URL}/sites/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
         .then(res => res.ok ? res.json() : null)
         .then(json => {
           if (json?.data) {
-            setSites(json.data);
-            localStorage.setItem('scada_sites', JSON.stringify(json.data));
+            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            const userRole = localStorage.getItem('userRole') || 'USER';
+            const roleName = (userData.roleName || userRole || '').toLowerCase();
+            const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+            
+            let filteredSites = json.data;
+            if (!isSuperAdmin && userData.organizationId) {
+              filteredSites = json.data.filter(s => Number(s.organizationId) === Number(userData.organizationId));
+            }
+            setSites(filteredSites);
+            localStorage.setItem('scada_sites', JSON.stringify(filteredSites));
+
+            if (filteredSites.length > 0) {
+              const hasSelected = filteredSites.some(s => String(s.id) === String(selectedSiteId));
+              if (!hasSelected) {
+                setSelectedSiteId(String(filteredSites[0].id));
+                localStorage.setItem('selectedSiteId', String(filteredSites[0].id));
+              }
+            }
           }
         })
         .catch(err => console.error('Error background fetching sites:', err));
