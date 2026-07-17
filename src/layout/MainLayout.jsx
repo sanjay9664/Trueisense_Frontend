@@ -118,11 +118,12 @@ const MainLayout = ({ children }) => {
               headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
-              }
+              },
+              body: JSON.stringify({})
             });
             if (orgRes.ok) {
               const orgsJson = await orgRes.json();
-              const orgList = orgsJson.data || [];
+              const orgList = orgsJson.list || orgsJson.data || [];
               const matchedOrg = orgList.find(o => Number(o.id) === Number(userData.organizationId));
               if (matchedOrg) {
                 userData.organizationName = matchedOrg.name;
