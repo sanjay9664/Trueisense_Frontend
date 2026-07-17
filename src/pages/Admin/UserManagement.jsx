@@ -168,11 +168,12 @@ const UserManagement = () => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success && json.data) {
+        let list = [];
         if (forceSochiot) {
-          setUsers(json.data.list || []);
+          list = json.data.list || [];
           setPagination({ page: json.data.page, pageSize: json.data.pageSize, total: json.data.total, totalPages: json.data.totalPages });
         } else {
-          setUsers(json.data || []);
+          list = json.data || [];
           const meta = json.meta || {};
           setPagination({
             page: meta.page || 1,
@@ -181,6 +182,19 @@ const UserManagement = () => {
             totalPages: meta.totalPages || 1
           });
         }
+
+        const loggedInUser = JSON.parse(localStorage.getItem('userData') || '{}');
+        const userRole = localStorage.getItem('userRole') || 'USER';
+        const roleName = (loggedInUser.roleName || userRole || '').toLowerCase();
+        const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+
+        if (!isSuperAdmin && loggedInUser.organizationId) {
+          list = list.filter(u => {
+            const uOrgId = u.organizationId || u.organization?.id;
+            return String(uOrgId) === String(loggedInUser.organizationId);
+          });
+        }
+        setUsers(list);
       } else setUsers([]);
     } catch (e) {
       console.error(e);

@@ -543,19 +543,39 @@ const AdministratorUserTab = () => {
         const json = await res.json();
         if (json.success && json.data) {
           const usersList = Array.isArray(json.data) ? json.data : (json.data.list || []);
-          const filtered = usersList.filter(u => u.userType === 'SYSTEM' || u.role?.roleType === 'SYSTEM');
-          setUsers(filtered);
+          const filtered = usersList.filter(u => 
+            u.userType === 'SYSTEM' || u.userType === 'ORGANIZATION' || 
+            u.role?.roleType === 'SYSTEM' || u.role?.roleType === 'ORGANIZATION'
+          );
 
           const loggedInUser = JSON.parse(localStorage.getItem('userData') || '{}');
           const myEmail = loggedInUser.email || '';
+          let myOrgId = loggedInUser.organizationId;
+
           if (myEmail) {
             const me = filtered.find(u => u.email === myEmail);
-            if (me && me.organizationId && !loggedInUser.organizationId) {
-              loggedInUser.organizationId = me.organizationId;
-              localStorage.setItem('userData', JSON.stringify(loggedInUser));
-              initOrgDetails(me.organizationId);
+            if (me && me.organizationId) {
+              myOrgId = me.organizationId;
+              if (!loggedInUser.organizationId) {
+                loggedInUser.organizationId = me.organizationId;
+                localStorage.setItem('userData', JSON.stringify(loggedInUser));
+                initOrgDetails(me.organizationId);
+              }
             }
           }
+
+          const userRole = localStorage.getItem('userRole') || 'USER';
+          const roleName = (loggedInUser.roleName || userRole || '').toLowerCase();
+          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+
+          let finalFiltered = filtered;
+          if (!isSuperAdmin && myOrgId) {
+            finalFiltered = filtered.filter(u => {
+              const uOrgId = u.organizationId || u.organization?.id;
+              return String(uOrgId) === String(myOrgId);
+            });
+          }
+          setUsers(finalFiltered);
         } else {
           setUsers([]);
         }
@@ -743,10 +763,12 @@ const AdministratorUserTab = () => {
     const selectedRoleId = e.target.value;
     const selectedRole = roles.find(r => String(r.id) === String(selectedRoleId));
     const resolvedKey = selectedRole ? getStandardRoleKey(selectedRole.name) : '';
+    const resolvedUserType = selectedRole?.roleType || (resolvedKey === 'org_admin' ? 'ORGANIZATION' : 'SYSTEM');
     setForm(prev => ({
       ...prev,
       roleId: selectedRoleId,
-      roleKey: resolvedKey
+      roleKey: resolvedKey,
+      userType: resolvedUserType
     }));
 
     if (CONFIGURABLE_ROLES.includes(resolvedKey)) {
@@ -853,7 +875,7 @@ const AdministratorUserTab = () => {
       roleId: Number(finalRoleId),
       enabled: form.enabled,
       siteId: siteIdParam,
-      user_type: 'SYSTEM',
+      user_type: form.userType || 'SYSTEM',
       zoneLocations: selectedLocations,
       featurePermissions: finalFeaturePermissions
     };
@@ -1358,10 +1380,11 @@ const AdministratorUserTab = () => {
         }
         
         const matched = findBestMatchingRole(standardRole, freshRoles);
+        const resolvedUserType = matched?.roleType || (roleKey === 'org_admin' ? 'ORGANIZATION' : 'SYSTEM');
         setForm({
           id: '', name: '', email: '',
           organizationId: fallbackOrgId,
-          userType: 'SYSTEM',
+          userType: resolvedUserType,
           roleId: matched ? matched.id : '',
           roleKey: roleKey,
           enabled: true
@@ -1369,10 +1392,11 @@ const AdministratorUserTab = () => {
       } catch (err) {
         console.error('Failed to fetch org/roles:', err);
         const matched = findBestMatchingRole(standardRole, roles);
+        const resolvedUserType = matched?.roleType || (roleKey === 'org_admin' ? 'ORGANIZATION' : 'SYSTEM');
         setForm({
           id: '', name: '', email: '',
           organizationId: fallbackOrgId,
-          userType: 'SYSTEM',
+          userType: resolvedUserType,
           roleId: matched ? matched.id : '',
           roleKey: roleKey,
           enabled: true
