@@ -288,7 +288,11 @@ const AlarmConfig = () => {
 
   // Fetch templates on mount
   useEffect(() => {
-    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const tenantId = userData?.tenantId || userData?.organizationId;
+    const queryStr = tenantId ? `?tenantId=${tenantId}` : '';
+
+    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates${queryStr}`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
         const mapped = data.map(t => {
