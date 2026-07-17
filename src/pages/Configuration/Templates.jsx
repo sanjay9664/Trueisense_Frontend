@@ -3492,7 +3492,7 @@ const ConfigTemplates = () => {
               if (numId === 12) {
                 return orgLower === 'zomato' || orgLower === 'oragnization';
               }
-              if (numId === 24) {
+              if (numId === 24 || numId === 16) {
                 return orgLower === 'hyperpure';
               }
               return false;
