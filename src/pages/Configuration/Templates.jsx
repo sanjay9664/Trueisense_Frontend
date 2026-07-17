@@ -4046,6 +4046,7 @@ const ConfigTemplates = () => {
 
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       const tenantId = userData?.tenantId;
+      const dbTenantId = (Number(tenantId) === 1 || Number(tenantId) === 4) ? Number(tenantId) : null;
 
       const response = await fetch('/api/templates/save', {
         method: 'POST',
@@ -4058,7 +4059,7 @@ const ConfigTemplates = () => {
           category: selectedCategory,
           module: selectedModule,
           mapping: templateData.mapping,
-          tenantId: tenantId
+          tenantId: dbTenantId
         }),
       });
 
@@ -4088,7 +4089,7 @@ const ConfigTemplates = () => {
         setSavedTemplates([...savedTemplates, { id: Date.now(), ...templateData, name: uniqueName.toUpperCase() }]);
       }
 
-      setToastMessage({ type: 'success', text: `${selectedModule} Configuration Saved Locally.` });
+      setToastMessage({ type: 'success', text: `${selectedModule} Configuration Saved Locally (Offline).` });
       setTimeout(() => setToastMessage(null), 3000);
     } finally {
       setIsSaving(false);
