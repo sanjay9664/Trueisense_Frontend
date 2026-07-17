@@ -68,23 +68,48 @@ const MainLayout = ({ children }) => {
       try {
         const userDataStr = localStorage.getItem('userData') || '{}';
         const userData = JSON.parse(userDataStr);
+        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
         
         // Auto-migrate organizationId to tenantId if missing
         if (userData.organizationId && !userData.tenantId) {
           userData.tenantId = userData.organizationId;
-          localStorage.setItem('userData', JSON.stringify(userData));
         }
 
-        const tenantId = userData?.tenantId || userData?.organizationId;
-        const url = tenantId ? `/api/templates?tenantId=${tenantId}` : '/api/templates';
+        // Auto-fetch organizationName if missing
+        if (userData.organizationId && !userData.organizationName && token) {
+          try {
+            const orgRes = await fetch('https://app.sochiot.com/api/location-engine/organization/getAll', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            if (orgRes.ok) {
+              const orgsJson = await orgRes.json();
+              const orgList = orgsJson.data || [];
+              const matchedOrg = orgList.find(o => Number(o.id) === Number(userData.organizationId));
+              if (matchedOrg) {
+                userData.organizationName = matchedOrg.name;
+              }
+            }
+          } catch (orgErr) {
+            console.error('Failed to sync organizationName on load:', orgErr);
+          }
+        }
 
-        const response = await fetch(`${backendUrl}${url}`);
+        // Always save any migrated changes to localStorage
+        localStorage.setItem('userData', JSON.stringify(userData));
+
+        // Fetch all templates globally from backend
+        const response = await fetch(`${backendUrl}/api/templates`);
         if (response.ok) {
           const data = await response.json();
           // Map backend data to frontend format to match what templates page saves
           const mappedData = data.map(t => ({
             id: t.id,
             name: t.name,
+            tenantId: t.tenantId,
             category: t.category || 'Water Management',
             module: t.settings[0]?.eventKey || 'AG Tank',
             mapping: (t.defaultValues || t.settings[0]?.meta || {}),
@@ -112,7 +137,27 @@ const MainLayout = ({ children }) => {
             mapping: cleanCorruptedMapping(t.mapping)
           }));
 
-          localStorage.setItem('scada_templates', JSON.stringify(finalData));
+          const userRole = localStorage.getItem('userRole') || 'USER';
+          const roleName = (userData.roleName || userRole || '').toLowerCase();
+          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+
+          let filteredData = finalData;
+          if (!isSuperAdmin) {
+            filteredData = finalData.filter(t => {
+              if (t.tenantId !== null && t.tenantId !== undefined) {
+                return Number(t.tenantId) === Number(userData.organizationId);
+              }
+              const templateOrg = (
+                t.mapping?.globalHierarchy?.organization || 
+                t.defaultValues?.globalHierarchy?.organization || 
+                ''
+              ).toLowerCase().trim();
+              const userOrg = (userData.organizationName || '').toLowerCase().trim();
+              return templateOrg === userOrg;
+            });
+          }
+
+          localStorage.setItem('scada_templates', JSON.stringify(filteredData));
           window.dispatchEvent(new Event('storage'));
         }
       } catch (error) {

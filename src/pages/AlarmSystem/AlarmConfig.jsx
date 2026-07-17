@@ -289,10 +289,8 @@ const AlarmConfig = () => {
   // Fetch templates on mount
   useEffect(() => {
     const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-    const tenantId = userData?.tenantId || userData?.organizationId;
-    const queryStr = tenantId ? `?tenantId=${tenantId}` : '';
 
-    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates${queryStr}`)
+    fetch(`${window.process?.env?.REACT_APP_BACKEND_URL || ''}/api/templates`)
       .then(res => res.ok ? res.json() : [])
       .then(data => {
         const mapped = data.map(t => {
@@ -302,13 +300,35 @@ const AlarmConfig = () => {
           return {
             id: t.id,
             name: t.name,
+            tenantId: t.tenantId,
             category: (defValues && defValues.category) || t.category || 'Water Management',
             module: (defValues && defValues.module) || t.settings?.[0]?.eventKey || 'AG Tank',
             mapping: mappingSource
           };
         });
-        setTemplates(mapped);
-        localStorage.setItem('scada_templates', JSON.stringify(mapped));
+
+        const userRole = localStorage.getItem('userRole') || 'USER';
+        const roleName = (userData.roleName || userRole || '').toLowerCase();
+        const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+
+        let filtered = mapped;
+        if (!isSuperAdmin) {
+          filtered = mapped.filter(t => {
+            if (t.tenantId !== null && t.tenantId !== undefined) {
+              return Number(t.tenantId) === Number(userData.organizationId);
+            }
+            const templateOrg = (
+              t.mapping?.globalHierarchy?.organization || 
+              t.defaultValues?.globalHierarchy?.organization || 
+              ''
+            ).toLowerCase().trim();
+            const userOrg = (userData.organizationName || '').toLowerCase().trim();
+            return templateOrg === userOrg;
+          });
+        }
+
+        setTemplates(filtered);
+        localStorage.setItem('scada_templates', JSON.stringify(filtered));
       })
       .catch(err => console.error('Error fetching templates in AlarmConfig:', err));
   }, []);
