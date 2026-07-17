@@ -70,9 +70,44 @@ const MainLayout = ({ children }) => {
         const userData = JSON.parse(userDataStr);
         const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
         
-        // Auto-migrate organizationId to tenantId if missing
-        if (userData.organizationId && !userData.tenantId) {
-          userData.tenantId = userData.organizationId;
+        const userRole = localStorage.getItem('userRole') || 'USER';
+        const roleName = (userData.roleName || userRole || '').toLowerCase();
+        const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+
+        // Auto-migrate organizationId and siteId if missing for non-super admins
+        if (!isSuperAdmin && (!userData.organizationId || !userData.siteId) && token) {
+          try {
+            const userEmail = userData.email;
+            const searchParam = userEmail ? `?search=${encodeURIComponent(userEmail)}&pageSize=5` : `?pageSize=100`;
+            const userListRes = await fetch(`${import.meta.env.VITE_BACKEND_BMS_URL}/users${searchParam}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (userListRes.ok) {
+              const listJson = await userListRes.json();
+              const usersList = Array.isArray(listJson)
+                ? listJson
+                : (Array.isArray(listJson.data)
+                    ? listJson.data
+                    : (Array.isArray(listJson.data?.list)
+                        ? listJson.data.list
+                        : []));
+              const myEmail = (userEmail || '').toLowerCase();
+              const matched = usersList.find(u => 
+                (u.email || '').toLowerCase() === myEmail
+              );
+              if (matched) {
+                if (matched.organizationId) {
+                  userData.organizationId = matched.organizationId;
+                  userData.tenantId = matched.organizationId;
+                }
+                if (matched.siteId) {
+                  userData.siteId = matched.siteId;
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('Failed to auto-migrate missing user details in MainLayout:', err);
+          }
         }
 
         // Auto-fetch organizationName if missing

@@ -106,28 +106,12 @@ const Login = ({ onLoginSuccess }) => {
           role = (typeof meData.role === 'object' ? meData.role?.name : meData.role) || 'USER';
         }
 
-        const userObj = {
-          id: meData.id || meData._id || 'temp-id',
-          name: meData.name || meData.username || 'Super Admin',
-          email: meData.email || credentials.username,
-          role: role,
-          roleName: (meData.roles && meData.roles.length > 0 && meData.roles[0] !== 'ADMIN' && meData.roles[0] !== 'SUPER_ADMIN')
-            ? meData.roles[0]
-            : (meData.role?.name || meData.roleName || (role === 'SUPER_ADMIN' ? 'Super Admin' : role === 'ADMIN' ? 'Administrator' : role)),
-          organizationId: meData.organizationId || null,
-          tenantId: meData.organizationId || null,
-          siteId: meData.siteId || null
-        };
-
-        localStorage.setItem('userRole', role);
-        localStorage.setItem('userData', JSON.stringify(userObj));
-        localStorage.setItem('isAuthenticated', 'true');
-
+        // Resolve matched user details from local backend for role-specific site / org mappings
+        let resolvedOrgId = meData.organizationId || null;
+        let resolvedSiteId = meData.siteId || null;
         let localFp = meData.featurePermissions || {};
 
-        // If featurePermissions is empty, try fetching via user list endpoint
-        // This covers Global Scope users where the backend siteId is null
-        if (Object.keys(localFp).length === 0 && role !== 'SUPER_ADMIN') {
+        if (role !== 'SUPER_ADMIN') {
           const userEmail = meData.email || credentials.username;
           const userId = meData.id || meData._id;
           if (userEmail || userId) {
@@ -152,15 +136,61 @@ const Login = ({ onLoginSuccess }) => {
                   String(u.id) === myId || 
                   (u.email || '').toLowerCase() === myEmail
                 );
-                if (matched?.featurePermissions && Object.keys(matched.featurePermissions).length > 0) {
-                  localFp = matched.featurePermissions;
+                if (matched) {
+                  if (matched.organizationId) resolvedOrgId = matched.organizationId;
+                  if (matched.siteId) resolvedSiteId = matched.siteId;
+                  if (matched.featurePermissions && Object.keys(matched.featurePermissions).length > 0) {
+                    localFp = matched.featurePermissions;
+                  }
                 }
               }
             } catch (fallbackErr) {
-              console.warn('Fallback user list fetch for featurePermissions failed:', fallbackErr);
+              console.warn('Fallback user list fetch for permissions failed:', fallbackErr);
             }
           }
         }
+
+        // Fetch organization name if we have an organizationId
+        let resolvedOrgName = '';
+        if (resolvedOrgId) {
+          try {
+            const orgRes = await fetch('https://app.sochiot.com/api/location-engine/organization/getAll', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            if (orgRes.ok) {
+              const orgsJson = await orgRes.json();
+              const orgList = orgsJson.data || [];
+              const matchedOrg = orgList.find(o => Number(o.id) === Number(resolvedOrgId));
+              if (matchedOrg) {
+                resolvedOrgName = matchedOrg.name;
+              }
+            }
+          } catch (orgErr) {
+            console.error('Failed to fetch org name during login:', orgErr);
+          }
+        }
+
+        const userObj = {
+          id: meData.id || meData._id || 'temp-id',
+          name: meData.name || meData.username || 'Super Admin',
+          email: meData.email || credentials.username,
+          role: role,
+          roleName: (meData.roles && meData.roles.length > 0 && meData.roles[0] !== 'ADMIN' && meData.roles[0] !== 'SUPER_ADMIN')
+            ? meData.roles[0]
+            : (meData.role?.name || meData.roleName || (role === 'SUPER_ADMIN' ? 'Super Admin' : role === 'ADMIN' ? 'Administrator' : role)),
+          organizationId: resolvedOrgId,
+          tenantId: resolvedOrgId,
+          siteId: resolvedSiteId,
+          organizationName: resolvedOrgName
+        };
+
+        localStorage.setItem('userRole', role);
+        localStorage.setItem('userData', JSON.stringify(userObj));
+        localStorage.setItem('isAuthenticated', 'true');
 
         const isSuperRole = role === 'SUPER_ADMIN';
         const isPowerUser = role === 'SUPER_ADMIN' || role === 'ADMIN';
