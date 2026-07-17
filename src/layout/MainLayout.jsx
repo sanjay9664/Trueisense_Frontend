@@ -142,15 +142,20 @@ const MainLayout = ({ children }) => {
         if (response.ok) {
           const data = await response.json();
           // Map backend data to frontend format to match what templates page saves
-          const mappedData = data.map(t => ({
-            id: t.id,
-            name: t.name,
-            tenantId: t.tenantId,
-            category: t.category || 'Water Management',
-            module: t.settings[0]?.eventKey || 'AG Tank',
-            mapping: (t.defaultValues || t.settings[0]?.meta || {}),
-            timestamp: new Date(t.createdAt).toLocaleString()
-          }));
+          const mappedData = data.map(t => {
+            const hasDef = t.defaultValues && typeof t.defaultValues === 'object' && Object.keys(t.defaultValues).length > 0;
+            const defValues = hasDef ? t.defaultValues : null;
+            const mappingSource = defValues || t.settings[0]?.meta || {};
+            return {
+              id: t.id,
+              name: t.name,
+              tenantId: t.tenantId,
+              category: (defValues && defValues.category) || t.category || 'Water Management',
+              module: (defValues && defValues.module) || t.settings[0]?.eventKey || 'AG Tank',
+              mapping: mappingSource,
+              timestamp: new Date(t.createdAt).toLocaleString()
+            };
+          });
           
           // Cleanup corrupted mappings like Templates.jsx does
           const cleanCorruptedMapping = (obj) => {
