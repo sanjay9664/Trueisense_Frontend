@@ -1189,17 +1189,38 @@ const SubMeters = () => {
           ];
           let latestTs = null;
           allCfgs.forEach(cfg => {
-            if (cfg && cfg.enabled !== false && cfg.module) {
-              const matchStat = stats.find(s =>
-                String(s.moduleId) === String(cfg.module) ||
-                String(s.meta?.module_id) === String(cfg.module)
-              );
-              if (matchStat?.meta?.created_at_timestamp) {
-                const raw = matchStat.meta.created_at_timestamp;
-                // Handle both seconds and milliseconds timestamps
-                const tsMs = raw > 1e12 ? raw : raw * 1000;
-                if (!latestTs || tsMs > latestTs) latestTs = tsMs;
+            if (cfg && cfg.enabled !== false) {
+              // 1. Check primary module ID
+              if (cfg.module && cfg.module !== 'ALL') {
+                const matchStat = stats.find(s =>
+                  String(s.moduleId) === String(cfg.module) ||
+                  String(s.meta?.module_id) === String(cfg.module)
+                );
+                if (matchStat?.meta?.created_at_timestamp) {
+                  const raw = matchStat.meta.created_at_timestamp;
+                  const tsMs = raw > 1e12 ? raw : raw * 1000;
+                  if (!latestTs || tsMs > latestTs) latestTs = tsMs;
+                }
               }
+              // 2. Check nested field custom module IDs (e.g. "4698::4,14F")
+              Object.keys(cfg).forEach(key => {
+                const val = cfg[key];
+                if (typeof val === 'string' && val.includes(':')) {
+                  const parts = val.split(':');
+                  const fieldModuleId = parts[0];
+                  if (fieldModuleId) {
+                    const matchStat = stats.find(s =>
+                      String(s.moduleId) === String(fieldModuleId) ||
+                      String(s.meta?.module_id) === String(fieldModuleId)
+                    );
+                    if (matchStat?.meta?.created_at_timestamp) {
+                      const raw = matchStat.meta.created_at_timestamp;
+                      const tsMs = raw > 1e12 ? raw : raw * 1000;
+                      if (!latestTs || tsMs > latestTs) latestTs = tsMs;
+                    }
+                  }
+                }
+              });
             }
           });
           if (latestTs) updatedMeter.lastTelemetryTimestamp = latestTs;
@@ -1236,6 +1257,8 @@ const SubMeters = () => {
           if (updatedMeter.vB !== undefined && updatedMeter.vB !== null && !isNaN(updatedMeter.vB)) phaseVoltages.push(updatedMeter.vB);
           if (phaseVoltages.length > 0) {
             updatedMeter.voltage = phaseVoltages.reduce((sum, v) => sum + v, 0) / phaseVoltages.length;
+          } else if (telemetryValues.vLNAvg !== undefined && telemetryValues.vLNAvg !== null && !isNaN(Number(telemetryValues.vLNAvg))) {
+            updatedMeter.voltage = Number(telemetryValues.vLNAvg);
           } else {
             updatedMeter.voltage = 0.0;
           }
@@ -1247,6 +1270,8 @@ const SubMeters = () => {
           if (updatedMeter.iB !== undefined && updatedMeter.iB !== null && !isNaN(updatedMeter.iB)) phaseCurrents.push(updatedMeter.iB);
           if (phaseCurrents.length > 0) {
             updatedMeter.current = phaseCurrents.reduce((sum, i) => sum + i, 0) / phaseCurrents.length;
+          } else if (telemetryValues.iAvg !== undefined && telemetryValues.iAvg !== null && !isNaN(Number(telemetryValues.iAvg))) {
+            updatedMeter.current = Number(telemetryValues.iAvg);
           } else {
             updatedMeter.current = 0.0;
           }
