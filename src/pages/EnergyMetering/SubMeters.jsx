@@ -115,7 +115,7 @@ const TelemetryCard = ({ label, value, unit, colorClass, type, isMapped = true, 
   );
 };
 
-const MiniMFMMeter = ({ meter, isMapped = true, isOnline, onClick }) => {
+const MiniMFMMeter = ({ meter, isMapped = true, isOnline, offlineReason, onClick }) => {
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -178,11 +178,19 @@ const MiniMFMMeter = ({ meter, isMapped = true, isOnline, onClick }) => {
 
   return (
     <div className="w-100 d-flex flex-column align-items-center scada-meter-wrapper" onClick={onClick} style={{ cursor: 'pointer', transition: 'transform 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}>
-      <div className="mb-2 text-center d-flex flex-column align-items-center" style={{ minHeight: '44px' }}>
+      <div className="mb-2 text-center d-flex flex-column align-items-center" style={{ minHeight: '52px' }}>
         <h6 className="fw-bold text-white mb-0" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }}>{meter.label}</h6>
         <div className="d-flex align-items-center justify-content-center gap-2 mt-1">
           <Badge bg="secondary" className="bg-opacity-10 border border-secondary border-opacity-10 px-2 py-0 fs-12 uppercase text-muted" style={{ fontSize: '0.6rem' }}>{meter.type}</Badge>
+          {!isOnline && isMapped && (
+            <Badge bg="danger" className="bg-opacity-10 border border-danger border-opacity-10 px-2 py-0 fs-12 uppercase text-danger" style={{ fontSize: '0.6rem' }} title={offlineReason}>OFFLINE</Badge>
+          )}
         </div>
+        {!isOnline && isMapped && offlineReason && (
+          <span className="text-danger mt-1 font-monospace" style={{ fontSize: '0.6rem', opacity: 0.85 }} title={offlineReason}>
+            ⚠️ {offlineReason}
+          </span>
+        )}
       </div>
       <div className="mfm-polycarbonate-case shadow-2xl mx-auto" style={{ maxWidth: '270px', padding: '14px 10px', borderWidth: '8px', borderRadius: '24px' }}>
         {/* Bezel Screws */}
@@ -485,11 +493,11 @@ const SubMeters = () => {
     let hasTelemetryDataFallback = false;
     if (meter) {
       const lastTelemetryTs = Number(meter.lastTelemetryTimestamp);
-      // We check for telemetry in the last 10 minutes (consistent with telemetry polling rate)
+      // We check for telemetry in the last 2 minutes (consistent with live updates)
       isFreshTelemetry =
         Number.isFinite(lastTelemetryTs) &&
         lastTelemetryTs > 0 &&
-        Date.now() - lastTelemetryTs < 10 * 60 * 1000;
+        Date.now() - lastTelemetryTs < 2 * 60 * 1000;
 
       if (isFreshTelemetry && meter.telemetryValues) {
         const tv = meter.telemetryValues;
@@ -526,6 +534,53 @@ const SubMeters = () => {
     }
 
     return isFreshTelemetry;
+  };
+
+  // Helper to determine the specific reason why a meter is offline
+  const getMeterOfflineReason = (meterLabel) => {
+    const template = getTemplateForMeter(meterLabel);
+    const meter = meters.find(
+      m => String(m.label).trim().toUpperCase() === String(meterLabel).trim().toUpperCase()
+    );
+
+    if (!template?.mapping) {
+      return "Not mapped in configurations";
+    }
+
+    let devId = template.mapping.deviceId || template.mapping.emChangeConfig?.device;
+    if (!devId) {
+      const anyConfig = Object.values(template.mapping).find(cfg => cfg && typeof cfg === 'object' && cfg.device);
+      if (anyConfig) devId = anyConfig.device;
+    }
+    const gatewayUuid = template.mapping.gatewayUuid;
+
+    if (devId) {
+      const devStatusOnline = !!getOverallStatus(devId, gatewayUuid);
+      if (!devStatusOnline) {
+        return "Gateway/IoT device disconnected";
+      }
+    }
+
+    if (meter) {
+      const lastTelemetryTs = Number(meter.lastTelemetryTimestamp);
+      const isFreshTelemetry =
+        Number.isFinite(lastTelemetryTs) &&
+        lastTelemetryTs > 0 &&
+        Date.now() - lastTelemetryTs < 2 * 60 * 1000;
+      if (!isFreshTelemetry) {
+        if (lastTelemetryTs > 0) {
+          const diffSec = Math.round((Date.now() - lastTelemetryTs) / 1000);
+          if (diffSec < 60) return `Last update: ${diffSec}s ago`;
+          const diffMin = Math.round(diffSec / 60);
+          if (diffMin < 60) return `Last update: ${diffMin}m ago`;
+          const diffHrs = Math.round(diffMin / 60);
+          return `Last update: ${diffHrs}h ago`;
+        }
+        return "No telemetry received";
+      }
+    }
+
+    return null;
   };
 
   // Helper to check if a specific meter has an active device mapping (i.e. is mapped)
@@ -1441,7 +1496,7 @@ const SubMeters = () => {
       </div>
 
       {/* METERS CARD GRID */}
-      <Row className="row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-3 mb-4 justify-content-center">
+      <Row className="row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5 g-3 mb-4 justify-content-center">
         {mappedMeters.length === 0 ? (
           <Col xs={12} className="text-center py-5">
             <div className="p-5 rounded-4 scada-glass-section border-change" style={{ maxWidth: '600px', margin: '0 auto' }}>
@@ -1454,12 +1509,14 @@ const SubMeters = () => {
           mappedMeters.map((meter, index) => {
             const isMapped = getMeterMappedStatus(meter.label);
             const isOnline = getMeterOnlineStatus(meter.label);
+            const offlineReason = getMeterOfflineReason(meter.label);
             return (
               <Col key={index} className="d-flex justify-content-center">
                 <MiniMFMMeter
                   meter={meter}
                   isMapped={isMapped}
                   isOnline={isOnline}
+                  offlineReason={offlineReason}
                   onClick={() => {
                     setSelectedMeter(meter);
                     if (refreshStatuses) refreshStatuses();
@@ -1484,12 +1541,12 @@ const SubMeters = () => {
                 <Table hover borderless className="align-middle scada-table text-white mb-0">
                   <thead>
                     <tr className="border-bottom border-secondary border-opacity-15 fs-13 text-secondary text-uppercase tracking-wider">
-                      <th className="py-3">Meter ID</th>
+                      <th className="py-3 d-none d-sm-table-cell">Meter ID</th>
                       <th className="py-3">Feed Description</th>
                       <th className="py-3 text-center">Power</th>
-                      <th className="py-3 text-center">Avg. Volts</th>
-                      <th className="py-3 text-center">Phase Amps</th>
-                      <th className="py-3 text-center">Last Updated</th>
+                      <th className="py-3 text-center d-none d-md-table-cell">Avg. Volts</th>
+                      <th className="py-3 text-center d-none d-md-table-cell">Phase Amps</th>
+                      <th className="py-3 text-center d-none d-md-table-cell">Last Updated</th>
                       <th className="py-3 text-end">Health Status</th>
                     </tr>
                   </thead>
@@ -1505,15 +1562,27 @@ const SubMeters = () => {
                         const hasTelemetry = Object.keys(meter.telemetryValues || {}).length > 0;
                         const showActive = !isMapped || isOnline || hasTelemetry;
                         const fmtNum = (v, d = 1) => { const n = Number(v); return isNaN(n) ? '0.0' : n.toFixed(d); };
+                        const offlineReason = getMeterOfflineReason(meter.label);
                         return (
                           <tr key={idx} className="border-bottom border-secondary border-opacity-5">
-                            <td className="py-3 font-monospace text-info fs-13">{meter.id}</td>
+                            <td className="py-3 font-monospace text-info fs-13 d-none d-sm-table-cell">{meter.id}</td>
                             <td className="py-3 text-white fw-bold">{meter.label}</td>
                             <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load, 2)} kW` : '—'}</td>
-                            <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
-                            <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.current)} A` : '—'}</td>
-                            <td className="py-3 text-center text-secondary font-monospace fs-13">{formatLastUpdated(meter.lastTelemetryTimestamp)}</td>
-                            <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? 'Online' : 'Offline'} /> : '—'}</td>
+                            <td className="py-3 text-center text-secondary d-none d-md-table-cell">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
+                            <td className="py-3 text-center text-secondary d-none d-md-table-cell">{showActive ? `${fmtNum(meter.current)} A` : '—'}</td>
+                            <td className="py-3 text-center text-secondary font-monospace fs-13 d-none d-md-table-cell">{formatLastUpdated(meter.lastTelemetryTimestamp)}</td>
+                            <td className="py-3 text-end">
+                              {isMapped ? (
+                                <div className="d-flex flex-column align-items-end gap-1">
+                                  <StatusBadge status={isOnline ? 'Online' : 'Offline'} />
+                                  {!isOnline && offlineReason && (
+                                    <span className="text-danger opacity-75 font-monospace animate-pulse" style={{ fontSize: '0.6rem' }}>
+                                      {offlineReason}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : '—'}
+                            </td>
                           </tr>
                         );
                       })
@@ -1527,11 +1596,11 @@ const SubMeters = () => {
                 <Table hover borderless className="align-middle scada-table text-white mb-0">
                   <thead>
                     <tr className="border-bottom border-secondary border-opacity-15 fs-13 text-secondary text-uppercase tracking-wider">
-                      <th className="py-3">Meter ID</th>
+                      <th className="py-3 d-none d-sm-table-cell">Meter ID</th>
                       <th className="py-3">Feed Description</th>
                       <th className="py-3 text-center">Power</th>
-                      <th className="py-3 text-center">Avg. Volts</th>
-                      <th className="py-3 text-center">Last Updated</th>
+                      <th className="py-3 text-center d-none d-md-table-cell">Avg. Volts</th>
+                      <th className="py-3 text-center d-none d-md-table-cell">Last Updated</th>
                       <th className="py-3 text-end">Health Status</th>
                     </tr>
                   </thead>
@@ -1547,14 +1616,26 @@ const SubMeters = () => {
                         const hasTelemetry = Object.keys(meter.telemetryValues || {}).length > 0;
                         const showActive = !isMapped || isOnline || hasTelemetry;
                         const fmtNum = (v, d = 1) => { const n = Number(v); return isNaN(n) ? '0.0' : n.toFixed(d); };
+                        const offlineReason = getMeterOfflineReason(meter.label);
                         return (
                           <tr key={idx} className="border-bottom border-secondary border-opacity-5">
-                            <td className="py-3 font-monospace text-info fs-13">{meter.id}</td>
+                            <td className="py-3 font-monospace text-info fs-13 d-none d-sm-table-cell">{meter.id}</td>
                             <td className="py-3 text-white fw-bold">{meter.label}</td>
                             <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load, 2)} kW` : '—'}</td>
-                            <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
-                            <td className="py-3 text-center text-secondary font-monospace fs-13">{formatLastUpdated(meter.lastTelemetryTimestamp)}</td>
-                            <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? 'Online' : 'Offline'} /> : '—'}</td>
+                            <td className="py-3 text-center text-secondary d-none d-md-table-cell">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
+                            <td className="py-3 text-center text-secondary font-monospace fs-13 d-none d-md-table-cell">{formatLastUpdated(meter.lastTelemetryTimestamp)}</td>
+                            <td className="py-3 text-end">
+                              {isMapped ? (
+                                <div className="d-flex flex-column align-items-end gap-1">
+                                  <StatusBadge status={isOnline ? 'Online' : 'Offline'} />
+                                  {!isOnline && offlineReason && (
+                                    <span className="text-danger opacity-75 font-monospace animate-pulse" style={{ fontSize: '0.6rem' }}>
+                                      {offlineReason}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : '—'}
+                            </td>
                           </tr>
                         );
                       })
