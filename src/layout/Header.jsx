@@ -25,7 +25,7 @@ const Header = ({ collapsed, toggleSidebar }) => {
     const handleUpdate = () => {
       try {
         setUserData(JSON.parse(localStorage.getItem('userData') || '{}'));
-      } catch (e) {}
+      } catch (e) { }
     };
     window.addEventListener('storage-update', handleUpdate);
     window.addEventListener('storage', handleUpdate);
@@ -38,15 +38,15 @@ const Header = ({ collapsed, toggleSidebar }) => {
   return (
     <header className={`scada-header ${collapsed ? 'collapsed' : ''}`}>
       <div className="header-left d-flex align-items-center">
-        <Button 
-          variant="link" 
-          className="text-white p-0 me-3" 
+        <Button
+          variant="link"
+          className="text-white p-0 me-3"
           onClick={toggleSidebar}
         >
           <Menu size={24} />
         </Button>
         <h5 className="mb-0 fw-bold tracking-tight d-none d-md-block header-title">
-           TRUEiSENSE Smart Monitoring System
+          To SMart E Pluse
         </h5>
         <span className="text-white fw-bold tracking-tight ms-1 d-md-none fs-6">
           TRUEiSENSE
@@ -77,17 +77,17 @@ const Header = ({ collapsed, toggleSidebar }) => {
         </div>
 
         {/* Toggle Theme Button */}
-        <Button 
-          variant={isDark ? 'outline-light' : 'outline-dark'} 
-          size="sm" 
-          onClick={toggleTheme} 
-          className="fw-bold fs-12 d-flex align-items-center gap-2 me-3" 
+        <Button
+          variant={isDark ? 'outline-light' : 'outline-dark'}
+          size="sm"
+          onClick={toggleTheme}
+          className="fw-bold fs-12 d-flex align-items-center gap-2 me-3"
           style={{ borderRadius: '20px', padding: '6px 16px', background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', backdropFilter: 'blur(10px)', border: '1px solid var(--scada-border)' }}
         >
-          {isDark ? <Sun size={14}/> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>}
+          {isDark ? <Sun size={14} /> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>}
           <span className="d-none d-lg-inline">{isDark ? 'LIGHT MODE' : 'DARK MODE'}</span>
         </Button>
-        
+
         <Button variant="link" className="text-muted p-2 me-2 position-relative">
           <Bell size={20} />
           <span className="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style={{ marginTop: '8px', marginLeft: '-8px' }}></span>
@@ -95,7 +95,7 @@ const Header = ({ collapsed, toggleSidebar }) => {
         <Button variant="link" className="text-muted p-2 me-3">
           <LayoutGrid size={20} />
         </Button>
-        
+
         <Dropdown align="end">
           <Dropdown.Toggle variant="link" className="d-flex align-items-center text-white text-decoration-none p-0 border-0 custom-toggle">
             <div className="user-avatar bg-info rounded-circle d-flex align-items-center justify-content-center me-2" style={{ width: '24px', height: '24px' }}>
@@ -120,7 +120,7 @@ const Header = ({ collapsed, toggleSidebar }) => {
             <Dropdown.Item className="text-white hover-bg-secondary">Profile</Dropdown.Item>
             <Dropdown.Item className="text-white hover-bg-secondary">Logs</Dropdown.Item>
             <Dropdown.Divider className="bg-secondary" />
-            <Dropdown.Item 
+            <Dropdown.Item
               className="text-danger hover-bg-secondary fw-bold"
               onClick={() => {
                 localStorage.removeItem('isAuthenticated');
@@ -142,7 +142,8 @@ const Header = ({ collapsed, toggleSidebar }) => {
         </Dropdown>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .header-title {
           white-space: nowrap;
           overflow: hidden;
