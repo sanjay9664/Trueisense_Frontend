@@ -378,7 +378,7 @@ const AQIPDFReport = () => {
       doc.setPage(i);
       doc.setFontSize(8);
       doc.setTextColor(150);
-      doc.text(`Page ${i} of ${pageCount} - To SMart E Pluse`, 14, 200);
+      doc.text(`Page ${i} of ${pageCount} - E-PULSE`, 14, 200);
     }
 
     doc.save(`AQI_Telemetry_Report_${sensorLabel.replace(/[^a-z0-9]/gi, '_')}.pdf`);

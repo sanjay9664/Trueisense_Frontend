@@ -46,7 +46,7 @@ const Header = ({ collapsed, toggleSidebar }) => {
           <Menu size={24} />
         </Button>
         <h5 className="mb-0 fw-bold tracking-tight d-none d-md-block header-title">
-          To SMart E Pluse
+          E-PULSE
         </h5>
         <span className="text-white fw-bold tracking-tight ms-1 d-md-none fs-6">
           TRUEiSENSE

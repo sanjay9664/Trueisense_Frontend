@@ -378,7 +378,7 @@ const EnergyPDFReport = () => {
       doc.setPage(i);
       doc.setFontSize(8);
       doc.setTextColor(150);
-      doc.text(`Page ${i} of ${pageCount} - To SMart E Pluse`, 14, 200);
+      doc.text(`Page ${i} of ${pageCount} - E-PULSE`, 14, 200);
     }
 
     doc.save(`${meterLabel.replace(/\s+/g, '_')}_Consolidated_Report.pdf`);

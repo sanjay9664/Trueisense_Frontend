@@ -85,13 +85,13 @@ const TelemetryCard = ({ label, value, unit, colorClass, type, isMapped = true, 
         boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.05), 0 4px 6px -1px rgba(0, 0, 0, 0.2)'
       }}
     >
-      <span 
-        className="uppercase tracking-wider mb-2 fw-semibold" 
-        style={{ 
-          fontSize: '0.7rem', 
-          color: '#cbd5e1', 
-          whiteSpace: 'nowrap', 
-          overflow: 'hidden', 
+      <span
+        className="uppercase tracking-wider mb-2 fw-semibold"
+        style={{
+          fontSize: '0.7rem',
+          color: '#cbd5e1',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
           textOverflow: 'ellipsis',
           letterSpacing: '0.8px'
         }}
@@ -247,7 +247,7 @@ const MiniMFMMeter = ({ meter, isMapped = true, isOnline, offlineReason, onClick
                 <span className="mfm-led-label" style={{ fontSize: '0.5rem', marginTop: '2px' }}>CAL</span>
               </div>
               <div className="d-flex flex-column align-items-center">
-                <div className={`mfm-led-bulb bulb-green ${isOnline && isMapped ? 'glow-active pulse-dot-green' : ''}`} style={{ width: '8px', height: '8px', animation: isOnline && isMapped ? 'pulseGlow 1.8s infinite' : 'none' }}></div>
+                <div className={`mfm-led-bulb bulb-green ${isOnline && isMapped ? 'glow-activE-PULSE-dot-green' : ''}`} style={{ width: '8px', height: '8px', animation: isOnline && isMapped ? 'pulseGlow 1.8s infinite' : 'none' }}></div>
                 <span className="mfm-led-label" style={{ fontSize: '0.5rem', marginTop: '2px' }}>COM</span>
               </div>
               <div className="d-flex flex-column align-items-center">
@@ -414,7 +414,7 @@ const formatLastUpdated = (timestamp) => {
   const hours = pad(date.getHours());
   const minutes = pad(date.getMinutes());
   const seconds = pad(date.getSeconds());
-  
+
   return `${day}/${month} ${hours}:${minutes}:${seconds}`;
 };
 
@@ -485,7 +485,7 @@ const SubMeters = () => {
 
   const getMeterOnlineStatus = (meterLabel) => {
     const template = getTemplateForMeter(meterLabel);
-    
+
     const meter = meters.find(
       m => String(m.label).trim().toUpperCase() === String(meterLabel).trim().toUpperCase()
     );
@@ -631,10 +631,10 @@ const SubMeters = () => {
             lastTelemetryTimestamp: existing?.lastTelemetryTimestamp ?? null
           };
         });
-        
+
         // Sort mapped list naturally so Meter-1 comes before Meter-2
         mapped.sort((a, b) => naturalSort(a.label, b.label));
-        
+
         return mapped;
       });
     }
@@ -939,7 +939,7 @@ const SubMeters = () => {
         const userRole = localStorage.getItem('userRole') || 'USER';
         const roleName = (userData.roleName || userRole || '').toLowerCase();
         const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-        
+
         let filtered = mapped;
         if (!isSuperAdmin) {
           const orgId = userData.organizationId;
@@ -949,7 +949,7 @@ const SubMeters = () => {
             }
             const orgName = t.mapping?.globalHierarchy?.organization || t.defaultValues?.mapping?.globalHierarchy?.organization;
             if (!orgName) return false;
-            
+
             const numId = Number(orgId);
             const orgLower = orgName.toLowerCase();
             if (numId === 12) {
@@ -1000,7 +1000,7 @@ const SubMeters = () => {
           const userRole = localStorage.getItem('userRole') || 'USER';
           const roleName = (userData.roleName || userRole || '').toLowerCase();
           const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-          
+
           let filtered = mapped;
           if (!isSuperAdmin) {
             const orgId = userData.organizationId;
@@ -1010,7 +1010,7 @@ const SubMeters = () => {
               }
               const orgName = t.mapping?.globalHierarchy?.organization || t.defaultValues?.mapping?.globalHierarchy?.organization;
               if (!orgName) return false;
-              
+
               const numId = Number(orgId);
               const orgLower = orgName.toLowerCase();
               if (numId === 12) {
@@ -1460,28 +1460,28 @@ const SubMeters = () => {
         <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">
           {mappedMeters.length > 0 && (
             <Dropdown>
-              <Dropdown.Toggle 
-                variant="dark" 
-                className="scada-dropdown-toggle py-2 px-3 fs-13 rounded-pill d-flex align-items-center justify-content-between" 
+              <Dropdown.Toggle
+                variant="dark"
+                className="scada-dropdown-toggle py-2 px-3 fs-13 rounded-pill d-flex align-items-center justify-content-between"
                 style={{ width: '200px', cursor: 'pointer' }}
               >
                 {selectedMeter ? selectedMeter.label : 'Select Sub-Meter...'}
               </Dropdown.Toggle>
               <Dropdown.Menu variant="dark" className="scada-dropdown-menu" style={{ width: '200px' }}>
-                <Dropdown.Item 
-                  onClick={() => setSelectedMeter(null)} 
+                <Dropdown.Item
+                  onClick={() => setSelectedMeter(null)}
                   className="scada-dropdown-item fs-13"
                 >
                   Select Sub-Meter...
                 </Dropdown.Item>
                 {mappedMeters.map(m => {
                   return (
-                    <Dropdown.Item 
-                      key={m.id} 
+                    <Dropdown.Item
+                      key={m.id}
                       onClick={() => {
                         setSelectedMeter(m);
                         if (refreshStatuses) refreshStatuses();
-                      }} 
+                      }}
                       className="scada-dropdown-item fs-13"
                     >
                       {m.label}
@@ -1910,9 +1910,9 @@ const SubMeters = () => {
                             {ALL_CHANGE_FIELDS.map(key => {
                               const meta = FIELD_LABELS[key] || { label: key, unit: '' };
                               const isFieldMapped = activeMeter?.moduleEvents?.change?.some(e => e.key === key) ||
-                                                    activeMeter?.moduleEvents?.warning?.some(e => e.key === key) ||
-                                                    activeMeter?.moduleEvents?.read?.some(e => e.key === key);
-                              
+                                activeMeter?.moduleEvents?.warning?.some(e => e.key === key) ||
+                                activeMeter?.moduleEvents?.read?.some(e => e.key === key);
+
                               // HIDE UNMAPPED FIELDS IF METER IS MAPPED
                               if (isMapped && !isFieldMapped) return null;
 
