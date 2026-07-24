@@ -13,7 +13,7 @@
       "destination": "https://app.sochiot.com/api/config-engine/:path*"
     },
     {
-      "source": "/((?!api/|sochiot-auth/|sochiot-config/).*)",
+      "source": "/:path*",
       "destination": "/index.html"
     }
   ]
