@@ -363,17 +363,42 @@
 }
 
 .scada-dropdown-menu {
-  background-color: #090d16 !important;
-  border: 1px solid rgba(224, 94, 0, 0.25) !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+  background-color: #0d1322 !important;
+  border: 1.5px solid rgba(249, 115, 22, 0.45) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.95), 0 0 20px rgba(0, 0, 0, 0.8) !important;
+  min-width: 220px !important;
+  width: max-content !important;
+  max-width: 340px !important;
+  padding: 6px 0 !important;
+  z-index: 9999 !important;
 }
 
 .scada-dropdown-item {
   color: #cbd5e1 !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  padding: 8px 16px !important;
   transition: all 0.2s ease !important;
 }
 .scada-dropdown-item:hover,
 .scada-dropdown-item:focus {
   background-color: rgba(224, 94, 0, 0.08) !important;
   color: #ffffff !important;
+}
+
+.scada-dropdown-item.active,
+.scada-dropdown-item:active {
+  background-color: rgba(30, 41, 59, 0.8) !important;
+  color: #ffffff !important;
+}
+
+.scada-search-input::placeholder {
+  color: rgba(255, 255, 255, 0.75) !important;
+  opacity: 1 !important;
+}
+.scada-search-input::-webkit-input-placeholder {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+.scada-search-input::-moz-placeholder {
+  color: rgba(255, 255, 255, 0.75) !important;
 }
