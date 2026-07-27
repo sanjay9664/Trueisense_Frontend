@@ -421,6 +421,7 @@ const formatLastUpdated = (timestamp) => {
 const SubMeters = () => {
   const location = useLocation();
   const { getOverallStatus, refreshStatuses } = useDeviceStatus();
+  const [selectedMeterFilter, setSelectedMeterFilter] = useState(null);
   const [selectedMeter, setSelectedMeter] = useState(null);
   const [meters, setMeters] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -731,6 +732,14 @@ const SubMeters = () => {
       if (statusFilter === 'online' && !isOnline) return false;
       if (statusFilter === 'offline' && isOnline) return false;
 
+      if (selectedMeterFilter) {
+        const targetLabel = String(selectedMeterFilter.label || selectedMeterFilter).trim().toUpperCase();
+        const targetId = String(selectedMeterFilter.id || '').trim().toUpperCase();
+        const mLabel = String(m.label || '').trim().toUpperCase();
+        const mId = String(m.id || '').trim().toUpperCase();
+        if (mLabel !== targetLabel && mId !== targetId) return false;
+      }
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchLabel = (m.label || '').toLowerCase().includes(q);
@@ -740,7 +749,7 @@ const SubMeters = () => {
       }
       return true;
     });
-  }, [mappedMeters, statusFilter, searchQuery, templates, getOverallStatus]);
+  }, [mappedMeters, statusFilter, selectedMeterFilter, searchQuery, templates, getOverallStatus]);
 
   const sortedMeters = useMemo(() => {
     return [...filteredMeters].sort((a, b) => {
@@ -858,7 +867,7 @@ const SubMeters = () => {
   // Derive activeMeter dynamically from meters array so it updates in real-time
   const activeMeter = useMemo(() => {
     if (!selectedMeter) return null;
-    return meters.find(m => m.id === selectedMeter.id) || selectedMeter;
+    return meters.find(m => m.id === selectedMeter.id || m.label === selectedMeter.label) || selectedMeter;
   }, [meters, selectedMeter]);
 
   const assignedMeterIds = useMemo(
@@ -1624,37 +1633,57 @@ const SubMeters = () => {
         <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">
           {/* CONTROL 1: Select Sub-Meter Dropdown */}
           {mappedMeters.length > 0 && (
-            <Dropdown>
-              <Dropdown.Toggle 
-                variant="dark" 
-                className="scada-dropdown-toggle py-2 px-3 fs-13 rounded-pill d-flex align-items-center justify-content-between" 
-                style={{ width: '200px', cursor: 'pointer' }}
-              >
-                <span className="text-truncate me-2">{selectedMeter ? selectedMeter.label : 'Select Sub-Meter...'}</span>
-              </Dropdown.Toggle>
-              <Dropdown.Menu variant="dark" className="scada-dropdown-menu" style={{ width: '200px' }}>
-                <Dropdown.Item 
-                  onClick={() => setSelectedMeter(null)} 
-                  className="scada-dropdown-item fs-13"
+            <div className="d-flex align-items-center gap-1">
+              <Dropdown align="start">
+                <Dropdown.Toggle 
+                  variant="dark" 
+                  className="scada-dropdown-toggle py-1 px-3 fs-13 rounded-pill d-flex align-items-center justify-content-between gap-2 border border-secondary border-opacity-25 shadow-sm" 
+                  style={{ minWidth: '210px', height: '32px', cursor: 'pointer', background: 'rgba(30, 41, 59, 0.7)' }}
                 >
-                  Select Sub-Meter...
-                </Dropdown.Item>
-                {mappedMeters.map(m => {
-                  return (
-                    <Dropdown.Item
-                      key={m.id}
-                      onClick={() => {
-                        setSelectedMeter(m);
-                        if (refreshStatuses) refreshStatuses();
-                      }}
-                      className="scada-dropdown-item fs-13"
-                    >
-                      {m.label}
-                    </Dropdown.Item>
-                  );
-                })}
-              </Dropdown.Menu>
-            </Dropdown>
+                  <span className="text-truncate me-2 fw-medium text-white fs-12">
+                    {selectedMeterFilter ? selectedMeterFilter.label : 'Select Sub-Meter...'}
+                  </span>
+                </Dropdown.Toggle>
+                <Dropdown.Menu variant="dark" className="scada-dropdown-menu shadow-2xl p-1.5" style={{ minWidth: '220px', maxHeight: '300px', overflowY: 'auto' }}>
+                  <Dropdown.Item 
+                    onClick={() => setSelectedMeterFilter(null)} 
+                    className={`scada-dropdown-item fs-12 d-flex align-items-center justify-content-between py-2 px-3 rounded-2 ${!selectedMeterFilter ? 'active' : ''}`}
+                  >
+                    <span className="text-white">Select Sub-Meter... (All)</span>
+                    <span className="px-2 py-0.5 rounded-pill text-white fw-bold ms-2" style={{ background: '#0284c7', fontSize: '0.7rem' }}>
+                      {mappedMeters.length}
+                    </span>
+                  </Dropdown.Item>
+                  {mappedMeters.map(m => {
+                    const isSelected = selectedMeterFilter && (selectedMeterFilter.id === m.id || selectedMeterFilter.label === m.label);
+                    const isOnline = getMeterOnlineStatus(m.label);
+                    return (
+                      <Dropdown.Item
+                        key={m.id}
+                        onClick={() => {
+                          setSelectedMeterFilter(isSelected ? null : m);
+                          if (refreshStatuses) refreshStatuses();
+                        }}
+                        className={`scada-dropdown-item fs-12 d-flex align-items-center justify-content-between py-2 px-3 rounded-2 mt-1 ${isSelected ? 'active' : ''}`}
+                      >
+                        <span className="text-white text-truncate me-2">{m.label}</span>
+                        <span style={{ fontSize: '0.65rem' }}>{isOnline ? '🟢' : '🔴'}</span>
+                      </Dropdown.Item>
+                    );
+                  })}
+                </Dropdown.Menu>
+              </Dropdown>
+              {selectedMeterFilter && (
+                <button
+                  className="btn btn-sm btn-outline-secondary text-white-50 rounded-circle p-0 d-flex align-items-center justify-content-center"
+                  style={{ width: '24px', height: '24px', fontSize: '0.85rem' }}
+                  onClick={() => setSelectedMeterFilter(null)}
+                  title="Clear meter filter"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           )}
 
           {/* CONTROL 2: Search Input */}
@@ -2100,7 +2129,6 @@ const SubMeters = () => {
         </Modal.Body>
       </Modal>
 
-      {/* DETAILED DATA MODAL */}
       <Modal show={selectedMeter !== null && activeMeter !== null} onHide={() => setSelectedMeter(null)} size="lg" centered dialogClassName="scada-glass-modal" contentClassName="border-0 text-white">
         {activeMeter && (() => {
           const isMapped = getMeterMappedStatus(activeMeter.label);
@@ -2150,7 +2178,6 @@ const SubMeters = () => {
 
                   return (
                     <Row className="g-3">
-                      {/* Left Column: Change Settings Telemetry */}
                       <Col xs={12}>
                         <div className="p-3 rounded-4 scada-glass-section border-change h-100">
                           <h6 className="text-info glow-text-info uppercase tracking-wider fs-12 mb-3 d-flex align-items-center gap-2 fw-bold">
@@ -2163,7 +2190,6 @@ const SubMeters = () => {
                                 activeMeter?.moduleEvents?.warning?.some(e => e.key === key) ||
                                 activeMeter?.moduleEvents?.read?.some(e => e.key === key);
 
-                              // HIDE UNMAPPED FIELDS IF METER IS MAPPED
                               if (isMapped && !isFieldMapped) return null;
 
                               const shouldShowValue = !isMapped || isFieldMapped;
