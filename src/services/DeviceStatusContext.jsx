@@ -53,6 +53,7 @@ export const DeviceStatusProvider = ({ children }) => {
 
   const checkDeviceStatus = useCallback(async (deviceId) => {
     if (!deviceId) return false;
+
     try {
       let res;
       const isNumeric = /^\d+$/.test(String(deviceId));
@@ -180,15 +181,10 @@ export const DeviceStatusProvider = ({ children }) => {
 
     handlePoll();
 
-    const interval = setInterval(handlePoll, 15000); // Poll every 15 seconds for instant status
-
-    window.addEventListener('storage-update', handlePoll);
-    window.addEventListener('storage', handlePoll);
+    const interval = setInterval(handlePoll, 30000); // Poll every 30 seconds for background status sync
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('storage-update', handlePoll);
-      window.removeEventListener('storage', handlePoll);
     };
   }, [pollAllStatuses]);
 
