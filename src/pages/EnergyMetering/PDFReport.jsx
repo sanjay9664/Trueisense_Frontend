@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Row, Col, Card, Form, Button, Badge, Spinner, Alert } from 'react-bootstrap';
-import { FileText, Download, FileSpreadsheet, Zap, CheckCircle2, AlertCircle, Activity, BarChart3, Clock, Calendar } from 'lucide-react';
+import { FileText, Download, FileSpreadsheet, Zap, CheckCircle2, AlertCircle, Activity, BarChart3, Clock, Calendar, Building2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
@@ -23,14 +23,27 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3
 const EnergyPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();
 
+  
+  const [selectedSiteId, setSelectedSiteId] = useState(() => {
+
+
   const siteId = useMemo(() => {
+
     try {
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
     } catch (e) {
       return localStorage.getItem('selectedSiteId') || '1';
     }
-  }, []);
+  });
+
+  const [sites, setSites] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('scada_sites') || '[]');
+    } catch (e) {
+      return [];
+    }
+  });
 
   const [templates, setTemplates] = useState(() => {
     try {
@@ -41,7 +54,7 @@ const EnergyPDFReport = () => {
   });
   const [devices, setDevices] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(`scada_devices_${siteId}`) || '[]');
+      return JSON.parse(localStorage.getItem(`scada_devices_${selectedSiteId}`) || '[]');
     } catch (e) {
       return [];
     }
@@ -63,14 +76,49 @@ const EnergyPDFReport = () => {
   const [interval, setIntervalVal] = useState('HOURLY');
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Fetch dynamic devices in background
+  // Background fetch sites list
+  useEffect(() => {
+    const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token') || '';
+    if (!token) return;
+
+    fetch(`${API_BASE_URL}/sites/`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        if (json?.data) {
+          const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+          const userRole = localStorage.getItem('userRole') || 'USER';
+          const roleName = (userData.roleName || userRole || '').toLowerCase();
+          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+          
+          let filteredSites = json.data;
+          if (!isSuperAdmin && userData.organizationId) {
+            filteredSites = json.data.filter(s => Number(s.organizationId) === Number(userData.organizationId));
+          }
+          setSites(filteredSites);
+          localStorage.setItem('scada_sites', JSON.stringify(filteredSites));
+
+          if (filteredSites.length > 0) {
+            const hasSelected = filteredSites.some(s => String(s.id) === String(selectedSiteId));
+            if (!hasSelected) {
+              setSelectedSiteId(String(filteredSites[0].id));
+              localStorage.setItem('selectedSiteId', String(filteredSites[0].id));
+            }
+          }
+        }
+      })
+      .catch(err => console.error('Error background fetching sites:', err));
+  }, []);
+
+  // Fetch dynamic devices in background when selectedSiteId changes
   useEffect(() => {
     const fetchDevices = async () => {
       setLoadingDevices(true);
       setErrorMsg(null);
       try {
         const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token');
-        const res = await fetch(`${API_BASE_URL}/sites/${siteId}/devices`, {
+        const res = await fetch(`${API_BASE_URL}/sites/${selectedSiteId}/devices`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -81,7 +129,7 @@ const EnergyPDFReport = () => {
         const result = await res.json();
         if (result.success && Array.isArray(result.data)) {
           setDevices(result.data);
-          localStorage.setItem(`scada_devices_${siteId}`, JSON.stringify(result.data));
+          localStorage.setItem(`scada_devices_${selectedSiteId}`, JSON.stringify(result.data));
         } else {
           setDevices([]);
         }
@@ -102,7 +150,7 @@ const EnergyPDFReport = () => {
     };
 
     fetchDevices();
-  }, [siteId]);
+  }, [selectedSiteId]);
 
   // Load templates on mount as fallback from local storage
   useEffect(() => {
@@ -422,8 +470,34 @@ const EnergyPDFReport = () => {
       <Card className="emr-main-card border-0 mb-4">
         <Card.Body className="p-4 p-md-5">
           <Row className="g-4 mb-4">
+            {sites.length > 0 && (
+              <Col md={sites.length > 0 ? 4 : 6} xs={12}>
+                <Form.Group>
+                  <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
+                    <Building2 size={14} style={{ color: 'var(--scada-accent)' }} />
+                    Select Site
+                  </Form.Label>
+                  <Form.Select
+                    className="emr-select"
+                    value={selectedSiteId}
+                    onChange={(e) => {
+                      const newSiteId = e.target.value;
+                      setSelectedSiteId(newSiteId);
+                      localStorage.setItem('selectedSiteId', newSiteId);
+                    }}
+                  >
+                    {sites.map(s => (
+                      <option key={s.id} value={String(s.id)}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+            )}
+
             {/* Meter Selection */}
-            <Col md={6} xs={12}>
+            <Col md={sites.length > 0 ? 4 : 6} xs={12}>
               <Form.Group>
                 <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
                   <Zap size={14} style={{ color: 'var(--scada-accent)' }} />
@@ -447,7 +521,7 @@ const EnergyPDFReport = () => {
             </Col>
 
             {/* Interval Selection */}
-            <Col md={6} xs={12}>
+            <Col md={sites.length > 0 ? 4 : 6} xs={12}>
               <Form.Group>
                 <Form.Label className="emr-label d-flex align-items-center gap-2 mb-2">
                   <Clock size={14} style={{ color: 'var(--scada-accent)' }} />
