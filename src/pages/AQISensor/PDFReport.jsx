@@ -17,8 +17,13 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3
 
 const AQIPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();
+
   
   const [selectedSiteId, setSelectedSiteId] = useState(() => {
+
+
+  const siteId = useMemo(() => {
+
     try {
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
@@ -54,7 +59,7 @@ const AQIPDFReport = () => {
   const [generating, setGenerating] = useState(false);
   const [downloadType, setDownloadType] = useState(null);
   const [downloadSuccess, setDownloadSuccess] = useState(null);
-  
+
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
@@ -126,13 +131,13 @@ const AQIPDFReport = () => {
       } catch (err) {
         console.error('Error fetching devices:', err);
         setErrorMsg('Failed to fetch devices. Using cached templates.');
-        
+
         // Fallback: templates cache
         const saved = localStorage.getItem('scada_templates');
         if (saved) {
           try {
             setTemplates(JSON.parse(saved));
-          } catch (e) {}
+          } catch (e) { }
         }
       } finally {
         setLoadingDevices(false);
@@ -148,7 +153,7 @@ const AQIPDFReport = () => {
     if (saved) {
       try {
         setTemplates(JSON.parse(saved));
-      } catch (e) {}
+      } catch (e) { }
     }
   }, []);
 
@@ -217,7 +222,7 @@ const AQIPDFReport = () => {
   const getSensorOnlineStatus = (sensorId) => {
     const option = aqiSensorOptions.find(s => String(s.id) === String(sensorId));
     if (!option) return false;
-    
+
     if (option.sochiotMeta) {
       return option.sochiotMeta.mode === 'ONLINE' || option.isActive;
     }
@@ -257,13 +262,13 @@ const AQIPDFReport = () => {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+
         if (!res.ok) {
           const text = await res.text();
           let json;
-          try { json = JSON.parse(text); } catch (e) {}
-          const errorMsg = (typeof json?.error === 'object' && json?.error?.message) 
-            ? json.error.message 
+          try { json = JSON.parse(text); } catch (e) { }
+          const errorMsg = (typeof json?.error === 'object' && json?.error?.message)
+            ? json.error.message
             : (json?.message || (typeof json?.error === 'string' ? json.error : null) || `Download failed: ${res.statusText}`);
           throw new Error(errorMsg);
         }
@@ -277,7 +282,7 @@ const AQIPDFReport = () => {
         a.click();
         a.remove();
         window.URL.revokeObjectURL(downloadUrl);
-        
+
         setDownloadSuccess('excel');
         setTimeout(() => setDownloadSuccess(null), 4000);
       } else if (type === 'pdf') {
@@ -287,13 +292,13 @@ const AQIPDFReport = () => {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+
         if (!res.ok) {
           const text = await res.text();
           let json;
-          try { json = JSON.parse(text); } catch (e) {}
-          const errorMsg = (typeof json?.error === 'object' && json?.error?.message) 
-            ? json.error.message 
+          try { json = JSON.parse(text); } catch (e) { }
+          const errorMsg = (typeof json?.error === 'object' && json?.error?.message)
+            ? json.error.message
             : (json?.message || (typeof json?.error === 'string' ? json.error : null) || `Fetch failed: ${res.statusText}`);
           throw new Error(errorMsg);
         }
@@ -318,20 +323,20 @@ const AQIPDFReport = () => {
     const sensorLabel = selectedSensorInfo?.label || 'AQI Sensor';
     const dateStr = new Date().toLocaleString();
     const doc = new jsPDF('l', 'mm', 'a4'); // Landscape A4
-    
+
     doc.setFontSize(18);
     doc.setTextColor(224, 94, 0); // TRUEiSENSE Orange
     doc.text(`AQI & ENVIRONMENT TELEMETRY REPORT`, 14, 20);
-    
+
     doc.setFontSize(9);
     doc.setTextColor(100, 116, 139);
     doc.text(`Generated on: ${dateStr}`, 14, 28);
     doc.text(`Sensor Asset: ${sensorLabel}`, 14, 33);
     doc.text(`Interval Ledger: ${interval} (From: ${fromDate} to: ${toDate})`, 14, 38);
-    
+
     doc.setDrawColor(224, 94, 0, 0.3);
     doc.line(14, 42, 283, 42); // Horizontal line
-    
+
     const fmt = (val, dec = 2) => val !== null && val !== undefined ? Number(val).toFixed(dec) : '-';
 
     const summary = reportData?.summary;
@@ -340,23 +345,23 @@ const AQIPDFReport = () => {
       doc.setTextColor(30, 41, 59); // Slate 800
       doc.setFont('helvetica', 'bold');
       doc.text('SUMMARY STATISTICS', 14, 48);
-      
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(71, 85, 105); // Slate 600
-      
+
       doc.text(`Average Temperature: ${fmt(summary.avgTemperature, 2)} °C`, 14, 54);
       doc.text(`Average Humidity: ${fmt(summary.avgHumidity, 2)} %`, 14, 59);
       doc.text(`Min Temperature: ${fmt(summary.minTemperature, 2)} °C`, 95, 54);
       doc.text(`Max Temperature: ${fmt(summary.maxTemperature, 2)} °C`, 95, 59);
-      
+
       if (summary.targetMinTemp !== undefined && summary.targetMaxTemp !== undefined) {
         doc.text(`Target Temp Range: ${fmt(summary.targetMinTemp, 1)} °C - ${fmt(summary.targetMaxTemp, 1)} °C`, 175, 54);
       }
       if (summary.targetMinHum !== undefined && summary.targetMaxHum !== undefined) {
         doc.text(`Target Hum Range: ${fmt(summary.targetMinHum, 1)} % - ${fmt(summary.targetMaxHum, 1)} %`, 175, 59);
       }
-      
+
       doc.setDrawColor(224, 94, 0, 0.15);
       doc.line(14, 68, 283, 68);
     }
@@ -366,7 +371,7 @@ const AQIPDFReport = () => {
       const start = new Date(item.windowStart);
       const end = new Date(item.windowEnd);
       const adjustedEnd = interval === 'DAILY' ? new Date(end.getTime() - 1000) : end;
-      
+
       const devTemp = item.deviationTemp !== undefined ? item.deviationTemp : (item.temperatureAvg !== null ? item.temperatureAvg - 24 : null);
       const devHum = item.deviationHumidity !== undefined ? item.deviationHumidity : (item.deviationHum !== undefined ? item.deviationHum : (item.humidityAvg !== null ? item.humidityAvg - 50 : null));
 
@@ -398,7 +403,7 @@ const AQIPDFReport = () => {
     autoTable(doc, {
       startY: startTableY,
       head: [[
-        'Sr.No', 'Zone', 'Node', 'Date', 'Time', 
+        'Sr.No', 'Zone', 'Node', 'Date', 'Time',
         'Avg. Temp (°C)', 'Avg. Humidity (%)', 'Deviation Temp', 'Deviation Hum'
       ]],
       body: tableBody,
@@ -421,7 +426,7 @@ const AQIPDFReport = () => {
       doc.setPage(i);
       doc.setFontSize(8);
       doc.setTextColor(150);
-      doc.text(`Page ${i} of ${pageCount} - TRUEiSENSE Smart Monitoring System`, 14, 200);
+      doc.text(`Page ${i} of ${pageCount} - E-PULSE`, 14, 200);
     }
 
     doc.save(`AQI_Telemetry_Report_${sensorLabel.replace(/[^a-z0-9]/gi, '_')}.pdf`);
@@ -672,7 +677,7 @@ const AQIPDFReport = () => {
                           No mapped AQI Sensors found. Please map sensors in the Templates page.
                         </Alert>
                       ) : (
-                        <Form.Select 
+                        <Form.Select
                           className="emr-select w-100"
                           value={selectedSensor}
                           onChange={(e) => setSelectedSensor(e.target.value)}
@@ -693,7 +698,7 @@ const AQIPDFReport = () => {
                       <Form.Label className="emr-label d-flex align-items-center gap-2">
                         <Clock size={13} style={{ color: 'var(--scada-accent)' }} /> Interval Scale
                       </Form.Label>
-                      <Form.Select 
+                      <Form.Select
                         className="emr-select w-100"
                         value={interval}
                         onChange={(e) => setIntervalVal(e.target.value)}
@@ -714,7 +719,7 @@ const AQIPDFReport = () => {
                       <Form.Label className="emr-label d-flex align-items-center gap-2">
                         <Calendar size={13} style={{ color: 'var(--scada-accent)' }} /> From Date
                       </Form.Label>
-                      <Form.Control 
+                      <Form.Control
                         type="date"
                         className="emr-select text-white w-100"
                         value={fromDate}
@@ -723,14 +728,14 @@ const AQIPDFReport = () => {
                       />
                     </Form.Group>
                   </Col>
-                  
+
                   {/* To Date */}
                   <Col md={4} xs={12}>
                     <Form.Group>
                       <Form.Label className="emr-label d-flex align-items-center gap-2">
                         <Calendar size={13} style={{ color: 'var(--scada-accent)' }} /> To Date
                       </Form.Label>
-                      <Form.Control 
+                      <Form.Control
                         type="date"
                         className="emr-select text-white w-100"
                         value={toDate}
@@ -743,7 +748,7 @@ const AQIPDFReport = () => {
                   {/* Download Actions */}
                   <Col md={4} xs={12}>
                     <div className="d-flex gap-3 flex-wrap emr-download-actions">
-                      <Button 
+                      <Button
                         className="emr-dl-btn emr-dl-pdf flex-fill d-flex align-items-center justify-content-center gap-2"
                         disabled={generating || !selectedSensor}
                         onClick={() => handleDownload('pdf')}
@@ -756,7 +761,7 @@ const AQIPDFReport = () => {
                         )}
                         Download PDF
                       </Button>
-                      <Button 
+                      <Button
                         className="emr-dl-btn emr-dl-excel flex-fill d-flex align-items-center justify-content-center gap-2"
                         disabled={generating || !selectedSensor}
                         onClick={() => handleDownload('excel')}

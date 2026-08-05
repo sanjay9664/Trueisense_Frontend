@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Row, Col, Card, Badge, Table, Tab, Tabs, Modal, Button, Form, Dropdown } from 'react-bootstrap';
-import { Zap, Activity, Cpu, ShieldCheck, RefreshCcw, Settings2, Plus, Trash2, FolderTree, CheckCircle2, Check } from 'lucide-react';
+import { Zap, Activity, Cpu, ShieldCheck, RefreshCcw, Settings2, Plus, Trash2, FolderTree, CheckCircle2, Check, Search, Download, ArrowUpDown, ArrowUp, ArrowDown, BarChart2, Filter, Gauge, Info, AlertTriangle } from 'lucide-react';
 import StatusBadge from '../../components/StatusBadge';
 import PdfButton from '../../components/PdfButton';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
@@ -85,13 +85,13 @@ const TelemetryCard = ({ label, value, unit, colorClass, type, isMapped = true, 
         boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.05), 0 4px 6px -1px rgba(0, 0, 0, 0.2)'
       }}
     >
-      <span 
-        className="uppercase tracking-wider mb-2 fw-semibold" 
-        style={{ 
-          fontSize: '0.7rem', 
-          color: '#cbd5e1', 
-          whiteSpace: 'nowrap', 
-          overflow: 'hidden', 
+      <span
+        className="uppercase tracking-wider mb-2 fw-semibold"
+        style={{
+          fontSize: '0.7rem',
+          color: '#cbd5e1',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
           textOverflow: 'ellipsis',
           letterSpacing: '0.8px'
         }}
@@ -115,7 +115,7 @@ const TelemetryCard = ({ label, value, unit, colorClass, type, isMapped = true, 
   );
 };
 
-const MiniMFMMeter = ({ meter, isMapped = true, isOnline, onClick }) => {
+const MiniMFMMeter = ({ meter, isMapped = true, isOnline, offlineReason, onClick }) => {
   const [page, setPage] = useState(0);
 
   useEffect(() => {
@@ -178,11 +178,19 @@ const MiniMFMMeter = ({ meter, isMapped = true, isOnline, onClick }) => {
 
   return (
     <div className="w-100 d-flex flex-column align-items-center scada-meter-wrapper" onClick={onClick} style={{ cursor: 'pointer', transition: 'transform 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}>
-      <div className="mb-2 text-center d-flex flex-column align-items-center" style={{ minHeight: '44px' }}>
+      <div className="mb-2 text-center d-flex flex-column align-items-center" style={{ minHeight: '52px' }}>
         <h6 className="fw-bold text-white mb-0" style={{ fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '240px' }}>{meter.label}</h6>
         <div className="d-flex align-items-center justify-content-center gap-2 mt-1">
           <Badge bg="secondary" className="bg-opacity-10 border border-secondary border-opacity-10 px-2 py-0 fs-12 uppercase text-muted" style={{ fontSize: '0.6rem' }}>{meter.type}</Badge>
+          {!isOnline && isMapped && (
+            <Badge bg="danger" className="bg-opacity-10 border border-danger border-opacity-10 px-2 py-0 fs-12 uppercase text-danger" style={{ fontSize: '0.6rem' }} title={offlineReason}>OFFLINE</Badge>
+          )}
         </div>
+        {!isOnline && isMapped && offlineReason && (
+          <span className="text-danger mt-1 font-monospace" style={{ fontSize: '0.6rem', opacity: 0.85 }} title={offlineReason}>
+            ⚠️ {offlineReason}
+          </span>
+        )}
       </div>
       <div className="mfm-polycarbonate-case shadow-2xl mx-auto" style={{ maxWidth: '270px', padding: '14px 10px', borderWidth: '8px', borderRadius: '24px' }}>
         {/* Bezel Screws */}
@@ -239,7 +247,7 @@ const MiniMFMMeter = ({ meter, isMapped = true, isOnline, onClick }) => {
                 <span className="mfm-led-label" style={{ fontSize: '0.5rem', marginTop: '2px' }}>CAL</span>
               </div>
               <div className="d-flex flex-column align-items-center">
-                <div className={`mfm-led-bulb bulb-green ${isOnline && isMapped ? 'glow-active pulse-dot-green' : ''}`} style={{ width: '8px', height: '8px', animation: isOnline && isMapped ? 'pulseGlow 1.8s infinite' : 'none' }}></div>
+                <div className={`mfm-led-bulb bulb-green ${isOnline && isMapped ? 'glow-activE-PULSE-dot-green' : ''}`} style={{ width: '8px', height: '8px', animation: isOnline && isMapped ? 'pulseGlow 1.8s infinite' : 'none' }}></div>
                 <span className="mfm-led-label" style={{ fontSize: '0.5rem', marginTop: '2px' }}>COM</span>
               </div>
               <div className="d-flex flex-column align-items-center">
@@ -406,13 +414,14 @@ const formatLastUpdated = (timestamp) => {
   const hours = pad(date.getHours());
   const minutes = pad(date.getMinutes());
   const seconds = pad(date.getSeconds());
-  
+
   return `${day}/${month} ${hours}:${minutes}:${seconds}`;
 };
 
 const SubMeters = () => {
   const location = useLocation();
   const { getOverallStatus, refreshStatuses } = useDeviceStatus();
+  const [selectedMeterFilter, setSelectedMeterFilter] = useState(null);
   const [selectedMeter, setSelectedMeter] = useState(null);
   const [meters, setMeters] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -472,12 +481,17 @@ const SubMeters = () => {
   const [groupSaveStatus, setGroupSaveStatus] = useState(null);
   const [showSaveSuccessPopup, setShowSaveSuccessPopup] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState('Group created successfully');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'online' | 'offline'
+  const [sortField, setSortField] = useState('load'); // 'id' | 'label' | 'load' | 'voltage' | 'current' | 'status'
+  const [sortDirection, setSortDirection] = useState('desc');
+  const [showLoadComparison, setShowLoadComparison] = useState(true);
   const groupsHydratedRef = useRef(false);
   const TELEMETRY_FRESHNESS_MS = 24 * 60 * 60 * 1000; // 24 hours freshness timeout (consistent with MainMeter.jsx)
 
   const getMeterOnlineStatus = (meterLabel) => {
     const template = getTemplateForMeter(meterLabel);
-    
+
     const meter = meters.find(
       m => String(m.label).trim().toUpperCase() === String(meterLabel).trim().toUpperCase()
     );
@@ -485,11 +499,11 @@ const SubMeters = () => {
     let hasTelemetryDataFallback = false;
     if (meter) {
       const lastTelemetryTs = Number(meter.lastTelemetryTimestamp);
-      // We check for telemetry in the last 10 minutes (consistent with telemetry polling rate)
+      // We check for telemetry in the last 2 minutes (consistent with live updates)
       isFreshTelemetry =
         Number.isFinite(lastTelemetryTs) &&
         lastTelemetryTs > 0 &&
-        Date.now() - lastTelemetryTs < 10 * 60 * 1000;
+        Date.now() - lastTelemetryTs < 2 * 60 * 1000;
 
       if (isFreshTelemetry && meter.telemetryValues) {
         const tv = meter.telemetryValues;
@@ -526,6 +540,53 @@ const SubMeters = () => {
     }
 
     return isFreshTelemetry;
+  };
+
+  // Helper to determine the specific reason why a meter is offline
+  const getMeterOfflineReason = (meterLabel) => {
+    const template = getTemplateForMeter(meterLabel);
+    const meter = meters.find(
+      m => String(m.label).trim().toUpperCase() === String(meterLabel).trim().toUpperCase()
+    );
+
+    if (!template?.mapping) {
+      return "Not mapped in configurations";
+    }
+
+    let devId = template.mapping.deviceId || template.mapping.emChangeConfig?.device;
+    if (!devId) {
+      const anyConfig = Object.values(template.mapping).find(cfg => cfg && typeof cfg === 'object' && cfg.device);
+      if (anyConfig) devId = anyConfig.device;
+    }
+    const gatewayUuid = template.mapping.gatewayUuid;
+
+    if (devId) {
+      const devStatusOnline = !!getOverallStatus(devId, gatewayUuid);
+      if (!devStatusOnline) {
+        return "Gateway/IoT device disconnected";
+      }
+    }
+
+    if (meter) {
+      const lastTelemetryTs = Number(meter.lastTelemetryTimestamp);
+      const isFreshTelemetry =
+        Number.isFinite(lastTelemetryTs) &&
+        lastTelemetryTs > 0 &&
+        Date.now() - lastTelemetryTs < 2 * 60 * 1000;
+      if (!isFreshTelemetry) {
+        if (lastTelemetryTs > 0) {
+          const diffSec = Math.round((Date.now() - lastTelemetryTs) / 1000);
+          if (diffSec < 60) return `Last update: ${diffSec}s ago`;
+          const diffMin = Math.round(diffSec / 60);
+          if (diffMin < 60) return `Last update: ${diffMin}m ago`;
+          const diffHrs = Math.round(diffMin / 60);
+          return `Last update: ${diffHrs}h ago`;
+        }
+        return "No telemetry received";
+      }
+    }
+
+    return null;
   };
 
   // Helper to check if a specific meter has an active device mapping (i.e. is mapped)
@@ -576,10 +637,10 @@ const SubMeters = () => {
             lastTelemetryTimestamp: existing?.lastTelemetryTimestamp ?? null
           };
         });
-        
+
         // Sort mapped list naturally so Meter-1 comes before Meter-2
         mapped.sort((a, b) => naturalSort(a.label, b.label));
-        
+
         return mapped;
       });
     }
@@ -587,7 +648,6 @@ const SubMeters = () => {
 
   useEffect(() => {
     let active = true;
-
     const hydrateGroups = async () => {
       if (meters.length === 0) {
         if (active) setMeterGroups([]);
@@ -665,10 +725,148 @@ const SubMeters = () => {
     return meters.filter(m => getMeterMappedStatus(m.label));
   }, [meters, templates]);
 
+  const filteredMeters = useMemo(() => {
+    return mappedMeters.filter(m => {
+      const isOnline = getMeterOnlineStatus(m.label);
+      if (statusFilter === 'online' && !isOnline) return false;
+      if (statusFilter === 'offline' && isOnline) return false;
+
+      if (selectedMeterFilter) {
+        const targetLabel = String(selectedMeterFilter.label || selectedMeterFilter).trim().toUpperCase();
+        const targetId = String(selectedMeterFilter.id || '').trim().toUpperCase();
+        const mLabel = String(m.label || '').trim().toUpperCase();
+        const mId = String(m.id || '').trim().toUpperCase();
+        if (mLabel !== targetLabel && mId !== targetId) return false;
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchLabel = (m.label || '').toLowerCase().includes(q);
+        const matchId = (m.id || '').toLowerCase().includes(q);
+        const matchType = (m.type || '').toLowerCase().includes(q);
+        if (!matchLabel && !matchId && !matchType) return false;
+      }
+      return true;
+    });
+  }, [mappedMeters, statusFilter, selectedMeterFilter, searchQuery, templates, getOverallStatus]);
+
+  const sortedMeters = useMemo(() => {
+    return [...filteredMeters].sort((a, b) => {
+      const isOnlineA = getMeterOnlineStatus(a.label);
+      const isOnlineB = getMeterOnlineStatus(b.label);
+      let valA, valB;
+
+      if (sortField === 'load') {
+        valA = isOnlineA ? Number(a.load || 0) : -1;
+        valB = isOnlineB ? Number(b.load || 0) : -1;
+      } else if (sortField === 'voltage') {
+        valA = isOnlineA ? Number(a.voltage || 0) : -1;
+        valB = isOnlineB ? Number(b.voltage || 0) : -1;
+      } else if (sortField === 'current') {
+        valA = isOnlineA ? Number(a.current || 0) : -1;
+        valB = isOnlineB ? Number(b.current || 0) : -1;
+      } else if (sortField === 'label') {
+        return sortDirection === 'asc' ? a.label.localeCompare(b.label) : b.label.localeCompare(a.label);
+      } else if (sortField === 'id') {
+        return sortDirection === 'asc' ? naturalSort(a.id, b.id) : naturalSort(b.id, a.id);
+      } else if (sortField === 'status') {
+        valA = isOnlineA ? 1 : 0;
+        valB = isOnlineB ? 1 : 0;
+      } else {
+        valA = 0; valB = 0;
+      }
+
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filteredMeters, sortField, sortDirection, templates, getOverallStatus]);
+
+  const kpiStats = useMemo(() => {
+    let onlineCount = 0;
+    let offlineCount = 0;
+    let totalKw = 0;
+    let totalVolts = 0;
+    let onlineVoltsCount = 0;
+    let maxMeter = null;
+    let maxKw = -1;
+
+    mappedMeters.forEach(m => {
+      const isOnline = getMeterOnlineStatus(m.label);
+      if (isOnline) {
+        onlineCount++;
+        const load = Number(m.load || 0);
+        totalKw += load;
+        const volt = Number(m.voltage || 0);
+        if (volt > 0) {
+          totalVolts += volt;
+          onlineVoltsCount++;
+        }
+        if (load > maxKw) {
+          maxKw = load;
+          maxMeter = m;
+        }
+      } else {
+        offlineCount++;
+      }
+    });
+
+    const avgVolts = onlineVoltsCount > 0 ? (totalVolts / onlineVoltsCount).toFixed(1) : '0.0';
+
+    return {
+      totalMeters: mappedMeters.length,
+      onlineCount,
+      offlineCount,
+      totalKw: totalKw.toFixed(2),
+      avgVolts,
+      maxMeterName: maxMeter ? maxMeter.label : 'None',
+      maxMeterKw: maxKw > -1 ? maxKw.toFixed(2) : '0.00'
+    };
+  }, [mappedMeters, templates, getOverallStatus]);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const exportToCSV = () => {
+    const headers = ["Meter ID", "Feed Description", "Type", "Power (kW)", "Avg. Volts (V)", "Phase Amps (A)", "Last Updated", "Health Status"];
+    const rows = sortedMeters.map(meter => {
+      const isMapped = getMeterMappedStatus(meter.label);
+      const isOnline = getMeterOnlineStatus(meter.label);
+      const hasTelemetry = Object.keys(meter.telemetryValues || {}).length > 0;
+      const showActive = !isMapped || isOnline || hasTelemetry;
+      const fmtNum = (v, d = 1) => { const n = Number(v); return isNaN(n) ? '0.0' : n.toFixed(d); };
+      return [
+        `"${meter.id}"`,
+        `"${meter.label}"`,
+        `"${meter.type || 'Sub Meter'}"`,
+        showActive ? fmtNum(meter.load, 2) : '—',
+        showActive ? fmtNum(meter.voltage) : '—',
+        showActive ? fmtNum(meter.current) : '—',
+        `"${formatLastUpdated(meter.lastTelemetryTimestamp)}"`,
+        isOnline ? 'Online' : 'Offline'
+      ];
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Sub_Meters_Diagnostics_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   // Derive activeMeter dynamically from meters array so it updates in real-time
   const activeMeter = useMemo(() => {
     if (!selectedMeter) return null;
-    return meters.find(m => m.id === selectedMeter.id) || selectedMeter;
+    return meters.find(m => m.id === selectedMeter.id || m.label === selectedMeter.label) || selectedMeter;
   }, [meters, selectedMeter]);
 
   const assignedMeterIds = useMemo(
@@ -884,7 +1082,7 @@ const SubMeters = () => {
         const userRole = localStorage.getItem('userRole') || 'USER';
         const roleName = (userData.roleName || userRole || '').toLowerCase();
         const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-        
+
         let filtered = mapped;
         if (!isSuperAdmin) {
           const orgId = userData.organizationId;
@@ -894,13 +1092,13 @@ const SubMeters = () => {
             }
             const orgName = t.mapping?.globalHierarchy?.organization || t.defaultValues?.mapping?.globalHierarchy?.organization;
             if (!orgName) return false;
-            
+
             const numId = Number(orgId);
             const orgLower = orgName.toLowerCase();
             if (numId === 12) {
               return orgLower === 'zomato' || orgLower === 'oragnization';
             }
-            if (numId === 24) {
+            if (numId === 24 || numId === 16) {
               return orgLower === 'hyperpure';
             }
             return false;
@@ -945,7 +1143,7 @@ const SubMeters = () => {
           const userRole = localStorage.getItem('userRole') || 'USER';
           const roleName = (userData.roleName || userRole || '').toLowerCase();
           const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-          
+
           let filtered = mapped;
           if (!isSuperAdmin) {
             const orgId = userData.organizationId;
@@ -955,13 +1153,13 @@ const SubMeters = () => {
               }
               const orgName = t.mapping?.globalHierarchy?.organization || t.defaultValues?.mapping?.globalHierarchy?.organization;
               if (!orgName) return false;
-              
+
               const numId = Number(orgId);
               const orgLower = orgName.toLowerCase();
               if (numId === 12) {
                 return orgLower === 'zomato' || orgLower === 'oragnization';
               }
-              if (numId === 24) {
+              if (numId === 24 || numId === 16) {
                 return orgLower === 'hyperpure';
               }
               return false;
@@ -1189,17 +1387,38 @@ const SubMeters = () => {
           ];
           let latestTs = null;
           allCfgs.forEach(cfg => {
-            if (cfg && cfg.enabled !== false && cfg.module) {
-              const matchStat = stats.find(s =>
-                String(s.moduleId) === String(cfg.module) ||
-                String(s.meta?.module_id) === String(cfg.module)
-              );
-              if (matchStat?.meta?.created_at_timestamp) {
-                const raw = matchStat.meta.created_at_timestamp;
-                // Handle both seconds and milliseconds timestamps
-                const tsMs = raw > 1e12 ? raw : raw * 1000;
-                if (!latestTs || tsMs > latestTs) latestTs = tsMs;
+            if (cfg && cfg.enabled !== false) {
+              // 1. Check primary module ID
+              if (cfg.module && cfg.module !== 'ALL') {
+                const matchStat = stats.find(s =>
+                  String(s.moduleId) === String(cfg.module) ||
+                  String(s.meta?.module_id) === String(cfg.module)
+                );
+                if (matchStat?.meta?.created_at_timestamp) {
+                  const raw = matchStat.meta.created_at_timestamp;
+                  const tsMs = raw > 1e12 ? raw : raw * 1000;
+                  if (!latestTs || tsMs > latestTs) latestTs = tsMs;
+                }
               }
+              // 2. Check nested field custom module IDs (e.g. "4698::4,14F")
+              Object.keys(cfg).forEach(key => {
+                const val = cfg[key];
+                if (typeof val === 'string' && val.includes(':')) {
+                  const parts = val.split(':');
+                  const fieldModuleId = parts[0];
+                  if (fieldModuleId) {
+                    const matchStat = stats.find(s =>
+                      String(s.moduleId) === String(fieldModuleId) ||
+                      String(s.meta?.module_id) === String(fieldModuleId)
+                    );
+                    if (matchStat?.meta?.created_at_timestamp) {
+                      const raw = matchStat.meta.created_at_timestamp;
+                      const tsMs = raw > 1e12 ? raw : raw * 1000;
+                      if (!latestTs || tsMs > latestTs) latestTs = tsMs;
+                    }
+                  }
+                }
+              });
             }
           });
           if (latestTs) updatedMeter.lastTelemetryTimestamp = latestTs;
@@ -1236,6 +1455,8 @@ const SubMeters = () => {
           if (updatedMeter.vB !== undefined && updatedMeter.vB !== null && !isNaN(updatedMeter.vB)) phaseVoltages.push(updatedMeter.vB);
           if (phaseVoltages.length > 0) {
             updatedMeter.voltage = phaseVoltages.reduce((sum, v) => sum + v, 0) / phaseVoltages.length;
+          } else if (telemetryValues.vLNAvg !== undefined && telemetryValues.vLNAvg !== null && !isNaN(Number(telemetryValues.vLNAvg))) {
+            updatedMeter.voltage = Number(telemetryValues.vLNAvg);
           } else {
             updatedMeter.voltage = 0.0;
           }
@@ -1247,6 +1468,8 @@ const SubMeters = () => {
           if (updatedMeter.iB !== undefined && updatedMeter.iB !== null && !isNaN(updatedMeter.iB)) phaseCurrents.push(updatedMeter.iB);
           if (phaseCurrents.length > 0) {
             updatedMeter.current = phaseCurrents.reduce((sum, i) => sum + i, 0) / phaseCurrents.length;
+          } else if (telemetryValues.iAvg !== undefined && telemetryValues.iAvg !== null && !isNaN(Number(telemetryValues.iAvg))) {
+            updatedMeter.current = Number(telemetryValues.iAvg);
           } else {
             updatedMeter.current = 0.0;
           }
@@ -1367,74 +1590,196 @@ const SubMeters = () => {
     };
   }, [templates, meters.length]);
 
+  const totalActiveKw = mappedMeters.reduce((sum, m) => {
+    const isOnline = getMeterOnlineStatus(m.label);
+    return sum + (isOnline ? (Number(m.load) || 0) : 0);
+  }, 0).toFixed(1);
+
   return (
     <div className="fade-in">
-      {/* HEADER SECTION */}
-      <div className="page-header d-flex justify-content-between align-items-center mb-4">
-        <div>
-          <h2 className="mb-1 text-white fw-bold d-flex align-items-center gap-2">
-            <Cpu className="text-info" size={26} /> Facility Sub-Meters Dashboard
-          </h2>
-          <p className="text-secondary fs-7">Granular power metrics, current loading, and status indicators across individual feeds.</p>
+      {/* UNIFIED SCADA COMMAND HEADER DECK */}
+      <div 
+        className="py-2 px-3 mb-4 rounded-4 d-flex justify-content-between align-items-center flex-wrap gap-3 shadow-lg"
+        style={{
+          background: 'rgba(15, 23, 42, 0.85)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+          position: 'relative',
+          zIndex: 10
+        }}
+      >
+        {/* LEFT SIDE: Live Informative SCADA Telemetry Summary */}
+        <div className="d-flex align-items-center gap-2 flex-wrap">
+          {/* Live Total Load Metric Pill */}
+          <div className="d-flex align-items-center gap-2 px-3 py-1 rounded-pill shadow-sm" style={{ background: 'rgba(249, 115, 22, 0.15)', border: '1px solid rgba(249, 115, 22, 0.4)', height: '32px' }}>
+            <Zap size={14} className="text-warning animate-pulse" />
+            <span className="text-white-50 fs-12 uppercase tracking-wider">Total Load:</span>
+            <span className="text-warning fw-extrabold fs-12 font-monospace">{totalActiveKw} kW</span>
+          </div>
+
+          {/* Sub-Meters Online Status Pill */}
+          <div className="d-flex align-items-center gap-2 px-3 py-1 rounded-pill shadow-sm" style={{ background: 'rgba(30, 41, 59, 0.7)', border: '1px solid rgba(255, 255, 255, 0.12)', height: '32px' }}>
+            <Activity size={13} className="text-info" />
+            <span className="text-white-50 fs-12">Active Feeds:</span>
+            <span className="text-white fw-bold fs-12">{kpiStats.onlineCount} / {mappedMeters.length}</span>
+            <span className="spinner-grow spinner-grow-sm text-success ms-0.5" style={{ width: '6px', height: '6px' }} />
+          </div>
         </div>
+
+        {/* RIGHT SIDE: Interactive Action Controls */}
         <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+          {/* CONTROL 1: Select Sub-Meter Dropdown */}
           {mappedMeters.length > 0 && (
-            <Dropdown>
-              <Dropdown.Toggle 
-                variant="dark" 
-                className="scada-dropdown-toggle py-2 px-3 fs-13 rounded-pill d-flex align-items-center justify-content-between" 
-                style={{ width: '200px', cursor: 'pointer' }}
-              >
-                {selectedMeter ? selectedMeter.label : 'Select Sub-Meter...'}
-              </Dropdown.Toggle>
-              <Dropdown.Menu variant="dark" className="scada-dropdown-menu" style={{ width: '200px' }}>
-                <Dropdown.Item 
-                  onClick={() => setSelectedMeter(null)} 
-                  className="scada-dropdown-item fs-13"
+            <div className="d-flex align-items-center gap-1">
+              <Dropdown align="start">
+                <Dropdown.Toggle 
+                  variant="dark" 
+                  className="scada-dropdown-toggle py-1 px-3 fs-13 rounded-pill d-flex align-items-center justify-content-between gap-2 border border-secondary border-opacity-25 shadow-sm" 
+                  style={{ minWidth: '210px', height: '32px', cursor: 'pointer', background: 'rgba(30, 41, 59, 0.7)' }}
                 >
-                  Select Sub-Meter...
-                </Dropdown.Item>
-                {mappedMeters.map(m => {
-                  return (
-                    <Dropdown.Item 
-                      key={m.id} 
-                      onClick={() => {
-                        setSelectedMeter(m);
-                        if (refreshStatuses) refreshStatuses();
-                      }} 
-                      className="scada-dropdown-item fs-13"
-                    >
-                      {m.label}
-                    </Dropdown.Item>
-                  );
-                })}
-              </Dropdown.Menu>
-            </Dropdown>
+                  <span className="text-truncate me-2 fw-medium text-white fs-12">
+                    {selectedMeterFilter ? selectedMeterFilter.label : 'Select Sub-Meter...'}
+                  </span>
+                </Dropdown.Toggle>
+                <Dropdown.Menu variant="dark" className="scada-dropdown-menu shadow-2xl p-1.5" style={{ minWidth: '220px', maxHeight: '300px', overflowY: 'auto' }}>
+                  <Dropdown.Item 
+                    onClick={() => setSelectedMeterFilter(null)} 
+                    className={`scada-dropdown-item fs-12 d-flex align-items-center justify-content-between py-2 px-3 rounded-2 ${!selectedMeterFilter ? 'active' : ''}`}
+                  >
+                    <span className="text-white">Select Sub-Meter... (All)</span>
+                    <span className="px-2 py-0.5 rounded-pill text-white fw-bold ms-2" style={{ background: '#0284c7', fontSize: '0.7rem' }}>
+                      {mappedMeters.length}
+                    </span>
+                  </Dropdown.Item>
+                  {mappedMeters.map(m => {
+                    const isSelected = selectedMeterFilter && (selectedMeterFilter.id === m.id || selectedMeterFilter.label === m.label);
+                    const isOnline = getMeterOnlineStatus(m.label);
+                    return (
+                      <Dropdown.Item
+                        key={m.id}
+                        onClick={() => {
+                          setSelectedMeterFilter(isSelected ? null : m);
+                          if (refreshStatuses) refreshStatuses();
+                        }}
+                        className={`scada-dropdown-item fs-12 d-flex align-items-center justify-content-between py-2 px-3 rounded-2 mt-1 ${isSelected ? 'active' : ''}`}
+                      >
+                        <span className="text-white text-truncate me-2">{m.label}</span>
+                        <span style={{ fontSize: '0.65rem' }}>{isOnline ? '🟢' : '🔴'}</span>
+                      </Dropdown.Item>
+                    );
+                  })}
+                </Dropdown.Menu>
+              </Dropdown>
+              {selectedMeterFilter && (
+                <button
+                  className="btn btn-sm btn-outline-secondary text-white-50 rounded-circle p-0 d-flex align-items-center justify-content-center"
+                  style={{ width: '24px', height: '24px', fontSize: '0.85rem' }}
+                  onClick={() => setSelectedMeterFilter(null)}
+                  title="Clear meter filter"
+                >
+                  ×
+                </button>
+              )}
+            </div>
           )}
+
+          {/* CONTROL 2: Search Input */}
+          <div className="d-flex align-items-center position-relative" style={{ width: '200px' }}>
+            <Search size={13} className="position-absolute ms-3" style={{ color: 'rgba(255, 255, 255, 0.75)' }} />
+            <Form.Control
+              type="text"
+              placeholder="Search feed or ID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="ps-5 bg-dark border-secondary border-opacity-25 text-white rounded-pill scada-search-input"
+              style={{ height: '32px', fontSize: '0.75rem' }}
+            />
+            {searchQuery && (
+              <button className="btn btn-link text-white-50 position-absolute end-0 me-2 py-0 border-0" style={{ fontSize: '0.8rem' }} onClick={() => setSearchQuery('')}>×</button>
+            )}
+          </div>
+
+          {/* CONTROL 3: Status Filter Dropdown (All, Online, Offline) */}
+          <Dropdown align="end">
+            <Dropdown.Toggle
+              variant="dark"
+              className="scada-dropdown-toggle py-1 px-3 fs-12 rounded-pill d-flex align-items-center justify-content-between gap-2 border border-secondary border-opacity-25 shadow-sm"
+              style={{ minWidth: '150px', height: '32px', cursor: 'pointer', background: 'rgba(30, 41, 59, 0.7)' }}
+            >
+              <span className="d-flex align-items-center gap-1.5 fs-12 fw-medium">
+                <Filter size={13} className="text-info" />
+                {statusFilter === 'all' && (
+                  <span>All Feeds <span className="ms-1 px-2 py-0.5 rounded-pill text-white fw-bold" style={{ background: '#0284c7', fontSize: '0.7rem' }}>{mappedMeters.length}</span></span>
+                )}
+                {statusFilter === 'online' && (
+                  <span className="text-success">🟢 Online <span className="ms-1 px-2 py-0.5 rounded-pill text-white fw-bold" style={{ background: '#16a34a', fontSize: '0.7rem' }}>{kpiStats.onlineCount}</span></span>
+                )}
+                {statusFilter === 'offline' && (
+                  <span className="text-danger">🔴 Offline <span className="ms-1 px-2 py-0.5 rounded-pill text-white fw-bold" style={{ background: '#dc2626', fontSize: '0.7rem' }}>{kpiStats.offlineCount}</span></span>
+                )}
+              </span>
+            </Dropdown.Toggle>
+            <Dropdown.Menu variant="dark" className="scada-dropdown-menu shadow-2xl p-1.5" style={{ minWidth: '200px' }}>
+              <Dropdown.Item
+                onClick={() => setStatusFilter('all')}
+                className={`scada-dropdown-item fs-12 d-flex align-items-center justify-content-between py-2 px-3 rounded-2 ${statusFilter === 'all' ? 'active' : ''}`}
+              >
+                <span className="d-flex align-items-center gap-2 font-medium text-white">🌐 All Feeds</span>
+                <span className="px-2 py-0.5 rounded-pill text-white fw-bold ms-2" style={{ background: '#0284c7', fontSize: '0.72rem', minWidth: '24px', textAlign: 'center' }}>
+                  {mappedMeters.length}
+                </span>
+              </Dropdown.Item>
+
+              <Dropdown.Item
+                onClick={() => setStatusFilter('online')}
+                className={`scada-dropdown-item fs-12 d-flex align-items-center justify-content-between py-2 px-3 rounded-2 mt-1 ${statusFilter === 'online' ? 'active' : ''}`}
+              >
+                <span className="d-flex align-items-center gap-2 font-medium text-white">🟢 Online Feeds</span>
+                <span className="px-2 py-0.5 rounded-pill text-white fw-bold ms-2" style={{ background: '#16a34a', fontSize: '0.72rem', minWidth: '24px', textAlign: 'center' }}>
+                  {kpiStats.onlineCount}
+                </span>
+              </Dropdown.Item>
+
+              <Dropdown.Item
+                onClick={() => setStatusFilter('offline')}
+                className={`scada-dropdown-item fs-12 d-flex align-items-center justify-content-between py-2 px-3 rounded-2 mt-1 ${statusFilter === 'offline' ? 'active' : ''}`}
+              >
+                <span className="d-flex align-items-center gap-2 font-medium text-white">🔴 Offline Feeds</span>
+                <span className="px-2 py-0.5 rounded-pill text-white fw-bold ms-2" style={{ background: '#dc2626', fontSize: '0.72rem', minWidth: '24px', textAlign: 'center' }}>
+                  {kpiStats.offlineCount}
+                </span>
+              </Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown>
+
           {groupSaveStatus && <Badge bg="success" className="px-3 py-2">{groupSaveStatus}</Badge>}
         </div>
       </div>
 
       {/* METERS CARD GRID */}
-      <Row className="row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 g-3 mb-4 justify-content-center">
-        {mappedMeters.length === 0 ? (
+      <Row className="row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5 g-3 mb-4 justify-content-center">
+        {filteredMeters.length === 0 ? (
           <Col xs={12} className="text-center py-5">
             <div className="p-5 rounded-4 scada-glass-section border-change" style={{ maxWidth: '600px', margin: '0 auto' }}>
               <Zap size={48} className="text-info mb-3 animate-pulse" />
-              <h4 className="text-white fw-black mb-2">No Sub-Meters Mapped</h4>
-              <p className="text-secondary mb-0">Please map your sub-meters in the Module Configurator / Templates page to see live telemetry analytics here.</p>
+              <h4 className="text-white fw-black mb-2">No Matching Sub-Meters</h4>
+              <p className="text-secondary mb-0">Try clearing your search query or changing status filter options.</p>
             </div>
           </Col>
         ) : (
-          mappedMeters.map((meter, index) => {
+          filteredMeters.map((meter, index) => {
             const isMapped = getMeterMappedStatus(meter.label);
             const isOnline = getMeterOnlineStatus(meter.label);
+            const offlineReason = getMeterOfflineReason(meter.label);
             return (
               <Col key={index} className="d-flex justify-content-center">
                 <MiniMFMMeter
                   meter={meter}
                   isMapped={isMapped}
                   isOnline={isOnline}
+                  offlineReason={offlineReason}
                   onClick={() => {
                     setSelectedMeter(meter);
                     if (refreshStatuses) refreshStatuses();
@@ -1446,12 +1791,15 @@ const SubMeters = () => {
         )}
       </Row>
 
-      {/* FILTER TABS & LOAD ANALYSIS */}
+      {/* FILTER TABS & SORTABLE PERFORMANCE DIAGNOSTICS */}
       <Card className="scada-card border-0 text-white mt-4" style={{ background: '#0f172a' }}>
         <Card.Body className="p-4">
-          <h5 className="mb-4 fw-black text-white d-flex align-items-center gap-2 uppercase tracking-wide fs-11">
-            <Activity className="text-info" size={18} /> Sub-Meters Performance Diagnostics
-          </h5>
+          <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            <h5 className="fw-black text-white d-flex align-items-center gap-2 uppercase tracking-wide fs-11 mb-0">
+              <Activity className="text-info" size={18} /> Sub-Meters Performance Diagnostics
+            </h5>
+            <span className="text-secondary fs-12">Showing {sortedMeters.length} of {mappedMeters.length} feeds</span>
+          </div>
 
           <Tabs defaultActiveKey="all" className="scada-tabs border-bottom border-secondary border-opacity-15 mb-4">
             <Tab eventKey="all" title="ALL FEEDS">
@@ -1459,36 +1807,60 @@ const SubMeters = () => {
                 <Table hover borderless className="align-middle scada-table text-white mb-0">
                   <thead>
                     <tr className="border-bottom border-secondary border-opacity-15 fs-13 text-secondary text-uppercase tracking-wider">
-                      <th className="py-3">Meter ID</th>
-                      <th className="py-3">Feed Description</th>
-                      <th className="py-3 text-center">Power</th>
-                      <th className="py-3 text-center">Avg. Volts</th>
-                      <th className="py-3 text-center">Phase Amps</th>
-                      <th className="py-3 text-center">Last Updated</th>
-                      <th className="py-3 text-end">Health Status</th>
+                      <th className="py-3 d-none d-sm-table-cell style-cursor" onClick={() => handleSort('id')} style={{ cursor: 'pointer' }}>
+                        Meter ID {sortField === 'id' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      </th>
+                      <th className="py-3" onClick={() => handleSort('label')} style={{ cursor: 'pointer' }}>
+                        Feed Description {sortField === 'label' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      </th>
+                      <th className="py-3 text-center" onClick={() => handleSort('load')} style={{ cursor: 'pointer' }}>
+                        Power {sortField === 'load' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      </th>
+                      <th className="py-3 text-center d-none d-md-table-cell" onClick={() => handleSort('voltage')} style={{ cursor: 'pointer' }}>
+                        Avg. Volts {sortField === 'voltage' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      </th>
+                      <th className="py-3 text-center d-none d-md-table-cell" onClick={() => handleSort('current')} style={{ cursor: 'pointer' }}>
+                        Phase Amps {sortField === 'current' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      </th>
+                      <th className="py-3 text-center d-none d-md-table-cell">Last Updated</th>
+                      <th className="py-3 text-end" onClick={() => handleSort('status')} style={{ cursor: 'pointer' }}>
+                        Health Status {sortField === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {mappedMeters.length === 0 ? (
+                    {sortedMeters.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center py-4 text-secondary">No mapped sub-meters found.</td>
+                        <td colSpan={7} className="text-center py-4 text-secondary">No mapped sub-meters match criteria.</td>
                       </tr>
                     ) : (
-                      mappedMeters.map((meter, idx) => {
+                      sortedMeters.map((meter, idx) => {
                         const isMapped = getMeterMappedStatus(meter.label);
                         const isOnline = getMeterOnlineStatus(meter.label);
                         const hasTelemetry = Object.keys(meter.telemetryValues || {}).length > 0;
                         const showActive = !isMapped || isOnline || hasTelemetry;
                         const fmtNum = (v, d = 1) => { const n = Number(v); return isNaN(n) ? '0.0' : n.toFixed(d); };
+                        const offlineReason = getMeterOfflineReason(meter.label);
                         return (
-                          <tr key={idx} className="border-bottom border-secondary border-opacity-5">
-                            <td className="py-3 font-monospace text-info fs-13">{meter.id}</td>
+                          <tr key={idx} className="border-bottom border-secondary border-opacity-5" style={{ cursor: 'pointer' }} onClick={() => setSelectedMeter(meter)}>
+                            <td className="py-3 font-monospace text-info fs-13 d-none d-sm-table-cell">{meter.id}</td>
                             <td className="py-3 text-white fw-bold">{meter.label}</td>
                             <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load, 2)} kW` : '—'}</td>
-                            <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
-                            <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.current)} A` : '—'}</td>
-                            <td className="py-3 text-center text-secondary font-monospace fs-13">{formatLastUpdated(meter.lastTelemetryTimestamp)}</td>
-                            <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? 'Online' : 'Offline'} /> : '—'}</td>
+                            <td className="py-3 text-center text-secondary d-none d-md-table-cell">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
+                            <td className="py-3 text-center text-secondary d-none d-md-table-cell">{showActive ? `${fmtNum(meter.current)} A` : '—'}</td>
+                            <td className="py-3 text-center text-secondary font-monospace fs-13 d-none d-md-table-cell">{formatLastUpdated(meter.lastTelemetryTimestamp)}</td>
+                            <td className="py-3 text-end">
+                              {isMapped ? (
+                                <div className="d-flex flex-column align-items-end gap-1">
+                                  <StatusBadge status={isOnline ? 'Online' : 'Offline'} />
+                                  {!isOnline && offlineReason && (
+                                    <span className="text-danger opacity-75 font-monospace animate-pulse" style={{ fontSize: '0.6rem' }}>
+                                      {offlineReason}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : '—'}
+                            </td>
                           </tr>
                         );
                       })
@@ -1502,34 +1874,46 @@ const SubMeters = () => {
                 <Table hover borderless className="align-middle scada-table text-white mb-0">
                   <thead>
                     <tr className="border-bottom border-secondary border-opacity-15 fs-13 text-secondary text-uppercase tracking-wider">
-                      <th className="py-3">Meter ID</th>
+                      <th className="py-3 d-none d-sm-table-cell">Meter ID</th>
                       <th className="py-3">Feed Description</th>
                       <th className="py-3 text-center">Power</th>
-                      <th className="py-3 text-center">Avg. Volts</th>
-                      <th className="py-3 text-center">Last Updated</th>
+                      <th className="py-3 text-center d-none d-md-table-cell">Avg. Volts</th>
+                      <th className="py-3 text-center d-none d-md-table-cell">Last Updated</th>
                       <th className="py-3 text-end">Health Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {mappedMeters.filter(m => m.type === 'Server Room' || m.type === 'Utility').length === 0 ? (
+                    {sortedMeters.filter(m => m.type === 'Server Room' || m.type === 'Utility').length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-4 text-secondary">No critical mapped sub-meters found.</td>
+                        <td colSpan={6} className="text-center py-4 text-secondary">No critical mapped sub-meters found matching filters.</td>
                       </tr>
                     ) : (
-                      mappedMeters.filter(m => m.type === 'Server Room' || m.type === 'Utility').map((meter, idx) => {
+                      sortedMeters.filter(m => m.type === 'Server Room' || m.type === 'Utility').map((meter, idx) => {
                         const isMapped = getMeterMappedStatus(meter.label);
                         const isOnline = getMeterOnlineStatus(meter.label);
                         const hasTelemetry = Object.keys(meter.telemetryValues || {}).length > 0;
                         const showActive = !isMapped || isOnline || hasTelemetry;
                         const fmtNum = (v, d = 1) => { const n = Number(v); return isNaN(n) ? '0.0' : n.toFixed(d); };
+                        const offlineReason = getMeterOfflineReason(meter.label);
                         return (
                           <tr key={idx} className="border-bottom border-secondary border-opacity-5">
-                            <td className="py-3 font-monospace text-info fs-13">{meter.id}</td>
+                            <td className="py-3 font-monospace text-info fs-13 d-none d-sm-table-cell">{meter.id}</td>
                             <td className="py-3 text-white fw-bold">{meter.label}</td>
                             <td className="py-3 text-center text-white fw-bold">{showActive ? `${fmtNum(meter.load, 2)} kW` : '—'}</td>
-                            <td className="py-3 text-center text-secondary">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
-                            <td className="py-3 text-center text-secondary font-monospace fs-13">{formatLastUpdated(meter.lastTelemetryTimestamp)}</td>
-                            <td className="py-3 text-end">{isMapped ? <StatusBadge status={isOnline ? 'Online' : 'Offline'} /> : '—'}</td>
+                            <td className="py-3 text-center text-secondary d-none d-md-table-cell">{showActive ? `${fmtNum(meter.voltage)} V` : '—'}</td>
+                            <td className="py-3 text-center text-secondary font-monospace fs-13 d-none d-md-table-cell">{formatLastUpdated(meter.lastTelemetryTimestamp)}</td>
+                            <td className="py-3 text-end">
+                              {isMapped ? (
+                                <div className="d-flex flex-column align-items-end gap-1">
+                                  <StatusBadge status={isOnline ? 'Online' : 'Offline'} />
+                                  {!isOnline && offlineReason && (
+                                    <span className="text-danger opacity-75 font-monospace animate-pulse" style={{ fontSize: '0.6rem' }}>
+                                      {offlineReason}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : '—'}
+                            </td>
                           </tr>
                         );
                       })
@@ -1744,7 +2128,6 @@ const SubMeters = () => {
         </Modal.Body>
       </Modal>
 
-      {/* DETAILED DATA MODAL */}
       <Modal show={selectedMeter !== null && activeMeter !== null} onHide={() => setSelectedMeter(null)} size="lg" centered dialogClassName="scada-glass-modal" contentClassName="border-0 text-white">
         {activeMeter && (() => {
           const isMapped = getMeterMappedStatus(activeMeter.label);
@@ -1791,10 +2174,9 @@ const SubMeters = () => {
                     'vRY', 'vYB', 'vBR', 'pfR', 'pfY', 'pfB',
                     'loadHrs', 'loadMin', 'noLoadHrs', 'noLoadMin', 'loadPct'
                   ];
-
+                  
                   return (
                     <Row className="g-3">
-                      {/* Left Column: Change Settings Telemetry */}
                       <Col xs={12}>
                         <div className="p-3 rounded-4 scada-glass-section border-change h-100">
                           <h6 className="text-info glow-text-info uppercase tracking-wider fs-12 mb-3 d-flex align-items-center gap-2 fw-bold">
@@ -1804,10 +2186,9 @@ const SubMeters = () => {
                             {ALL_CHANGE_FIELDS.map(key => {
                               const meta = FIELD_LABELS[key] || { label: key, unit: '' };
                               const isFieldMapped = activeMeter?.moduleEvents?.change?.some(e => e.key === key) ||
-                                                    activeMeter?.moduleEvents?.warning?.some(e => e.key === key) ||
-                                                    activeMeter?.moduleEvents?.read?.some(e => e.key === key);
-                              
-                              // HIDE UNMAPPED FIELDS IF METER IS MAPPED
+                                activeMeter?.moduleEvents?.warning?.some(e => e.key === key) ||
+                                activeMeter?.moduleEvents?.read?.some(e => e.key === key);
+
                               if (isMapped && !isFieldMapped) return null;
 
                               const shouldShowValue = !isMapped || isFieldMapped;

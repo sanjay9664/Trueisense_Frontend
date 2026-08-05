@@ -22,8 +22,13 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3
 
 const EnergyPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();
+
   
   const [selectedSiteId, setSelectedSiteId] = useState(() => {
+
+
+  const siteId = useMemo(() => {
+
     try {
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
@@ -59,7 +64,7 @@ const EnergyPDFReport = () => {
   const [generating, setGenerating] = useState(false);
   const [downloadType, setDownloadType] = useState(null);
   const [downloadSuccess, setDownloadSuccess] = useState(null);
-  
+
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
@@ -131,13 +136,13 @@ const EnergyPDFReport = () => {
       } catch (err) {
         console.error('Error fetching devices:', err);
         setErrorMsg('Failed to fetch devices. Using cached templates.');
-        
+
         // Fallback: load templates from local storage
         const saved = localStorage.getItem('scada_templates');
         if (saved) {
           try {
             setTemplates(JSON.parse(saved));
-          } catch (e) {}
+          } catch (e) { }
         }
       } finally {
         setLoadingDevices(false);
@@ -153,7 +158,7 @@ const EnergyPDFReport = () => {
     if (saved) {
       try {
         setTemplates(JSON.parse(saved));
-      } catch (e) {}
+      } catch (e) { }
     }
   }, []);
 
@@ -187,7 +192,7 @@ const EnergyPDFReport = () => {
         }))
         .sort((a, b) => naturalSort(a.label, b.label));
     }
-    
+
     // Fallback: templates mapping
     return templates
       .filter(t => t.module === 'Sub Meters')
@@ -227,11 +232,11 @@ const EnergyPDFReport = () => {
   const getMeterOnlineStatus = (meterId) => {
     const option = allMeterOptions.find(m => String(m.id) === String(meterId));
     if (!option) return false;
-    
+
     if (option.sochiotMeta) {
       return option.sochiotMeta.mode === 'ONLINE' || option.isActive;
     }
-    
+
     const template = templates.find(t => String(t.id) === String(meterId));
     if (!template || !template.mapping) return false;
 
@@ -266,13 +271,13 @@ const EnergyPDFReport = () => {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+
         if (!res.ok) {
           const text = await res.text();
           let json;
-          try { json = JSON.parse(text); } catch (e) {}
-          const errorMsg = (typeof json?.error === 'object' && json?.error?.message) 
-            ? json.error.message 
+          try { json = JSON.parse(text); } catch (e) { }
+          const errorMsg = (typeof json?.error === 'object' && json?.error?.message)
+            ? json.error.message
             : (json?.message || (typeof json?.error === 'string' ? json.error : null) || `Download failed: ${res.statusText}`);
           throw new Error(errorMsg);
         }
@@ -286,7 +291,7 @@ const EnergyPDFReport = () => {
         a.click();
         a.remove();
         window.URL.revokeObjectURL(downloadUrl);
-        
+
         setDownloadSuccess('excel');
         setTimeout(() => setDownloadSuccess(null), 4000);
       } else if (type === 'pdf') {
@@ -296,13 +301,13 @@ const EnergyPDFReport = () => {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+
         if (!res.ok) {
           const text = await res.text();
           let json;
-          try { json = JSON.parse(text); } catch (e) {}
-          const errorMsg = (typeof json?.error === 'object' && json?.error?.message) 
-            ? json.error.message 
+          try { json = JSON.parse(text); } catch (e) { }
+          const errorMsg = (typeof json?.error === 'object' && json?.error?.message)
+            ? json.error.message
             : (json?.message || (typeof json?.error === 'string' ? json.error : null) || `Fetch failed: ${res.statusText}`);
           throw new Error(errorMsg);
         }
@@ -327,17 +332,17 @@ const EnergyPDFReport = () => {
     const meterLabel = selectedMeterInfo?.label || 'Meter';
     const dateStr = new Date().toLocaleString();
     const doc = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
-    
+
     doc.setFontSize(18);
     doc.setTextColor(224, 94, 0); // TRUEiSENSE Orange
     doc.text(`ENERGY TELEMETRY CONSOLIDATED REPORT`, 14, 20);
-    
+
     doc.setFontSize(9);
     doc.setTextColor(100, 116, 139);
     doc.text(`Generated on: ${dateStr}`, 14, 28);
     doc.text(`Target Asset: ${meterLabel} (Sub Meter)`, 14, 33);
     doc.text(`Interval Ledger: ${interval} (From: ${fromDate} to: ${toDate})`, 14, 38);
-    
+
     doc.setDrawColor(224, 94, 0, 0.3);
     doc.line(14, 42, 283, 42); // Horizontal line
 
@@ -349,18 +354,18 @@ const EnergyPDFReport = () => {
       doc.setTextColor(30, 41, 59); // Slate 800
       doc.setFont('helvetica', 'bold');
       doc.text('SUMMARY STATISTICS', 14, 48);
-      
+
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8.5);
       doc.setTextColor(71, 85, 105); // Slate 600
-      
+
       doc.text(`Total Energy Consumed: ${fmt(summary.totalEnergyConsumed, 2)} kWh`, 14, 54);
       doc.text(`Average Power Factor: ${fmt(summary.pfAvg, 4)}`, 14, 59);
       doc.text(`Voltage Avg: ${fmt(summary.voltageAvg, 2)} V`, 95, 54);
       doc.text(`Voltage Min: ${fmt(summary.voltageMin, 2)} V`, 95, 59);
       doc.text(`Voltage Max: ${fmt(summary.voltageMax, 2)} V`, 95, 64);
       doc.text(`Current Avg: ${fmt(summary.currentAvg, 2)} A`, 180, 54);
-      
+
       doc.setDrawColor(224, 94, 0, 0.15);
       doc.line(14, 68, 283, 68);
     }
@@ -370,18 +375,18 @@ const EnergyPDFReport = () => {
       const start = new Date(item.windowStart);
       const end = new Date(item.windowEnd);
       const adjustedEnd = interval === 'DAILY' ? new Date(end.getTime() - 1000) : end;
-      
+
       const totalKwh = item.energyDelta !== undefined && item.energyDelta !== null
         ? item.energyDelta
         : (item.closingEnergy !== null && item.openingEnergy !== null
-            ? Math.max(0, item.closingEnergy - item.openingEnergy)
-            : null);
+          ? Math.max(0, item.closingEnergy - item.openingEnergy)
+          : null);
 
       const totalKvah = item.kvahDelta !== undefined && item.kvahDelta !== null
         ? item.kvahDelta
         : (item.closingKvah !== null && item.openingKvah !== null
-            ? Math.max(0, item.closingKvah - item.openingKvah)
-            : null);
+          ? Math.max(0, item.closingKvah - item.openingKvah)
+          : null);
 
       return [
         start.toLocaleString('en-IN'),
@@ -404,10 +409,10 @@ const EnergyPDFReport = () => {
     autoTable(doc, {
       startY: startTableY,
       head: [[
-        'Start Time', 'End Time', 
-        'Energy (kWh)', 'Apparent (kVAh)', 'Max Demand (kW)', 
-        'Volt Avg (V)', 'Volt Max (V)', 'Volt Min (V)', 
-        'Amp Avg (A)', 'Amp Max (A)', 'Amp Min (A)', 
+        'Start Time', 'End Time',
+        'Energy (kWh)', 'Apparent (kVAh)', 'Max Demand (kW)',
+        'Volt Avg (V)', 'Volt Max (V)', 'Volt Min (V)',
+        'Amp Avg (A)', 'Amp Max (A)', 'Amp Min (A)',
         'Avg. PF'
       ]],
       body: tableBody,
@@ -417,11 +422,11 @@ const EnergyPDFReport = () => {
     });
 
     const pageCount = doc.internal.getNumberOfPages();
-    for(let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(8);
-        doc.setTextColor(150);
-        doc.text(`Page ${i} of ${pageCount} - TRUEiSENSE Smart Monitoring System`, 14, 200);
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(`Page ${i} of ${pageCount} - E-PULSE`, 14, 200);
     }
 
     doc.save(`${meterLabel.replace(/\s+/g, '_')}_Consolidated_Report.pdf`);
@@ -429,8 +434,8 @@ const EnergyPDFReport = () => {
     setTimeout(() => setDownloadSuccess(null), 4000);
   };
 
-  const currentDate = new Date().toLocaleDateString('en-IN', { 
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+  const currentDate = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
 
   return (

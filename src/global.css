@@ -182,10 +182,14 @@ h1, h2, h3, h4, h5, h6, p, span, div, label {
   top: 0;
   right: 0;
   left: 280px;
-  z-index: 999;
+  z-index: 1100;
   transition: left 0.3s ease;
   backdrop-filter: blur(8px);
   background-color: rgba(15, 23, 42, 0.8);
+}
+
+.scada-header .dropdown-menu {
+  z-index: 1150 !important;
 }
 
 .scada-header.collapsed {

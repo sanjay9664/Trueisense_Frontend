@@ -20,7 +20,7 @@ const Gauge = ({ value, min, max, unit, color, isMapped = true }) => {
   const circumference = Math.PI * radius;
   const percent = Math.max(0, Math.min(1, (value - min) / (max - min)));
   const offset = circumference - (percent * circumference);
-  
+
   // -90deg is far left, +90deg is far right
   const rotation = -90 + (percent * 180);
 
@@ -46,7 +46,7 @@ const Gauge = ({ value, min, max, unit, color, isMapped = true }) => {
           strokeWidth="12"
           strokeLinecap="round"
         />
-        
+
         {/* Value Arc (Colored) */}
         {isMapped && (
           <path
@@ -60,10 +60,10 @@ const Gauge = ({ value, min, max, unit, color, isMapped = true }) => {
             filter="url(#glow)"
           />
         )}
-        
+
         {/* Central Pivot Needle */}
         {isMapped ? (
-          <g 
+          <g
             transform={`rotate(${rotation}, ${cx}, ${cy})`}
           >
             {/* Needle pointer */}
@@ -75,7 +75,7 @@ const Gauge = ({ value, min, max, unit, color, isMapped = true }) => {
         ) : (
           <circle cx={cx} cy={cy} r="6" fill="rgba(255,255,255,0.15)" className="scada-gauge-needle-unmapped" />
         )}
-        
+
         {/* Min / Max Text Labels */}
         <text className="scada-gauge-label" x={cx - radius - 15} y={cy + 5} fill="rgba(255,255,255,0.4)" fontSize="10" textAnchor="end" alignmentBaseline="middle">{min}</text>
         <text className="scada-gauge-label" x={cx + radius + 15} y={cy + 5} fill="rgba(255,255,255,0.4)" fontSize="10" textAnchor="start" alignmentBaseline="middle">{max}</text>
@@ -101,7 +101,7 @@ try {
       globalCachedZones = parsed;
     }
   }
-} catch (e) {}
+} catch (e) { }
 
 // Fallback dynamic construction from templates on startup/hard refresh
 if (!Array.isArray(globalCachedZones) || globalCachedZones.length === 0) {
@@ -150,7 +150,7 @@ if (!Array.isArray(globalCachedZones) || globalCachedZones.length === 0) {
           .filter(z => z.mapping?.vrvConfig?.device);
       }
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 if (!Array.isArray(globalCachedZones)) {
@@ -176,7 +176,7 @@ const formatLastUpdated = (timestamp) => {
   const hours = pad(date.getHours());
   const minutes = pad(date.getMinutes());
   const seconds = pad(date.getSeconds());
-  
+
   const today = new Date();
   if (date.toDateString() === today.toDateString()) {
     return `${hours}:${minutes}:${seconds}`;
@@ -248,12 +248,12 @@ const EnvDashboard = () => {
 
     const processTelemetry = (stats) => {
       if (!Array.isArray(stats)) return;
-      
+
       setSavedZones(prev => {
         let updated = false;
         const next = prev.map(zone => {
           if (!zone.mapping || !zone.mapping.vrvConfig) return zone;
-          
+
           let newZone = { ...zone };
           if (!newZone.lastSeen) newZone.lastSeen = {};
           if (!newZone.highs) newZone.highs = {};
@@ -351,9 +351,9 @@ const EnvDashboard = () => {
         if (saved) {
           try {
             templatesData = JSON.parse(saved);
-          } catch (e) {}
+          } catch (e) { }
         }
-        
+
         // Fallback to fetch if cache is empty
         if (!templatesData || templatesData.length === 0) {
           const userData = JSON.parse(localStorage.getItem('userData') || '{}');
@@ -361,11 +361,11 @@ const EnvDashboard = () => {
           const response = await fetch(`${backendUrl}/api/templates`);
           if (response.ok) {
             const rawData = await response.json();
-            
+
             // Filter templates by organization in the frontend
             const roleName = (userData.roleName || userRole || '').toLowerCase();
             const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-            
+
             if (isSuperAdmin) {
               templatesData = rawData;
             } else {
@@ -377,13 +377,13 @@ const EnvDashboard = () => {
                 const mapping = t.defaultValues || t.settings?.[0]?.meta || {};
                 const orgName = mapping.globalHierarchy?.organization || mapping.vrvConfig?.organization || (t.defaultValues?.mapping?.globalHierarchy?.organization);
                 if (!orgName) return false;
-                
+
                 const numId = Number(orgId);
                 const orgLower = orgName.toLowerCase();
                 if (numId === 12) {
                   return orgLower === 'zomato' || orgLower === 'oragnization';
                 }
-                if (numId === 24) {
+                if (numId === 24 || numId === 16) {
                   return orgLower === 'hyperpure';
                 }
                 return false;
@@ -396,7 +396,7 @@ const EnvDashboard = () => {
         const mappedData = getNormalizedTemplates(templatesData);
         const vrvTemplates = mappedData.filter(t => (t.category === 'VRV' || t.category === 'AQI Sensor') && t.module === 'Temp & Humidity');
         currentTemplates = vrvTemplates;
-        
+
         setSavedZones(prev => {
           const nextZones = vrvTemplates
             .map((t, index) => {
@@ -424,9 +424,9 @@ const EnvDashboard = () => {
           localStorage.setItem('scada_vrv_zones', JSON.stringify(nextZones));
           return nextZones;
         });
-        
+
         setIsFetching(false);
-        
+
         const stats = await statsPromise;
         if (stats && stats.length > 0) {
           processTelemetry(stats);
@@ -436,9 +436,9 @@ const EnvDashboard = () => {
         setIsFetching(false);
       }
     };
-    
+
     fetchTemplatesAndStats();
-    
+
     const pollInterval = setInterval(async () => {
       if (currentTemplates.length === 0) return;
       const modulesToPoll = new Set();
@@ -459,7 +459,7 @@ const EnvDashboard = () => {
           const stats = await res.json();
           processTelemetry(stats);
         }
-      } catch (e) {}
+      } catch (e) { }
     }, 2000);
 
     return () => {
@@ -529,89 +529,89 @@ const EnvDashboard = () => {
 
       {/* Removed old blocking isLoading screen entirely as requested */}
       <Row className="g-4 flex-grow-1">
-          {/* Zone Sidebar */}
-          <Col xl={3} lg={4} xs={12}>
-            <Card className="scada-card border-0 h-100 shadow-lg" style={{ background: 'rgba(30, 41, 59, 0.4)', borderRadius: '16px' }}>
-              <Card.Header className="bg-transparent border-bottom border-secondary border-opacity-25 p-4">
-                <h6 className="text-white fw-bold m-0 text-uppercase fs-8 text-secondary tracking-wide">Select Zone</h6>
-              </Card.Header>
-              <Card.Body className="p-2 overflow-auto scada-scrollbar" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-                <div className="p-1">
-                  {activeZones.length === 0 ? (
-                    <div className="p-3 text-center text-secondary fs-13">No zones mapped.</div>
-                  ) : (
-                    activeZones.map((zone) => {
-                      const isSelected = selectedUnit === zone.name;
-                      return (
-                        <div 
-                          key={zone.id} 
-                          className="p-3 mb-2 rounded-4 d-flex justify-content-between align-items-center"
-                          style={{ 
-                            cursor: 'pointer',
-                            background: isSelected ? 'linear-gradient(90deg, rgba(56, 189, 248, 0.15) 0%, rgba(56, 189, 248, 0) 100%)' : 'transparent',
-                            borderLeft: isSelected ? '4px solid #38bdf8' : '4px solid transparent',
-                            transition: 'all 0.3s ease'
-                          }}
-                          onClick={() => setSelectedUnit(zone.name)}
-                        >
-                          <div>
-                            <span className={`fw-bold d-block fs-6 ${isSelected ? 'text-white' : 'text-secondary'}`}>{zone.name}</span>
-                            <span className="text-muted fs-8">Zone {zone.id}</span>
-                          </div>
-                          <div className="text-end d-flex flex-column align-items-end">
-                            <span className={`font-monospace fw-bold fs-5 ${isSelected ? 'text-info' : 'text-white'} d-flex align-items-center`}>
-                              {zone.TEMP.toFixed(1)}<span style={{fontSize:'0.6em', marginLeft:'2px'}}>°C</span>
-                            </span>
-                            <span className={`font-monospace fw-bold fs-6 ${isSelected ? 'text-primary' : 'text-secondary'} d-flex align-items-center`} style={{marginTop: '-4px'}}>
-                              {zone.HUMIDITY.toFixed(1)}<span style={{fontSize:'0.6em', marginLeft:'2px'}}>%</span>
-                            </span>
-                          </div>
+        {/* Zone Sidebar */}
+        <Col xl={3} lg={4} xs={12}>
+          <Card className="scada-card border-0 h-100 shadow-lg" style={{ background: 'rgba(30, 41, 59, 0.4)', borderRadius: '16px' }}>
+            <Card.Header className="bg-transparent border-bottom border-secondary border-opacity-25 p-4">
+              <h6 className="text-white fw-bold m-0 text-uppercase fs-8 text-secondary tracking-wide">Select Zone</h6>
+            </Card.Header>
+            <Card.Body className="p-2 overflow-auto scada-scrollbar" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+              <div className="p-1">
+                {activeZones.length === 0 ? (
+                  <div className="p-3 text-center text-secondary fs-13">No zones mapped.</div>
+                ) : (
+                  activeZones.map((zone) => {
+                    const isSelected = selectedUnit === zone.name;
+                    return (
+                      <div
+                        key={zone.id}
+                        className="p-3 mb-2 rounded-4 d-flex justify-content-between align-items-center"
+                        style={{
+                          cursor: 'pointer',
+                          background: isSelected ? 'linear-gradient(90deg, rgba(56, 189, 248, 0.15) 0%, rgba(56, 189, 248, 0) 100%)' : 'transparent',
+                          borderLeft: isSelected ? '4px solid #38bdf8' : '4px solid transparent',
+                          transition: 'all 0.3s ease'
+                        }}
+                        onClick={() => setSelectedUnit(zone.name)}
+                      >
+                        <div>
+                          <span className={`fw-bold d-block fs-6 ${isSelected ? 'text-white' : 'text-secondary'}`}>{zone.name}</span>
+                          <span className="text-muted fs-8">Zone {zone.id}</span>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-              </Card.Body>
-            </Card>
-          </Col>
+                        <div className="text-end d-flex flex-column align-items-end">
+                          <span className={`font-monospace fw-bold fs-5 ${isSelected ? 'text-info' : 'text-white'} d-flex align-items-center`}>
+                            {zone.TEMP.toFixed(1)}<span style={{ fontSize: '0.6em', marginLeft: '2px' }}>°C</span>
+                          </span>
+                          <span className={`font-monospace fw-bold fs-6 ${isSelected ? 'text-primary' : 'text-secondary'} d-flex align-items-center`} style={{ marginTop: '-4px' }}>
+                            {zone.HUMIDITY.toFixed(1)}<span style={{ fontSize: '0.6em', marginLeft: '2px' }}>%</span>
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
 
-          {/* Dashboard Grid */}
-          <Col xl={9} lg={8} xs={12} className="overflow-auto scada-scrollbar vrv-dashboard-grid" style={{ maxHeight: 'calc(100vh - 120px)', paddingBottom: '20px' }}>
-            {isFetching && !unitData ? (
-              // Silent Skeleton Loader instead of error message
-              <div className="pe-2 placeholder-glow">
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                   <div className="placeholder rounded" style={{ width: '200px', height: '30px', background: 'rgba(255,255,255,0.05)' }}></div>
-                   <div className="placeholder rounded-pill" style={{ width: '120px', height: '35px', background: 'rgba(255,255,255,0.05)' }}></div>
-                </div>
-                <Row className="g-4">
-                  {[1, 2, 3, 4].map(i => (
-                    <Col xl={6} lg={6} md={12} key={i}>
-                      <Card className="border-0 h-100" style={{ background: 'rgba(30, 41, 59, 0.4)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.02)', minHeight: '220px' }}>
-                         <Card.Body className="d-flex flex-column justify-content-center align-items-center">
-                            <div className="placeholder rounded-circle mb-3" style={{ width: '100px', height: '100px', background: 'rgba(255,255,255,0.03)' }}></div>
-                         </Card.Body>
-                      </Card>
-                    </Col>
-                  ))}
-                </Row>
+        {/* Dashboard Grid */}
+        <Col xl={9} lg={8} xs={12} className="overflow-auto scada-scrollbar vrv-dashboard-grid" style={{ maxHeight: 'calc(100vh - 120px)', paddingBottom: '20px' }}>
+          {isFetching && !unitData ? (
+            // Silent Skeleton Loader instead of error message
+            <div className="pe-2 placeholder-glow">
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <div className="placeholder rounded" style={{ width: '200px', height: '30px', background: 'rgba(255,255,255,0.05)' }}></div>
+                <div className="placeholder rounded-pill" style={{ width: '120px', height: '35px', background: 'rgba(255,255,255,0.05)' }}></div>
               </div>
-            ) : !unitData ? (
-              <div className="d-flex flex-column align-items-center justify-content-center h-100 bg-dark bg-opacity-20 rounded-4 border border-white border-opacity-5 p-5" style={{ minHeight: '600px' }}>
-                <div className="p-4 rounded-circle bg-dark bg-opacity-40 border border-secondary border-opacity-25 mb-4 shadow-sm">
-                  <Activity size={48} className="text-secondary opacity-50" />
-                </div>
-                <h4 className="text-white fw-bold mb-2 tracking-wide text-uppercase">No Configurations Found</h4>
-                <p className="text-secondary mb-0 text-center" style={{ maxWidth: '400px' }}>
-                  Map an AQI Sensor target device in the settings configuration module to start receiving live environment telemetry.
-                </p>
+              <Row className="g-4">
+                {[1, 2, 3, 4].map(i => (
+                  <Col xl={6} lg={6} md={12} key={i}>
+                    <Card className="border-0 h-100" style={{ background: 'rgba(30, 41, 59, 0.4)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.02)', minHeight: '220px' }}>
+                      <Card.Body className="d-flex flex-column justify-content-center align-items-center">
+                        <div className="placeholder rounded-circle mb-3" style={{ width: '100px', height: '100px', background: 'rgba(255,255,255,0.03)' }}></div>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+            </div>
+          ) : !unitData ? (
+            <div className="d-flex flex-column align-items-center justify-content-center h-100 bg-dark bg-opacity-20 rounded-4 border border-white border-opacity-5 p-5" style={{ minHeight: '600px' }}>
+              <div className="p-4 rounded-circle bg-dark bg-opacity-40 border border-secondary border-opacity-25 mb-4 shadow-sm">
+                <Activity size={48} className="text-secondary opacity-50" />
               </div>
-            ) : (
+              <h4 className="text-white fw-bold mb-2 tracking-wide text-uppercase">No Configurations Found</h4>
+              <p className="text-secondary mb-0 text-center" style={{ maxWidth: '400px' }}>
+                Map an AQI Sensor target device in the settings configuration module to start receiving live environment telemetry.
+              </p>
+            </div>
+          ) : (
             <>
               <div className="d-flex justify-content-between align-items-center mb-3 px-2">
                 <div className="d-flex flex-column">
                   <h5 className="text-white fw-bold text-uppercase fs-5 m-0 d-flex align-items-center">
-                    <Activity className="me-2 text-primary" size={24}/> 
+                    <Activity className="me-2 text-primary" size={24} />
                     {selectedUnit} Diagnostics
                   </h5>
                 </div>
@@ -630,7 +630,7 @@ const EnvDashboard = () => {
                     const isOptimal = value >= config.min + (config.max - config.min) * 0.15 && value <= config.max - (config.max - config.min) * 0.15;
                     const statusColor = isOptimal ? '#10b981' : '#f59e0b';
                     const statusText = isOptimal ? 'OPTIMAL' : 'ATTENTION';
-                    
+
                     const metricToConfigField = {
                       TEMP: 'temperature',
                       HUMIDITY: 'humidity',
@@ -643,9 +643,9 @@ const EnvDashboard = () => {
 
                     return (
                       <Col xl={4} lg={6} md={12} xs={12} key={key}>
-                        <Card 
-                          className="scada-card border-0 h-100 position-relative overflow-hidden" 
-                          style={{ 
+                        <Card
+                          className="scada-card border-0 h-100 position-relative overflow-hidden"
+                          style={{
                             background: 'linear-gradient(145deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%)',
                             backdropFilter: 'blur(12px)',
                             borderRadius: '16px',
@@ -662,13 +662,13 @@ const EnvDashboard = () => {
                           {isFieldMapped && (
                             <div className="position-absolute" style={{ top: '-50px', right: '-50px', width: '160px', height: '160px', background: config.color, filter: 'blur(80px)', opacity: 0.15, borderRadius: '50%', pointerEvents: 'none' }}></div>
                           )}
-                          
+
                           <Card.Body className="p-2 d-flex flex-column justify-content-between">
                             {/* Card Header */}
                             <div className="d-flex justify-content-between align-items-center border-bottom border-secondary border-opacity-10 pb-1 mb-1">
                               <h6 className="text-white fw-bold text-uppercase fs-7 m-0 d-flex align-items-center" style={{ letterSpacing: '1px' }}>
                                 <div className="p-2 rounded-circle me-3 d-flex align-items-center justify-content-center shadow-sm" style={{ background: `rgba(${hexToRgb(config.color)}, 0.15)`, border: `1px solid rgba(${hexToRgb(config.color)}, 0.3)` }}>
-                                  <IconComponent size={20} style={{ color: config.color }} /> 
+                                  <IconComponent size={20} style={{ color: config.color }} />
                                 </div>
                                 {config.label}
                               </h6>
@@ -680,13 +680,13 @@ const EnvDashboard = () => {
                                     if (isLive) {
                                       return (
                                         <span className="badge bg-success bg-opacity-10 border border-success border-opacity-25 text-success px-2 py-1 rounded d-flex align-items-center gap-1.5 fs-11 fw-bold uppercase tracking-wider" style={{ letterSpacing: '0.5px' }}>
-                                          <span className="rounded-circle pulse-dot-green"></span> online
+                                          <span className="rounded-circlE-PULSE-dot-green"></span> online
                                         </span>
                                       );
                                     } else {
                                       return (
                                         <span className="badge bg-danger bg-opacity-10 border border-danger border-opacity-25 text-danger px-2 py-1 rounded d-flex align-items-center gap-1.5 fs-11 fw-bold uppercase tracking-wider" style={{ letterSpacing: '0.5px' }}>
-                                          <span className="rounded-circle pulse-dot-red"></span> offline
+                                          <span className="rounded-circlE-PULSE-dot-red"></span> offline
                                         </span>
                                       );
                                     }
@@ -698,11 +698,11 @@ const EnvDashboard = () => {
                             </div>
 
                             <div className="d-flex flex-column align-items-center justify-content-center flex-grow-1 py-0" style={{ transform: 'scale(0.95)', transformOrigin: 'top center', marginBottom: '-10px' }}>
-                              <Gauge 
-                                value={value} 
-                                min={config.min} 
-                                max={config.max} 
-                                unit={config.unit} 
+                              <Gauge
+                                value={value}
+                                min={config.min}
+                                max={config.max}
+                                unit={config.unit}
                                 color={config.color}
                                 isMapped={isFieldMapped}
                               />
@@ -731,7 +731,7 @@ const EnvDashboard = () => {
                                   </div>
                                 </Col>
                               </Row>
-                              
+
                               {/* Animated Live Trend Line */}
                               <div className="mt-1 pt-0 border-top border-secondary border-opacity-10 position-relative rounded-bottom-4" style={{ height: '28px', width: '100%', overflow: 'hidden' }}>
                                 {(() => {
@@ -758,22 +758,22 @@ const EnvDashboard = () => {
                                               <stop offset="100%" stopColor={config.color} stopOpacity="0" />
                                             </linearGradient>
                                           </defs>
-                                          
+
                                           {/* Grid Lines */}
                                           <line x1="0" y1="15" x2="200" y2="15" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="2 2" />
                                           <line x1="0" y1="25" x2="200" y2="25" stroke="rgba(255,255,255,0.05)" strokeWidth="0.5" strokeDasharray="2 2" />
-                                          
+
                                           <g>
                                             <animateTransform attributeName="transform" type="translate" from="0,0" to="-200,0" dur="3s" repeatCount="indefinite" />
-                                            <path 
-                                              d="M 0 20 C 10 15, 20 10, 30 20 C 40 30, 50 30, 60 20 C 70 10, 80 5, 100 15 C 120 25, 130 30, 140 20 C 150 10, 160 10, 170 20 C 180 30, 190 25, 200 20 C 210 15, 220 10, 230 20 C 240 30, 250 30, 260 20 C 270 10, 280 5, 300 15 C 320 25, 330 30, 340 20 C 350 10, 360 10, 370 20 C 380 30, 390 25, 400 20 L 400 40 L 0 40 Z" 
-                                              fill={`url(#grad-${key})`} 
+                                            <path
+                                              d="M 0 20 C 10 15, 20 10, 30 20 C 40 30, 50 30, 60 20 C 70 10, 80 5, 100 15 C 120 25, 130 30, 140 20 C 150 10, 160 10, 170 20 C 180 30, 190 25, 200 20 C 210 15, 220 10, 230 20 C 240 30, 250 30, 260 20 C 270 10, 280 5, 300 15 C 320 25, 330 30, 340 20 C 350 10, 360 10, 370 20 C 380 30, 390 25, 400 20 L 400 40 L 0 40 Z"
+                                              fill={`url(#grad-${key})`}
                                             />
-                                            <path 
-                                              d="M 0 20 C 10 15, 20 10, 30 20 C 40 30, 50 30, 60 20 C 70 10, 80 5, 100 15 C 120 25, 130 30, 140 20 C 150 10, 160 10, 170 20 C 180 30, 190 25, 200 20 C 210 15, 220 10, 230 20 C 240 30, 250 30, 260 20 C 270 10, 280 5, 300 15 C 320 25, 330 30, 340 20 C 350 10, 360 10, 370 20 C 380 30, 390 25, 400 20" 
-                                              fill="none" 
-                                              stroke={config.color} 
-                                              strokeWidth="1.5" 
+                                            <path
+                                              d="M 0 20 C 10 15, 20 10, 30 20 C 40 30, 50 30, 60 20 C 70 10, 80 5, 100 15 C 120 25, 130 30, 140 20 C 150 10, 160 10, 170 20 C 180 30, 190 25, 200 20 C 210 15, 220 10, 230 20 C 240 30, 250 30, 260 20 C 270 10, 280 5, 300 15 C 320 25, 330 30, 340 20 C 350 10, 360 10, 370 20 C 380 30, 390 25, 400 20"
+                                              fill="none"
+                                              stroke={config.color}
+                                              strokeWidth="1.5"
                                               strokeOpacity="0.9"
                                             />
                                           </g>
