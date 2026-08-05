@@ -25,10 +25,6 @@ const EnergyPDFReport = () => {
 
   
   const [selectedSiteId, setSelectedSiteId] = useState(() => {
-
-
-  const siteId = useMemo(() => {
-
     try {
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
