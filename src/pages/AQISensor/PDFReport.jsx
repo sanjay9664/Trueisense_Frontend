@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Row, Col, Card, Form, Button, Badge, Spinner, Alert } from 'react-bootstrap';
-import { FileText, Download, FileSpreadsheet, Leaf, CheckCircle2, AlertCircle, Activity, BarChart3, Clock, Calendar } from 'lucide-react';
+import { FileText, Download, FileSpreadsheet, Leaf, CheckCircle2, AlertCircle, Activity, BarChart3, Clock, Calendar, MapPin } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
@@ -18,14 +18,22 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_BMS_URL || 'http://localhost:3
 const AQIPDFReport = () => {
   const { getOverallStatus } = useDeviceStatus();
 
-  const siteId = useMemo(() => {
+  const [selectedSiteId, setSelectedSiteId] = useState(() => {
     try {
       const userData = JSON.parse(localStorage.getItem('userData') || '{}');
       return userData?.siteId || localStorage.getItem('selectedSiteId') || '1';
     } catch (e) {
       return localStorage.getItem('selectedSiteId') || '1';
     }
-  }, []);
+  });
+
+  const [sites, setSites] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('scada_sites') || '[]');
+    } catch (e) {
+      return [];
+    }
+  });
 
   const [templates, setTemplates] = useState(() => {
     try {
@@ -36,7 +44,7 @@ const AQIPDFReport = () => {
   });
   const [devices, setDevices] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem(`scada_devices_${siteId}`) || '[]');
+      return JSON.parse(localStorage.getItem(`scada_devices_${selectedSiteId}`) || '[]');
     } catch (e) {
       return [];
     }
@@ -58,14 +66,58 @@ const AQIPDFReport = () => {
   const [interval, setIntervalVal] = useState('HOURLY');
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Fetch dynamic devices in background
+  // Fetch sites on mount
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token');
+        const res = await fetch(`${API_BASE_URL}/sites/`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const siteArray = Array.isArray(json) ? json : (json?.data || []);
+          if (Array.isArray(siteArray) && siteArray.length > 0) {
+            const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+            const userRole = localStorage.getItem('userRole') || 'USER';
+            const roleName = (userData.roleName || userRole || '').toLowerCase();
+            const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
+
+            let filteredSites = siteArray;
+            if (!isSuperAdmin && userData.organizationId) {
+              filteredSites = siteArray.filter(s => Number(s.organizationId) === Number(userData.organizationId));
+            }
+            const finalSites = filteredSites.length > 0 ? filteredSites : siteArray;
+            setSites(finalSites);
+            localStorage.setItem('scada_sites', JSON.stringify(finalSites));
+            if (finalSites.length > 0) {
+              const hasSelected = finalSites.some(s => String(s.id) === String(selectedSiteId));
+              if (!hasSelected) {
+                setSelectedSiteId(String(finalSites[0].id));
+                localStorage.setItem('selectedSiteId', String(finalSites[0].id));
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching sites:', err);
+      }
+    };
+
+    fetchSites();
+  }, []);
+
+  // Fetch dynamic devices for selected site
   useEffect(() => {
     const fetchDevices = async () => {
+      if (!selectedSiteId) return;
       setLoadingDevices(true);
       setErrorMsg(null);
       try {
         const token = localStorage.getItem('sochiot_token') || localStorage.getItem('token');
-        const res = await fetch(`${API_BASE_URL}/sites/${siteId}/devices`, {
+        const res = await fetch(`${API_BASE_URL}/sites/${selectedSiteId}/devices`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -74,30 +126,34 @@ const AQIPDFReport = () => {
           throw new Error(`Failed to fetch devices: ${res.statusText}`);
         }
         const result = await res.json();
-        if (result.success && Array.isArray(result.data)) {
-          setDevices(result.data);
-          localStorage.setItem(`scada_devices_${siteId}`, JSON.stringify(result.data));
+        const devArray = Array.isArray(result) ? result : (result?.data || []);
+        if (Array.isArray(devArray)) {
+          setDevices(devArray);
+          localStorage.setItem(`scada_devices_${selectedSiteId}`, JSON.stringify(devArray));
+
+          const aqiSensors = devArray.filter(d => !d.category || String(d.category).toUpperCase() === 'AQI_SENSOR');
+          if (aqiSensors.length > 0) {
+            setSelectedSensor(prev => {
+              const exists = aqiSensors.some(s => String(s.id) === String(prev));
+              return exists ? prev : String(aqiSensors[0].id);
+            });
+          } else {
+            setSelectedSensor('');
+          }
         } else {
           setDevices([]);
+          setSelectedSensor('');
         }
       } catch (err) {
         console.error('Error fetching devices:', err);
-        setErrorMsg('Failed to fetch devices. Using cached templates.');
-
-        // Fallback: templates cache
-        const saved = localStorage.getItem('scada_templates');
-        if (saved) {
-          try {
-            setTemplates(JSON.parse(saved));
-          } catch (e) { }
-        }
+        setErrorMsg('Failed to fetch devices.');
       } finally {
         setLoadingDevices(false);
       }
     };
 
     fetchDevices();
-  }, [siteId]);
+  }, [selectedSiteId]);
 
   // Load templates on mount as fallback from local storage
   useEffect(() => {
@@ -126,35 +182,19 @@ const AQIPDFReport = () => {
 
   // Filter templates for AQI Sensors / Temp & Humidity
   const aqiSensorOptions = useMemo(() => {
-    if (devices.length > 0) {
-      return devices
-        .filter(d => String(d.category).toUpperCase() === 'AQI_SENSOR')
-        .map(d => ({
-          id: d.id,
-          label: d.name,
-          description: d.description,
-          areaName: d.area?.name || d.building?.name || '',
-          sochiotDeviceId: d.sochiotDeviceId,
-          sochiotMeta: d.sochiotMeta,
-          isActive: d.isActive
-        }))
-        .sort((a, b) => naturalSort(a.label, b.label));
-    }
-
-    // Fallback: templates mapping
-    return templates
-      .filter(t => (t.category === 'VRV' || t.category === 'AQI Sensor') && t.module === 'Temp & Humidity')
-      .map(t => ({
-        id: t.id,
-        label: t.mapping?.vrvConfig?.vrvZone || t.name,
-        description: 'AQI Sensor • Environmental target',
-        areaName: '',
-        sochiotDeviceId: t.mapping?.deviceId || t.mapping?.vrvConfig?.device,
-        sochiotMeta: null,
-        isActive: false
+    return devices
+      .filter(d => !d.category || String(d.category).toUpperCase() === 'AQI_SENSOR')
+      .map(d => ({
+        id: d.id,
+        label: d.name || d.description || 'Unnamed Device',
+        description: d.description,
+        areaName: d.area?.name || d.building?.name || '',
+        sochiotDeviceId: d.sochiotDeviceId,
+        sochiotMeta: d.sochiotMeta,
+        isActive: d.isActive
       }))
       .sort((a, b) => naturalSort(a.label, b.label));
-  }, [devices, templates]);
+  }, [devices]);
 
   // Auto-select first sensor or handle mismatch
   useEffect(() => {
@@ -163,6 +203,8 @@ const AQIPDFReport = () => {
       if (!selectedSensor || !exists) {
         setSelectedSensor(String(aqiSensorOptions[0].id));
       }
+    } else {
+      setSelectedSensor('');
     }
   }, [aqiSensorOptions, selectedSensor]);
 
@@ -594,10 +636,40 @@ const AQIPDFReport = () => {
             <Card.Body className="p-4">
               <Form>
                 <Row className="g-4 mb-4">
-                  {/* Meter Selection */}
-                  <Col md={6} xs={12}>
+                  {/* Site Selection */}
+                  <Col md={4} xs={12}>
                     <Form.Group>
-                      <Form.Label className="emr-label">Select target AQI Sensor / Zone</Form.Label>
+                      <Form.Label className="emr-label d-flex align-items-center gap-2">
+                        <MapPin size={13} style={{ color: 'var(--scada-accent)' }} /> SITE NAME
+                      </Form.Label>
+                      <Form.Select
+                        className="emr-select w-100"
+                        value={selectedSiteId}
+                        onChange={(e) => {
+                          setSelectedSiteId(e.target.value);
+                          localStorage.setItem('selectedSiteId', e.target.value);
+                          setSelectedSensor('');
+                        }}
+                      >
+                        {sites.length === 0 ? (
+                          <option value={selectedSiteId}>Main Site</option>
+                        ) : (
+                          sites.map(s => (
+                            <option key={s.id} value={String(s.id)}>
+                              {s.name}
+                            </option>
+                          ))
+                        )}
+                      </Form.Select>
+                    </Form.Group>
+                  </Col>
+
+                  {/* Meter Selection */}
+                  <Col md={4} xs={12}>
+                    <Form.Group>
+                      <Form.Label className="emr-label d-flex align-items-center gap-2">
+                        <Leaf size={13} style={{ color: 'var(--scada-accent)' }} /> AQI SENSOR / NODE
+                      </Form.Label>
                       {aqiSensorOptions.length === 0 ? (
                         <Alert variant="warning" className="bg-dark bg-opacity-25 border-warning border-opacity-25 text-warning rounded-4 p-3 m-0">
                           <AlertCircle className="me-2" size={16} />
@@ -620,7 +692,7 @@ const AQIPDFReport = () => {
                   </Col>
 
                   {/* Interval Selection */}
-                  <Col md={6} xs={12}>
+                  <Col md={sites.length > 0 ? 4 : 6} xs={12}>
                     <Form.Group>
                       <Form.Label className="emr-label d-flex align-items-center gap-2">
                         <Clock size={13} style={{ color: 'var(--scada-accent)' }} />  Interval Scale

@@ -648,7 +648,6 @@ const SubMeters = () => {
 
   useEffect(() => {
     let active = true;
-
     const hydrateGroups = async () => {
       if (meters.length === 0) {
         if (active) setMeterGroups([]);
@@ -2175,7 +2174,7 @@ const SubMeters = () => {
                     'vRY', 'vYB', 'vBR', 'pfR', 'pfY', 'pfB',
                     'loadHrs', 'loadMin', 'noLoadHrs', 'noLoadMin', 'loadPct'
                   ];
-
+                  
                   return (
                     <Row className="g-3">
                       <Col xs={12}>
