@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { io } from 'socket.io-client';
+import { filterTemplatesByOrg } from '../services/authService';
 
 const MainLayout = ({ children }) => {
   const [collapsed, setCollapsed] = useState(window.innerWidth < 992);
@@ -53,7 +54,10 @@ const MainLayout = ({ children }) => {
             "Maintenance": globalConfig.showMaintenance,
             "Service History": globalConfig.showServiceHistory,
             "Daily DPR": globalConfig.showDailyDPR,
-            "Energy Metering": globalConfig.showEnergyMetering,
+            "Energy Metering": true,
+            "AQI Sensor": true,
+            "HVAC": false,
+            "AC": true,
           };
           localStorage.setItem('scada_modules_config', JSON.stringify(sidebarModules));
           localStorage.setItem('scada_submodules_config', JSON.stringify(globalConfig.submoduleVisibility || {}));
@@ -105,33 +109,8 @@ const MainLayout = ({ children }) => {
             mapping: cleanCorruptedMapping(t.mapping)
           }));
 
-          // Filter templates by organization in the frontend
-          const roleName = (userData.roleName || userRole || '').toLowerCase();
-          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-          
-          let filteredData = finalData;
-          if (!isSuperAdmin) {
-            const orgId = userData.organizationId;
-            filteredData = finalData.filter(t => {
-              // 1. If explicit tenantId matches
-              if (t.tenantId !== undefined && t.tenantId !== null && Number(t.tenantId) === Number(orgId)) {
-                return true;
-              }
-              // 2. Fallback check on mapping organization name
-              const orgName = t.mapping?.globalHierarchy?.organization || t.defaultValues?.mapping?.globalHierarchy?.organization;
-              if (!orgName) return false;
-              
-              const numId = Number(orgId);
-              const orgLower = orgName.toLowerCase();
-              if (numId === 12) {
-                return orgLower === 'zomato' || orgLower === 'oragnization';
-              }
-              if (numId === 24) {
-                return orgLower === 'hyperpure';
-              }
-              return false;
-            });
-          }
+          // Filter templates by organization safely for all roles (SuperAdmin, Admin, Site Viewer, etc.)
+          const filteredData = filterTemplatesByOrg(finalData, userData, userRole);
 
           localStorage.setItem('scada_templates', JSON.stringify(filteredData));
           window.dispatchEvent(new Event('storage'));
@@ -210,6 +189,10 @@ const MainLayout = ({ children }) => {
                 Object.entries(globalModuleKeys).forEach(([key, label]) => {
                   sidebarModules[label] = configRaw[key] ?? true;
                 });
+                sidebarModules["Energy Metering"] = true;
+                sidebarModules["AQI Sensor"] = true;
+                sidebarModules["HVAC"] = false;
+                sidebarModules["AC"] = true;
                 
                 const savedModulesStr = localStorage.getItem('scada_modules_config');
                 const savedSubsStr = localStorage.getItem('scada_submodules_config');
@@ -400,11 +383,11 @@ const MainLayout = ({ children }) => {
               "Maintenance": newFp.showMaintenance_read ?? newFp.showMaintenance ?? defaultVal,
               "Service History": newFp.showServiceHistory_read ?? newFp.showServiceHistory ?? defaultVal,
               "Daily DPR": newFp.showDailyDPR_read ?? newFp.showDailyDPR ?? defaultVal,
-              "Energy Metering": newFp.showEnergyMetering_read ?? newFp.showEnergyMetering ?? defaultVal,
+              "Energy Metering": true,
               "VRV": newFp.showVRV_read ?? newFp.showVRV ?? defaultVal,
-              "AQI Sensor": newFp.showAQISensor_read ?? newFp.showAQISensor ?? defaultVal,
-              "HVAC": newFp.showHVAC_read ?? newFp.showHVAC ?? defaultVal,
-              "AC": newFp.showAC_read ?? newFp.showAC ?? defaultVal
+              "AQI Sensor": true,
+              "HVAC": false,
+              "AC": true
             };
             localStorage.setItem('scada_modules_config', JSON.stringify(sidebarMapping));
 

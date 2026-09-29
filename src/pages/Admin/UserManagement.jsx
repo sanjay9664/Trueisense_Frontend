@@ -6,6 +6,7 @@ import {
   ShieldAlert, ClipboardList, PenTool, History, Gauge, User, X,
   CheckCircle, Key, Settings, RefreshCw, Wind, Eye, EyeOff
 } from 'lucide-react';
+import { fetchWithAuth } from '../../services/authService';
 
 
 /* ─────────────────────── module map ─────────────────────── */
@@ -137,25 +138,6 @@ const UserManagement = () => {
   const [sites,        setSites]        = useState([]);
   const [syncingStates,setSyncingStates]= useState({});
 
-  /* ── auth fetch helper ── */
-  const fetchWithAuth = async (url, options = {}) => {
-    let token = localStorage.getItem('sochiot_token');
-    if (!token) {
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-    }
-    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
-    let r = await fetch(url, { ...options, headers });
-    if (r.status === 401) {
-      localStorage.removeItem('sochiot_token');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-    return r;
-  };
 
   /* ── data fetchers ── */
   const fetchUsers = async (page = 1, forceSochiot = showSochiotAdmins) => {

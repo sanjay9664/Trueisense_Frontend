@@ -5,6 +5,7 @@ import { Leaf, Wind, Thermometer, Droplets, MapPin, Activity, Maximize2 } from '
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { io } from 'socket.io-client';
 import PdfButton from '../../components/PdfButton';
+import { filterTemplatesByOrg } from '../../services/authService';
 
 const formatLastUpdated = (timestamp) => {
   if (!timestamp) return '';
@@ -532,33 +533,8 @@ const AQIOverview = () => {
           if (response.ok) {
             const rawData = await response.json();
             
-            // Filter templates by organization in the frontend
-            const roleName = (userData.roleName || userRole || '').toLowerCase();
-            const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-            
-            if (isSuperAdmin) {
-              templatesData = rawData;
-            } else {
-              const orgId = userData.organizationId;
-              templatesData = rawData.filter(t => {
-                if (t.tenantId !== undefined && t.tenantId !== null && Number(t.tenantId) === Number(orgId)) {
-                  return true;
-                }
-                const mapping = t.defaultValues || t.settings?.[0]?.meta || {};
-                const orgName = mapping.globalHierarchy?.organization || mapping.vrvConfig?.organization || (t.defaultValues?.mapping?.globalHierarchy?.organization);
-                if (!orgName) return false;
-                
-                const numId = Number(orgId);
-                const orgLower = orgName.toLowerCase();
-                if (numId === 12) {
-                  return orgLower === 'zomato' || orgLower === 'oragnization';
-                }
-                if (numId === 24 || numId === 16) {
-                  return orgLower === 'hyperpure';
-                }
-                return false;
-              });
-            }
+            // Filter templates by organization safely for all roles (SuperAdmin, Admin, Site Viewer, etc.)
+            templatesData = filterTemplatesByOrg(rawData, userData, userRole);
             localStorage.setItem('scada_templates', JSON.stringify(templatesData));
           }
         }

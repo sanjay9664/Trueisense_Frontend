@@ -6,6 +6,7 @@ import {
   Cpu, MapPin
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { fetchWithAuth } from '../../services/authService';
 
 
 /* ─────────────────────── category map / details ─────────────────────── */
@@ -169,25 +170,6 @@ const DeviceManagement = () => {
   const [selectedSiteId, setSelectedSiteId] = useState('');
   const [syncingStates, setSyncingStates] = useState({});
 
-  /* ── auth fetch helper ── */
-  const fetchWithAuth = async (url, options = {}) => {
-    let token = localStorage.getItem('sochiot_token');
-    if (!token) {
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-    }
-    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
-    let r = await fetch(url, { ...options, headers });
-    if (r.status === 401) {
-      localStorage.removeItem('sochiot_token');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-    return r;
-  };
 
   /* ── data fetchers ── */
   const fetchSites = async () => {

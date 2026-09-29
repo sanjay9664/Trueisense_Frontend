@@ -23,6 +23,7 @@ import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import PdfButton from '../../components/PdfButton';
 import StatusBadge from '../../components/StatusBadge';
+import { filterTemplatesByOrg } from '../../services/authService';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
 
 const GROUP_EVENT_NAME = 'energy-meter-groups-updated';
@@ -186,33 +187,8 @@ const EnergyMeteringOverview = () => {
           };
         });
 
-        // Filter templates by organization in the frontend
-        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-        const userRole = localStorage.getItem('userRole') || 'USER';
-        const roleName = (userData.roleName || userRole || '').toLowerCase();
-        const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-        
-        let filtered = mapped;
-        if (!isSuperAdmin) {
-          const orgId = userData.organizationId;
-          filtered = mapped.filter(t => {
-            if (t.tenantId !== undefined && t.tenantId !== null && Number(t.tenantId) === Number(orgId)) {
-              return true;
-            }
-            const orgName = t.mapping?.globalHierarchy?.organization || t.defaultValues?.mapping?.globalHierarchy?.organization;
-            if (!orgName) return false;
-            
-            const numId = Number(orgId);
-            const orgLower = orgName.toLowerCase();
-            if (numId === 12) {
-              return orgLower === 'zomato' || orgLower === 'oragnization';
-            }
-            if (numId === 24 || numId === 16) {
-              return orgLower === 'hyperpure';
-            }
-            return false;
-          });
-        }
+        // Filter templates by organization safely for all roles (SuperAdmin, Admin, Site Viewer, etc.)
+        const filtered = filterTemplatesByOrg(mapped);
 
         if (active) {
           setTemplates(filtered);

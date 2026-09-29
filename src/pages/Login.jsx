@@ -4,11 +4,13 @@ import { Container, Row, Col, Card, Form, Button, Alert } from 'react-bootstrap'
 import { Shield, ArrowRight, Key, Mail, Cpu, Globe, Eye, EyeOff } from 'lucide-react';
 import logo from "../assets/logo.png";
 import heroImg from "./scada_hero.png";
+import { login } from '../services/authService';
 
 const Login = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
   const [loginMode, setLoginMode] = useState('admin');
   const [credentials, setCredentials] = useState({ username: '', password: '' });
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,215 +21,26 @@ const Login = ({ onLoginSuccess }) => {
     setError('');
 
     try {
-      const response = await fetch('https://app.sochiot.com/api/auth-engine/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: credentials.username,
-          password: credentials.password
-        })
+      const result = await login({
+        email: credentials.username,
+        password: credentials.password,
+        rememberMe
       });
 
-      const data = await response.json();
+      // Trigger splash screen FIRST, then navigate after one frame
+      if (onLoginSuccess) onLoginSuccess();
 
-      if (response.ok) {
-        const token = data.token;
-        localStorage.setItem('token', token);
-        localStorage.setItem('sochiot_token', token);
-        localStorage.setItem('token_timestamp', Date.now().toString());
-        localStorage.setItem('sochiot_email', credentials.username);
-        localStorage.setItem('sochiot_password', credentials.password);
-
-        // Fetch User Me details with robust fallback logic
-        let meData = {};
-        let profileSuccess = false;
-
-        // Try local backend first
-        try {
-          const meResponse = await fetch(`${import.meta.env.VITE_BACKEND_BMS_URL}/users/me`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-
-          if (meResponse.ok) {
-            const meDataJson = await meResponse.json();
-            meData = meDataJson.data || meDataJson || {};
-            profileSuccess = true;
-          }
-        } catch (localErr) {
-          console.warn('Failed to fetch profile from local backend:', localErr);
+      // Small delay so React can mount SplashScreen before route changes
+      setTimeout(() => {
+        if (result.user.role === 'SUPER_ADMIN') {
+          navigate('/super-admin');
+        } else {
+          navigate('/dashboard');
         }
-
-        // If local backend fails, fall back to Sochiot user me endpoint
-        if (!profileSuccess) {
-          try {
-            const meResponse = await fetch('https://app.sochiot.com/api/auth-engine/user/me', {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            });
-            if (meResponse.ok) {
-              const meDataJson = await meResponse.json();
-              meData = meDataJson.data || meDataJson || {};
-              profileSuccess = true;
-            }
-          } catch (sochiotErr) {
-            console.error('Failed to fetch profile from Sochiot auth:', sochiotErr);
-          }
-        }
-
-        // Determine user role based on /me authorities, roles, isRootUser, or credentials
-        let role = 'USER';
-        const emailLower = credentials.username.toLowerCase();
-
-        const isSuper = (
-          meData.isRootUser === true ||
-          (meData.roles && meData.roles.includes('SUPER_ADMIN')) ||
-          (meData.authorities && (meData.authorities.includes('PERM_SUPER_ADMIN') || meData.authorities.includes('PERM_MANAGE_ALL'))) ||
-          emailLower === 'superadmin@sochiot.com' ||
-          emailLower === 'superadmin@trueisense.com' ||
-          emailLower === 'sa@ismartaccess.com' ||
-          emailLower.startsWith('superadmin@')
-        );
-
-        const isAdmin = (
-          (meData.roles && meData.roles.includes('ADMIN')) ||
-          (meData.authorities && meData.authorities.includes('PERM_MANAGE_ADMINISTRATORS'))
-        );
-
-        if (isSuper) {
-          role = 'SUPER_ADMIN';
-        } else if (isAdmin) {
-          role = 'ADMIN';
-        } else if (meData.roles && meData.roles.length > 0) {
-          role = meData.roles[0];
-        } else if (meData.role) {
-          role = (typeof meData.role === 'object' ? meData.role?.name : meData.role) || 'USER';
-        }
-
-        const userObj = {
-          id: meData.id || meData._id || 'temp-id',
-          name: meData.name || meData.username || 'Super Admin',
-          email: meData.email || credentials.username,
-          role: role,
-          roleName: (meData.roles && meData.roles.length > 0 && meData.roles[0] !== 'ADMIN' && meData.roles[0] !== 'SUPER_ADMIN')
-            ? meData.roles[0]
-            : (meData.role?.name || meData.roleName || (role === 'SUPER_ADMIN' ? 'Super Admin' : role === 'ADMIN' ? 'Administrator' : role)),
-          organizationId: meData.organizationId || null,
-          tenantId: meData.organizationId || null,
-          siteId: meData.siteId || null
-        };
-
-        localStorage.setItem('userRole', role);
-        localStorage.setItem('userData', JSON.stringify(userObj));
-        localStorage.setItem('isAuthenticated', 'true');
-
-        let localFp = meData.featurePermissions || {};
-
-        // If featurePermissions is empty, try fetching via user list endpoint
-        // This covers Global Scope users where the backend siteId is null
-        if (Object.keys(localFp).length === 0 && role !== 'SUPER_ADMIN') {
-          const userEmail = meData.email || credentials.username;
-          const userId = meData.id || meData._id;
-          if (userEmail || userId) {
-            try {
-              const searchParam = userEmail ? `?search=${encodeURIComponent(userEmail)}&pageSize=5` : `?pageSize=100`;
-              const userListRes = await fetch(`${import.meta.env.VITE_BACKEND_BMS_URL}/users${searchParam}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-              });
-              if (userListRes.ok) {
-                const listJson = await userListRes.json();
-                const usersList = Array.isArray(listJson)
-                  ? listJson
-                  : (Array.isArray(listJson.data)
-                      ? listJson.data
-                      : (Array.isArray(listJson.data?.list)
-                          ? listJson.data.list
-                          : []));
-                const myId = String(userId);
-                const myEmail = (userEmail || '').toLowerCase();
-                const matched = usersList.find(u => 
-                  String(u.sochiotUserId) === myId || 
-                  String(u.id) === myId || 
-                  (u.email || '').toLowerCase() === myEmail
-                );
-                if (matched?.featurePermissions && Object.keys(matched.featurePermissions).length > 0) {
-                  localFp = matched.featurePermissions;
-                }
-              }
-            } catch (fallbackErr) {
-              console.warn('Fallback user list fetch for featurePermissions failed:', fallbackErr);
-            }
-          }
-        }
-
-        const isSuperRole = role === 'SUPER_ADMIN';
-        const isPowerUser = role === 'SUPER_ADMIN' || role === 'ADMIN';
-        const isFpEmpty = Object.keys(localFp).length === 0;
-        const defaultVal = (isPowerUser || isFpEmpty) ? true : false;
-
-        const sidebarMapping = {
-          "Dashboard": localFp.showDashboard_read ?? localFp.showDashboard ?? defaultVal,
-          "Water Management": localFp.showWaterManagement_read ?? localFp.showWaterManagement ?? defaultVal,
-          "Motors": localFp.showMotors_read ?? localFp.showMotors ?? defaultVal,
-          "DG Set": localFp.showDGSet_read ?? localFp.showDGSet ?? defaultVal,
-          "Setting Templates": localFp.showSettingTemplates_read ?? localFp.showSettingTemplates ?? defaultVal,
-          "Alarm System": localFp.showAlarms_read ?? localFp.showAlarms ?? defaultVal,
-          "LT Panel": localFp.showLTPanel_read ?? localFp.showLTPanel ?? defaultVal,
-          "Transformer": localFp.showTransformers_read ?? localFp.showTransformers ?? defaultVal,
-          "Fire": localFp.showFirePumps_read ?? localFp.showFirePumps ?? defaultVal,
-          "Ticketing": localFp.showTicketing_read ?? localFp.showTicketing ?? defaultVal,
-          "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? defaultVal,
-          "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? defaultVal,
-          "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? defaultVal,
-          "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? defaultVal,
-          "VRV": localFp.showVRV_read ?? localFp.showVRV ?? defaultVal,
-          "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? defaultVal,
-          "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? defaultVal,
-          "AC": localFp.showAC_read ?? localFp.showAC ?? defaultVal
-        };
-        localStorage.setItem('scada_modules_config', JSON.stringify(sidebarMapping));
-        // Reconstruct submoduleVisibility from flat keys if present
-        const submoduleVisibility = {};
-        Object.entries(localFp).forEach(([key, val]) => {
-          if (key.startsWith('submodule_')) {
-            const parts = key.split('_');
-            if (parts.length >= 3) {
-              const moduleKey = parts[1];
-              const subName = parts.slice(2).join('_');
-              if (!submoduleVisibility[moduleKey]) submoduleVisibility[moduleKey] = {};
-              submoduleVisibility[moduleKey][subName] = !!val;
-            }
-          }
-        });
-        const finalSubs = Object.keys(submoduleVisibility).length > 0 
-          ? submoduleVisibility 
-          : (localFp.submoduleVisibility || {});
-
-        localFp.submoduleVisibility = finalSubs;
-        localStorage.setItem('scada_feature_permissions', JSON.stringify(localFp));
-        localStorage.setItem('scada_submodules_config', JSON.stringify(finalSubs));
-
-        window.dispatchEvent(new Event('storage-update'));
-
-        // Trigger splash screen FIRST, then navigate after one frame
-        if (onLoginSuccess) onLoginSuccess();
-
-        // Small delay so React can mount SplashScreen before route changes
-        setTimeout(() => {
-          if (role === 'SUPER_ADMIN') {
-            navigate('/super-admin');
-          } else {
-            navigate('/dashboard');
-          }
-        }, 80);
-      } else {
-        setError(data.error || 'Authentication failed');
-      }
+      }, 80);
     } catch (err) {
       console.error('Login error:', err);
-      setError('Connection error. Is the server running?');
+      setError(err.message || 'Authentication failed');
     } finally {
       setLoading(false);
     }
@@ -305,7 +118,7 @@ const Login = ({ onLoginSuccess }) => {
                   required
                 />
               </Form.Group>
-              <Form.Group className="mb-5 position-relative">
+              <Form.Group className="mb-3 position-relative">
                 <div className="input-icon-v3"><Key size={18} /></div>
                 <Form.Control
                   type={showPassword ? "text" : "password"}
@@ -325,6 +138,16 @@ const Login = ({ onLoginSuccess }) => {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </Form.Group>
+
+              <div className="d-flex align-items-center justify-content-between mb-4 px-1">
+                <Form.Check
+                  type="checkbox"
+                  id="rememberMeCheckbox"
+                  label={<span className="text-white text-opacity-75 fs-13 fw-semibold">Remember Me</span>}
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
+              </div>
             </div>
 
             <Button

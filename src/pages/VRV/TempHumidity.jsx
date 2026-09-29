@@ -3,6 +3,7 @@ import { Row, Col, Card, Badge } from 'react-bootstrap';
 import { Thermometer, Droplets, Activity, Wind, Leaf, Sparkles } from 'lucide-react';
 import { io } from 'socket.io-client';
 import PdfButton from '../../components/PdfButton';
+import { filterTemplatesByOrg } from '../../services/authService';
 import './VRVOverview.css';
 
 const metricsConfig = {
@@ -362,33 +363,8 @@ const EnvDashboard = () => {
           if (response.ok) {
             const rawData = await response.json();
 
-            // Filter templates by organization in the frontend
-            const roleName = (userData.roleName || userRole || '').toLowerCase();
-            const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-
-            if (isSuperAdmin) {
-              templatesData = rawData;
-            } else {
-              const orgId = userData.organizationId;
-              templatesData = rawData.filter(t => {
-                if (t.tenantId !== undefined && t.tenantId !== null && Number(t.tenantId) === Number(orgId)) {
-                  return true;
-                }
-                const mapping = t.defaultValues || t.settings?.[0]?.meta || {};
-                const orgName = mapping.globalHierarchy?.organization || mapping.vrvConfig?.organization || (t.defaultValues?.mapping?.globalHierarchy?.organization);
-                if (!orgName) return false;
-
-                const numId = Number(orgId);
-                const orgLower = orgName.toLowerCase();
-                if (numId === 12) {
-                  return orgLower === 'zomato' || orgLower === 'oragnization';
-                }
-                if (numId === 24 || numId === 16) {
-                  return orgLower === 'hyperpure';
-                }
-                return false;
-              });
-            }
+            // Filter templates by organization safely for all roles (SuperAdmin, Admin, Site Viewer, etc.)
+            templatesData = filterTemplatesByOrg(rawData, userData, userRole);
             localStorage.setItem('scada_templates', JSON.stringify(templatesData));
           }
         }
