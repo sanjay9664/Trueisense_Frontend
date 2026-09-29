@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Menu, Search, User, Bell, LayoutGrid, Sun } from 'lucide-react';
 import { Button, Form, InputGroup, Dropdown } from 'react-bootstrap';
 import { useTheme } from '../context/ThemeContext';
+import { logout } from '../services/authService';
 
 const Header = ({ collapsed, toggleSidebar }) => {
   const { isDark, toggleTheme } = useTheme();
@@ -123,17 +124,7 @@ const Header = ({ collapsed, toggleSidebar }) => {
             <Dropdown.Item
               className="text-danger hover-bg-secondary fw-bold"
               onClick={() => {
-                localStorage.removeItem('isAuthenticated');
-                localStorage.removeItem('userRole');
-                localStorage.removeItem('userData');
-                localStorage.removeItem('token');
-                localStorage.removeItem('sochiot_token');
-                localStorage.removeItem('sochiot_email');
-                localStorage.removeItem('sochiot_password');
-                localStorage.removeItem('scada_modules_config');
-                localStorage.removeItem('scada_submodules_config');
-                localStorage.removeItem('scada_feature_permissions');
-                window.location.href = '/login';
+                logout();
               }}
             >
               Sign Out

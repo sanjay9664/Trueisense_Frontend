@@ -4,7 +4,7 @@ import {
   ArrowLeft, ArrowRight, Check, Plus, Trash2, Cpu, Server,
   Layers, MapPin, Building2, Zap, FileText, ChevronDown, X, Save
 } from 'lucide-react';
-import { getSochiotLocationData, getSochiotDeviceDetails } from '../../services/authService';
+import { getSochiotLocationData, getSochiotDeviceDetails, fetchWithAuth } from '../../services/authService';
 
 const DeviceRegistration = () => {
   const navigate = useNavigate();
@@ -63,15 +63,6 @@ const DeviceRegistration = () => {
 
   const dataTypeOptions = ['STRING', 'FLOAT', 'INTEGER', 'BOOLEAN', 'JSON'];
 
-  /* ── Fetch helper ── */
-  const fetchWithAuth = async (url, options = {}) => {
-    const token = localStorage.getItem('sochiot_token');
-    if (!token) { window.location.href = '/login'; return; }
-    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
-    const r = await fetch(url, { ...options, headers });
-    if (r.status === 401) { localStorage.removeItem('sochiot_token'); window.location.href = '/login'; }
-    return r;
-  };
 
   /* ── Fetch data on mount ── */
   useEffect(() => {
