@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://backend-7vd2.vercel.app/api/:path*"
+      "destination": "https://backend-three-self-69.vercel.app/api/:path*"
     },
     {
       "source": "/sochiot-auth/:path*",
