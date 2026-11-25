@@ -4,6 +4,7 @@ import {
   Plus, Trash2, Save, Search, Settings, X, CheckCircle,
   ShieldAlert, Sliders, MapPin, Building2, HelpCircle, ChevronDown
 } from 'lucide-react';
+import { fetchWithAuth } from '../../services/authService';
 
 
 /* ─────────────────────── functional system map / details ─────────────────────── */
@@ -120,25 +121,6 @@ const AreaManagement = () => {
   const [sites, setSites] = useState([]);
   const [selectedSiteId, setSelectedSiteId] = useState('');
 
-  /* ── auth fetch helper ── */
-  const fetchWithAuth = async (url, options = {}) => {
-    let token = localStorage.getItem('sochiot_token');
-    if (!token) {
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-    }
-    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
-    let r = await fetch(url, { ...options, headers });
-    if (r.status === 401) {
-      localStorage.removeItem('sochiot_token');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-    return r;
-  };
 
   /* ── data fetchers ── */
   const fetchSites = async () => {

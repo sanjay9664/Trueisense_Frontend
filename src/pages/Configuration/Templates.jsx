@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Row, Col, Card, Form, Button, Badge, Modal, Spinner } from 'react-bootstrap';
 import { Save, Settings, Database, Activity, Zap, Droplets, LayoutGrid, CheckCircle2, ChevronRight, Layers, History, Eye, Info, X, Home, ArrowDownCircle, ArrowUpCircle, MapPin, AlertTriangle, Wind, Thermometer } from 'lucide-react';
-import { loginToSochiot, getSochiotUserMe, getSochiotLocationData, getSochiotDeviceDetails, getSochiotZoneData, getSochiotDeviceModules } from '../../services/authService';
+import { loginToSochiot, getSochiotUserMe, getSochiotLocationData, getSochiotDeviceDetails, getSochiotZoneData, getSochiotDeviceModules, filterTemplatesByOrg } from '../../services/authService';
 import { normalizeMeterName } from '../../services/meterUtils';
 
 const CONFIG_API_URL = '/sochiot-config';
@@ -3474,30 +3474,8 @@ const ConfigTemplates = () => {
           });
 
           // Filter templates by organization in the frontend
-          const roleName = (userData.roleName || userRole || '').toLowerCase();
-          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-          
-          let filteredData = mappedData;
-          if (!isSuperAdmin) {
-            const orgId = userData.organizationId;
-            filteredData = mappedData.filter(t => {
-              if (t.tenantId !== undefined && t.tenantId !== null && Number(t.tenantId) === Number(orgId)) {
-                return true;
-              }
-              const orgName = t.mapping?.globalHierarchy?.organization || t.defaultValues?.mapping?.globalHierarchy?.organization;
-              if (!orgName) return false;
-              
-              const numId = Number(orgId);
-              const orgLower = orgName.toLowerCase();
-              if (numId === 12) {
-                return orgLower === 'zomato' || orgLower === 'oragnization';
-              }
-              if (numId === 24 || numId === 16) {
-                return orgLower === 'hyperpure';
-              }
-              return false;
-            });
-          }
+          // Filter templates by organization safely for all roles (SuperAdmin, Admin, Site Viewer, etc.)
+          const filteredData = filterTemplatesByOrg(mappedData, userData, userRole);
 
           setSavedTemplates(filteredData);
         }

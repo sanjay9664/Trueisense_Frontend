@@ -4,6 +4,7 @@ import { Wind, Thermometer, Droplets, Zap, Power, Settings, Fan, MapPin, Clock, 
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 import { useDeviceStatus } from '../../services/DeviceStatusContext';
+import { filterTemplatesByOrg } from '../../services/authService';
 import io from 'socket.io-client';
 
 // --- MOCK DATA ---
@@ -1027,30 +1028,8 @@ const ACOverview = () => {
           });
 
           // Filter templates by organization in the frontend
-          const roleName = (userData.roleName || userRole || '').toLowerCase();
-          const isSuperAdmin = userRole === 'SUPER_ADMIN' || roleName.includes('super');
-          
-          let filteredData = mapped;
-          if (!isSuperAdmin) {
-            const orgId = userData.organizationId;
-            filteredData = mapped.filter(t => {
-              if (t.tenantId !== undefined && t.tenantId !== null && Number(t.tenantId) === Number(orgId)) {
-                return true;
-              }
-              const orgName = t.mapping?.globalHierarchy?.organization || t.mapping?.acConfig?.organization || (t.defaultValues?.mapping?.globalHierarchy?.organization);
-              if (!orgName) return false;
-              
-              const numId = Number(orgId);
-              const orgLower = orgName.toLowerCase();
-              if (numId === 12) {
-                return orgLower === 'zomato' || orgLower === 'oragnization';
-              }
-              if (numId === 24 || numId === 16) {
-                return orgLower === 'hyperpure';
-              }
-              return false;
-            });
-          }
+          // Filter templates by organization safely for all roles (SuperAdmin, Admin, Site Viewer, etc.)
+          const filteredData = filterTemplatesByOrg(mapped, userData, userRole);
 
           setTemplates(filteredData);
           localStorage.setItem('scada_templates', JSON.stringify(filteredData));

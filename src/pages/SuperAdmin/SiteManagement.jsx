@@ -7,7 +7,7 @@ import {
   Wifi, WifiOff, MapPin, Globe2, Hash, Clock,
   ChevronRight, Check, Loader2, Mail, Phone, User
 } from 'lucide-react';
-import { getSochiotUserMe } from '../../services/authService';
+import { getSochiotUserMe, fetchWithAuth } from '../../services/authService';
 
 
 /* ─── Constants ────────────────────────────────────────── */
@@ -518,30 +518,6 @@ const SiteManagement = () => {
       : <span style={{ marginLeft: '4px', color: 'var(--scada-accent)', fontSize: '0.7rem', display: 'inline-block' }}>▼</span>;
   };
 
-  /* ── Auth Fetch Helper ───────────────────────────── */
-  const fetchWithAuth = async (url, options = {}) => {
-    let token = localStorage.getItem('sochiot_token');
-    if (!token) {
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-    }
-
-    const headers = {
-      ...options.headers,
-      'Authorization': `Bearer ${token}`
-    };
-
-    let r = await fetch(url, { ...options, headers });
-    if (r.status === 401) {
-      localStorage.removeItem('sochiot_token');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-    return r;
-  };
 
   /* ── Fetch ────────────────────────────────────────── */
   const fetchSites = async () => {

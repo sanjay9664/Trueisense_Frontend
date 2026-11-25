@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { Cpu } from 'lucide-react';
 
 // Pages
 import Dashboard from '../pages/Dashboard';
@@ -66,45 +67,44 @@ import PumpStatus from '../pages/FirePumps/PumpStatus';
 import HeaderPressure from '../pages/FirePumps/HeaderPressure';
 import JockeyMain from '../pages/FirePumps/JockeyMain';
 
-// Fallback for other routes until customized
+// Fallback for routes with no active hardware configuration
 const PlaceholderPage = ({ title }) => (
   <div className="fade-in">
-    <div className="page-header">
+    <div className="page-header d-flex justify-content-between align-items-center mb-4">
       <div>
-        <h2 className="mb-1">{title}</h2>
-        <p className="text-muted">Detailed monitoring and controls for {title}</p>
+        <h2 className="mb-1 text-white fw-bold">{title}</h2>
+        <p className="text-muted mb-0 fs-13">Monitoring and controls for {title}</p>
       </div>
       <div className="d-flex gap-2">
-        <button className="btn btn-outline-secondary btn-sm">Refresh Data</button>
-        <button className="btn btn-info btn-sm">System Check</button>
+        <button onClick={() => window.location.reload()} className="btn btn-outline-secondary btn-sm px-3 rounded-pill">
+          Refresh Data
+        </button>
       </div>
     </div>
 
-    <div className="scada-card p-5 text-center mt-4">
-      <div className="text-muted opacity-50 mb-3">
-        <div className="display-4 font-monospace">DATA_STREAM_ACTIVE</div>
-      </div>
-      <h4>{title} Module</h4>
-      <p>Continuous monitoring in progress. All sensors reporting normal operation.</p>
-      <div className="d-flex justify-content-center gap-4 mt-4">
-        <div className="text-center">
-          <div className="h3 mb-0 text-success">98%</div>
-          <small className="text-muted">Efficiency</small>
+    <div className="scada-card p-5 text-center mt-3" style={{ background: 'var(--scada-card-bg, #1a1612)', border: '1px solid var(--scada-border, rgba(255,255,255,0.08))', borderRadius: '14px' }}>
+      <div className="d-flex flex-column align-items-center justify-content-center py-4">
+        <div className="p-3 rounded-circle mb-3" style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+          <Cpu size={44} className="text-warning" />
         </div>
-        <div className="text-center border-start border-end px-4">
-          <div className="h3 mb-0 text-info">24.5°C</div>
-          <small className="text-muted">Amb. Temp</small>
-        </div>
-        <div className="text-center">
-          <div className="h3 mb-0 text-warning">1.2kW</div>
-          <small className="text-muted">Load</small>
-        </div>
+        <h3 className="fw-bold text-white mb-2">No Device Configured</h3>
+        <p className="text-muted mb-3" style={{ maxWidth: '460px', fontSize: '14px', lineHeight: '1.6' }}>
+          There are currently no IoT devices or data streams configured for <strong>{title}</strong>.
+        </p>
+        <span className="badge bg-secondary bg-opacity-25 text-secondary px-3 py-2 rounded-pill font-monospace fs-12">
+          STATUS: NO_DEVICE_CONFIGURED
+        </span>
       </div>
     </div>
   </div>
 );
 
 const OperatorRoute = ({ children, moduleKey }) => {
+  // Allow Energy Metering, AC, and AQI Sensor for all users
+  if (moduleKey === 'showEnergyMetering' || moduleKey === 'showAC' || moduleKey === 'showAQISensor') {
+    return children;
+  }
+
   const userRole = localStorage.getItem('userRole') || 'USER';
   const userData = JSON.parse(localStorage.getItem('userData') || '{}');
   const roleName = (userData.roleName || userRole || '').toLowerCase();

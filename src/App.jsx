@@ -8,10 +8,19 @@ import { ThemeProvider } from './context/ThemeContext';
 import SplashScreen from './components/SplashScreen';
 import brandLogo from './assets/trueisense.jpeg';
 import loginLogo from './assets/logo.png';
+import {
+  initAuthSession,
+  isTokenExpired,
+  refreshAccessToken,
+  getRefreshToken,
+  getAccessToken,
+  clearAuthSession,
+  setAuthSession
+} from './services/authService';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
-    localStorage.getItem('isAuthenticated') === 'true'
+    localStorage.getItem('isAuthenticated') === 'true' && !!getAccessToken()
   );
 
   // Preload critical branding assets for instant rendering and cache hits
@@ -33,31 +42,11 @@ function App() {
     const urlRole = urlParams.get('role');
     
     if (urlToken) {
-      localStorage.setItem('token', urlToken);
-      localStorage.setItem('sochiot_token', urlToken);
-      localStorage.setItem('token_timestamp', Date.now().toString());
-      localStorage.setItem('isAuthenticated', 'true');
-      if (urlRole) localStorage.setItem('userRole', urlRole);
-      
-      // Default sidebar config for bypass
-      const sidebarMapping = {
-        "Dashboard": true,
-        "Water Management": true,
-        "Motors": true,
-        "DG Set": true,
-        "Setting Templates": true,
-        "Alarm System": true,
-        "LT Panel": true,
-        "Transformer": true,
-        "Fire": true,
-        "Ticketing": true,
-        "Maintenance": true,
-        "Service History": true,
-        "Daily DPR": true,
-        "Energy Metering": true
-      };
-      localStorage.setItem('scada_modules_config', JSON.stringify(sidebarMapping));
-      
+      setAuthSession({
+        accessToken: urlToken,
+        user: { role: urlRole || 'USER', name: 'User' },
+        expiresIn: 900
+      });
       setIsAuthenticated(true);
       
       // Clean up URL
@@ -68,125 +57,65 @@ function App() {
   // Listen for storage changes (for login/logout across tabs if needed)
   useEffect(() => {
     const checkAuth = () => {
-      const newAuth = localStorage.getItem('isAuthenticated') === 'true';
-      // Trigger splash only when transitioning from not-authenticated → authenticated - disabled
+      const newAuth = localStorage.getItem('isAuthenticated') === 'true' && !!getAccessToken();
       prevAuthRef.current = newAuth;
       setIsAuthenticated(newAuth);
     };
     window.addEventListener('storage', checkAuth);
     window.addEventListener('storage-update', checkAuth);
-    // Periodically check local storage status to synchronize within the same tab
-    const interval = setInterval(checkAuth, 500);
     return () => {
       window.removeEventListener('storage', checkAuth);
       window.removeEventListener('storage-update', checkAuth);
-      clearInterval(interval);
     };
   }, []);
 
-  // Auth Token Auto-Refresh and Logout Manager
+  // Initialize and verify session on load / browser refresh
+  useEffect(() => {
+    let isMounted = true;
+    const verifySession = async () => {
+      const isValid = await initAuthSession();
+      if (isMounted) {
+        setIsAuthenticated(isValid);
+      }
+    };
+    verifySession();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Proactive token refresh & liveness manager
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const checkTokenAgeAndManageSession = async () => {
-      const tokenTimestamp = localStorage.getItem('token_timestamp');
-      if (!tokenTimestamp) {
-        // Set timestamp if not found to avoid premature logout
-        localStorage.setItem('token_timestamp', Date.now().toString());
-        return;
-      }
-
-      const elapsedMs = Date.now() - parseInt(tokenTimestamp, 10);
-      const fifteenMinutesMs = 15 * 60 * 1000;
-      const gracePeriodMs = 20 * 60 * 1000; // 20 mins grace period to force logout if refresh consistently fails
-
-      if (elapsedMs >= fifteenMinutesMs) {
-        const isTabActive = document.visibilityState === 'visible';
-
-        if (isTabActive) {
-          console.log('[Auth Manager] Token expired (15m). Tab is active, regenerating token...');
-          const email = localStorage.getItem('sochiot_email');
-          const password = localStorage.getItem('sochiot_password');
-          if (!email || !password) {
-            performSessionLogout('No credentials to auto-renew session');
-            return;
-          }
-
-          try {
-            const response = await fetch('https://app.sochiot.com/api/auth-engine/login', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, password })
-            });
-
-            if (response.ok) {
-              const data = await response.json();
-              if (data.token) {
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('sochiot_token', data.token);
-                localStorage.setItem('token_timestamp', Date.now().toString());
-                console.log('[Auth Manager] Token successfully regenerated at', new Date().toLocaleTimeString());
-                window.dispatchEvent(new Event('storage-update'));
-              } else {
-                console.error('[Auth Manager] No token in refresh response.');
-              }
-            } else {
-              console.error('[Auth Manager] Failed to regenerate token, status:', response.status);
-              if (elapsedMs >= gracePeriodMs) {
-                performSessionLogout(`Token renewal failed repeatedly (expired for ${Math.round(elapsedMs / 1000 / 60)} minutes)`);
-              }
-            }
-          } catch (error) {
-            console.error('[Auth Manager] Error during token regeneration:', error);
-            if (elapsedMs >= gracePeriodMs) {
-              performSessionLogout('Token renewal network error (expired for too long)');
-            }
+    const checkAndRefresh = async () => {
+      if (isTokenExpired()) {
+        const refreshToken = getRefreshToken();
+        if (refreshToken) {
+          const newToken = await refreshAccessToken();
+          if (!newToken) {
+            setIsAuthenticated(false);
           }
         } else {
-          // Tab is not active/hidden: trigger logout with timestamp
-          performSessionLogout('Tab is inactive, auto-logout triggered');
+          clearAuthSession();
+          setIsAuthenticated(false);
         }
       }
     };
 
-    const performSessionLogout = (reason) => {
-      console.log(`[Auth Manager] Logging out. Reason: ${reason}`);
-      const logoutTimestamp = Date.now().toString();
-      localStorage.setItem('logout_timestamp', logoutTimestamp);
+    // Check token freshness every 30 seconds
+    const interval = setInterval(checkAndRefresh, 30 * 1000);
 
-      localStorage.removeItem('isAuthenticated');
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('userData');
-      localStorage.removeItem('token');
-      localStorage.removeItem('sochiot_token');
-      localStorage.removeItem('sochiot_email');
-      localStorage.removeItem('sochiot_password');
-      localStorage.removeItem('scada_modules_config');
-      localStorage.removeItem('scada_submodules_config');
-      localStorage.removeItem('scada_feature_permissions');
-
-      window.dispatchEvent(new Event('storage-update'));
-      setIsAuthenticated(false);
-      window.location.href = '/login';
-    };
-
-    // Check token age every 10 seconds
-    const checkInterval = setInterval(checkTokenAgeAndManageSession, 10 * 1000);
-
-    // Check immediately when visibility state changes to visible
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        checkTokenAgeAndManageSession();
+        checkAndRefresh();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Initial check on mount
-    checkTokenAgeAndManageSession();
-
     return () => {
-      clearInterval(checkInterval);
+      clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [isAuthenticated]);

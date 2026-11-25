@@ -48,11 +48,11 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
       "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? defaultVal,
       "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? defaultVal,
       "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? defaultVal,
-      "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? defaultVal,
+      "Energy Metering": true,
       "VRV": localFp.showVRV_read ?? localFp.showVRV ?? defaultVal,
-      "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? defaultVal,
-      "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? defaultVal,
-      "AC": localFp.showAC_read ?? localFp.showAC ?? defaultVal
+      "AQI Sensor": true,
+      "HVAC": false,
+      "AC": true
     };
   });
   const [submodulesConfig, setSubmodulesConfig] = useState(() => {
@@ -137,11 +137,11 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
           "Maintenance": localFp.showMaintenance_read ?? localFp.showMaintenance ?? defaultVal,
           "Service History": localFp.showServiceHistory_read ?? localFp.showServiceHistory ?? defaultVal,
           "Daily DPR": localFp.showDailyDPR_read ?? localFp.showDailyDPR ?? defaultVal,
-          "Energy Metering": localFp.showEnergyMetering_read ?? localFp.showEnergyMetering ?? defaultVal,
+          "Energy Metering": true,
           "VRV": localFp.showVRV_read ?? localFp.showVRV ?? defaultVal,
-          "AQI Sensor": localFp.showAQISensor_read ?? localFp.showAQISensor ?? defaultVal,
-          "HVAC": localFp.showHVAC_read ?? localFp.showHVAC ?? defaultVal,
-          "AC": localFp.showAC_read ?? localFp.showAC ?? defaultVal
+          "AQI Sensor": true,
+          "HVAC": false,
+          "AC": true
         };
         setModulesConfig(calculated);
 
@@ -346,20 +346,14 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
     {
       title: "Energy Metering",
       icon: <Zap size={20} />,
-      disabled: modulesConfig ? !modulesConfig["Energy Metering"] : false,
+      disabled: false,
       subItems: [
         { title: "Overview", path: "/energy-metering/overview" },
         { title: "Main Meter", path: "/energy-metering/main" },
         { title: "Sub Meters", path: "/energy-metering/sub" },
         { title: "Graphs", path: "/energy-metering/graphs" },
         { title: "PDF Report", path: "/energy-metering/report" }
-      ].filter((subItem) => {
-        if (subItem.title === "Main Meter") {
-          const isManager = roleName.includes('manager') || roleName.includes('admin') || userRole === 'SUPER_ADMIN' || userRole === 'ADMIN';
-          if (!isManager) return false;
-        }
-        return submodulesConfig.showEnergyMetering?.[subItem.title] ?? true;
-      })
+      ]
     },
     {
       title: "VRV",
@@ -375,33 +369,33 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
     {
       title: "AQI Sensor",
       icon: <Leaf size={20} />,
-      disabled: modulesConfig ? !modulesConfig["AQI Sensor"] : false,
+      disabled: false,
       subItems: [
         { title: "Overview", path: "/aqi-sensor/overview" },
         { title: "Temp & Humidity", path: "/aqi-sensor/temp-humidity" },
         { title: "Graphs", path: "/aqi-sensor/graphs" },
         { title: "PDF Report", path: "/aqi-sensor/report" }
-      ].filter((subItem) => submodulesConfig.showAQISensor?.[subItem.title] ?? true)
+      ]
     },
     {
       title: "HVAC",
       icon: <Thermometer size={20} />,
-      disabled: modulesConfig ? !modulesConfig["HVAC"] : false,
+      disabled: true,
       subItems: [
         { title: "Chiller", path: "/hvac/chiller" },
         { title: "AHU", path: "/hvac/ahu" },
         { title: "Cooling Tower", path: "/hvac/cooling-tower" },
         { title: "PDF Report", path: "/hvac/report" }
-      ].filter((subItem) => submodulesConfig.showHVAC?.[subItem.title] ?? true)
+      ]
     },
     {
       title: "AC",
       icon: <Wind size={20} />,
-      disabled: modulesConfig ? !modulesConfig["AC"] : false,
+      disabled: false,
       subItems: [
         { title: "Overview", path: "/ac/overview" },
         { title: "PDF Report", path: "/ac/report" }
-      ].filter((subItem) => submodulesConfig.showAC?.[subItem.title] ?? true)
+      ]
     }
   ];
 
@@ -488,6 +482,8 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
 
         {/* Operational Modules */}
         {menuItems.filter(item => {
+          if (item.title === "HVAC") return false;
+          if (item.title === "Energy Metering" || item.title === "AC" || item.title === "AQI Sensor") return true;
           const isAllowedByRole = !item.adminOnly || isAdmin || isSuperAdmin;
           const isEnabledByConfig = !modulesConfig || modulesConfig[item.title] === true;
           const isNotDisabled = !item.disabled;

@@ -5,6 +5,7 @@ import {
   ChevronRight as ChevRight, Eye, EyeOff, Plus, Search,
   CheckSquare, Square, Settings, Globe, Star, X, Edit
 } from 'lucide-react';
+import { fetchWithAuth } from '../../services/authService';
 
 /* ══════════════════════════════════════════════
    MOCK DATA
@@ -515,24 +516,6 @@ const AdministratorUserTab = () => {
     }
   }, [orgTree, checked]);
 
-  const fetchWithAuth = async (url, options = {}) => {
-    let token = localStorage.getItem('sochiot_token');
-    if (!token) {
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-    }
-    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
-    let r = await fetch(url, { ...options, headers });
-    if (r.status === 401) {
-      localStorage.removeItem('sochiot_token');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-    return r;
-  };
 
   const fetchUsers = async () => {
     setLoading(true);
